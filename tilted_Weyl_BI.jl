@@ -8,7 +8,7 @@
 #Pkg.add("Plots")
 
 using Distributed
-addprocs(25)
+addprocs(20)
 
 @everywhere using LinearAlgebra
 @everywhere sigma = [[1.0 0.0; 0.0 1.0], [0.0 1.0; 1.0 0.0], [0.0 -1.0im; 1.0im 0.0], [1.0 0.0; 0.0 -1.0]]
@@ -312,13 +312,15 @@ function main(arg::Array{String,1})
     Inter_XXX_mu = zeros(Float64,length(T0))
     dInter_XXX_mu = zeros(Float64,length(T0))
 
-    #total_ZXY_mu = zeros(Float64,length(T0))
+    #=
+    total_ZXY_mu = zeros(Float64,length(T0))
     Drude_ZXY_mu = zeros(Float64,length(T0))
     BCD_ZXY_mu = zeros(Float64,length(T0))
     sQMD_ZXY_mu = zeros(Float64,length(T0))
     dQMD_ZXY_mu = zeros(Float64,length(T0))
     Inter_ZXY_mu = zeros(Float64,length(T0))
     dInter_ZXY_mu = zeros(Float64,length(T0))
+    =#
     #A::String = []
     for j in 1:length(T0)
         #Parm: m, lamda, hx, hy, hz, mu, eta, T, K_MAX, K_SIZE, W_in, W_MAX, W_SIZE
@@ -335,18 +337,22 @@ function main(arg::Array{String,1})
             dQMD::Float64 = 0.0
             Inter::Float64 = 0.0
             dInter::Float64 = 0.0
+            #=
             DrudeH::Float64 = 0.0
             BCDH::Float64 = 0.0
             sQMDH::Float64 = 0.0
             dQMDH::Float64 = 0.0
             InterH::Float64 = 0.0
             dInterH::Float64 = 0.0
-            Drude, BCD, sQMD, dQMD, Inter, dInter,DrudeH, BCDH, sQMDH, dQMDH, InterH, dInterH = @distributed (+) for i in 1:length(k2)
+            ,DrudeH, BCDH, sQMDH, dQMDH, InterH, dInterH
+            =#
+            Drude, BCD, sQMD, dQMD, Inter, dInter = @distributed (+) for i in 1:length(k2)
                 k = (k2[i][1], k2[i][2], kz)
                 Hamk = Hamiltonian_3D(HandV_weyl(k,p)...)
                 Drude0, BCD0, sQMD0, dQMD0, Inter0, dInter0 = Green_XXX_BI(p,Hamk)
-                DrudeH0, BCDH0, sQMDH0, dQMDH0, InterH0, dInterH0 = Green_ZXY_BI(p,Hamk)
-                [Drude0/(p.K_SIZE^3), BCD0/(p.K_SIZE^3), sQMD0/(p.K_SIZE^3), dQMD0/(p.K_SIZE^3), Inter0/(p.K_SIZE^3), dInter0/(p.K_SIZE^3),DrudeH0/(p.K_SIZE^3), BCDH0/(p.K_SIZE^3), sQMDH0/(p.K_SIZE^3), dQMDH0/(p.K_SIZE^3), InterH0/(p.K_SIZE^3), dInterH0/(p.K_SIZE^3)]
+                #DrudeH0, BCDH0, sQMDH0, dQMDH0, InterH0, dInterH0 = Green_ZXY_BI(p,Hamk)
+                [Drude0/(p.K_SIZE^3), BCD0/(p.K_SIZE^3), sQMD0/(p.K_SIZE^3), dQMD0/(p.K_SIZE^3), Inter0/(p.K_SIZE^3), dInter0/(p.K_SIZE^3)]
+                #,DrudeH0/(p.K_SIZE^3), BCDH0/(p.K_SIZE^3), sQMDH0/(p.K_SIZE^3), dQMDH0/(p.K_SIZE^3), InterH0/(p.K_SIZE^3), dInterH0/(p.K_SIZE^3)]
             end
             Drude_XXX_mu[j] += Drude
             BCD_XXX_mu[j] += BCD
@@ -354,12 +360,14 @@ function main(arg::Array{String,1})
             dQMD_XXX_mu[j] += dQMD
             Inter_XXX_mu[j] += Inter
             dInter_XXX_mu[j] += dInter
+            #=
             Drude_ZXY_mu[j] += DrudeH
             BCD_ZXY_mu[j] += BCDH
             sQMD_ZXY_mu[j] += sQMDH
             dQMD_ZXY_mu[j] += dQMDH
             Inter_ZXY_mu[j] += InterH
             dInter_ZXY_mu[j] += dInterH
+            =#
         end
         #push!(A,"#")
         #println(A)
@@ -367,26 +375,26 @@ function main(arg::Array{String,1})
     println("finish the calculation!")
     # headerの名前を(Q,E1,E2)にして、CSVファイル形式を作成
     save_data = DataFrame(T=T0, Drude=Drude_XXX_mu, BCD=BCD_XXX_mu, sQMD=sQMD_XXX_mu, dQMD=dQMD_XXX_mu, Inter=Inter_XXX_mu, dInter=dInter_XXX_mu)
-    save_data2 = DataFrame(T=T0, Drude=Drude_ZXY_mu, BCD=BCD_ZXY_mu, sQMD=sQMD_ZXY_mu, dQMD=dQMD_ZXY_mu, Inter=Inter_ZXY_mu, dInter=dInter_ZXY_mu)
+    #save_data2 = DataFrame(T=T0, Drude=Drude_ZXY_mu, BCD=BCD_ZXY_mu, sQMD=sQMD_ZXY_mu, dQMD=dQMD_ZXY_mu, Inter=Inter_ZXY_mu, dInter=dInter_ZXY_mu)
     #「./」で現在の(tutorial.ipynbがある)ディレクトリにファイルを作成の意味、指定すれば別のディレクトリにファイルを作ることも出来る。
     CSV.write("./T_dep_XXX.csv", save_data)
-    CSV.write("./T_dep_ZXY.csv", save_data2)
+    #CSV.write("./T_dep_ZXY.csv", save_data2)
 
     #gr()
     ENV["GKSwstype"]="nul"
-    #plot(mu0, Drude_XXX_mu, label="Drude",xlabel="μ",ylabel="σ",title="nonlinear conductivity", width=2.0, marker=:circle)
-    p1=plot(T0, BCD_XXX_mu, label="BCD",xlabel="μ",ylabel="σ",title="nonlinear conductivity", width=2.0, marker=:circle)
+    p1=plot(T0, Drude_XXX_mu, label="Drude",xlabel="μ",ylabel="σ",title="nonlinear conductivity", width=2.0, marker=:circle)
+    p1=plot!(T0, BCD_XXX_mu, label="BCD",xlabel="μ",ylabel="σ",title="nonlinear conductivity", width=2.0, marker=:circle)
     p1=plot!(T0, dQMD_XXX_mu, label="dQMD", width=2.0, marker=:circle)
     savefig(p1,"./T_dep_XXX.png")
-    #plot(mu0, BCD_XXX_mu, label="BCD", width=2.0, marker=:circle)
-    p1=plot!(T0, sQMD_XXX_mu, label="sQMD", width=2.0, marker=:circle)
+    p1=plot(T0, Drude_XXX_mu+BCD_XXX_mu+sQMD_XXX_mu+dQMD_XXX_mu+Inter_XXX_mu+dInter_XXX_mu, label="total",xlabel="μ",ylabel="σ",title="nonlinear conductivity", width=2.0, marker=:circle)
+    #p1=plot!(T0, sQMD_XXX_mu, label="sQMD", width=2.0, marker=:circle)
     #plot!(mu0, dQMD_XXX_mu+BCD_XXX_mu, label="sum_TR", width=2.0, marker=:circle)
-    p1=plot!(T0, Inter_XXX_mu, label="Inter", width=2.0, marker=:circle)
-    p1=plot!(T0, dInter_XXX_mu, label="dInter", width=2.0, marker=:circle)
+    #p1=plot!(T0, Inter_XXX_mu, label="Inter", width=2.0, marker=:circle)
+    #p1=plot!(T0, dInter_XXX_mu, label="dInter", width=2.0, marker=:circle)
     #plot!(mu0, total_XXX_mu, label="total", width=2.0, marker=:circle)
     savefig(p1,"./T_dep_XXX2.png")
 
-    #plot(mu0, Drude_XXX_mu, label="Drude",xlabel="μ",ylabel="σ",title="nonlinear conductivity", width=2.0, marker=:circle)
+    #=plot(mu0, Drude_XXX_mu, label="Drude",xlabel="μ",ylabel="σ",title="nonlinear conductivity", width=2.0, marker=:circle)
     p2=plot(T0, BCD_ZXY_mu, label="BCD",xlabel="μ",ylabel="σ",title="nonlinear conductivity", width=2.0, marker=:circle)
     p2=plot!(T0, dQMD_ZXY_mu, label="dQMD", width=2.0, marker=:circle)
     p2=plot!(T0, dQMD_ZXY_mu+BCD_ZXY_mu, label="sum_TR", width=2.0, marker=:circle)
@@ -397,7 +405,7 @@ function main(arg::Array{String,1})
     p2=plot!(T0, Inter_ZXY_mu, label="Inter", width=2.0, marker=:circle)
     p2=plot!(T0, dInter_ZXY_mu, label="dInter", width=2.0, marker=:circle)
     #plot!(mu0, total_XXX_mu, label="total", width=2.0, marker=:circle)
-    savefig(p2,"./T_dep_ZXY2.png")
+    savefig(p2,"./T_dep_ZXY2.png")=#
 end
 
 main(ARGS)
