@@ -282,6 +282,37 @@ end
     return dw*XXX, dw*XYY
 end
 
+
+@everywhere function Green_XX_BI(p::Parm, H::Hamiltonian)
+    
+    Drude::Float64 = 0.0
+    Drude0::Float64 = 0.0
+    BC::Float64 = 0.0
+    dQM::Float64 = 0.0
+    app_QM::Float64 = 0.0
+    
+    HV_BI(H)
+
+    for i = 1:2
+        Drude += -real(H.Vx[i,i]*H.Vx[i,i])*real(df(H.E[i]+1.0im*p.eta, p.T))/(2.0p.eta)
+        Drude0 += -real(H.Vx[i,i]*H.Vx[i,i])*real(df(H.E[i], p.T))/(2.0p.eta)
+        BC += 2.0*imag(H.Vx[i,3-i]*H.Vx[3-i,i]/((H.E[i]-H.E[3-i]+2.0im*p.eta)^2))*real(f(H.E[i]+1.0im*p.eta, p.T))
+        dQM += 2.0*real(H.Vx[i,3-i]*H.Vx[3-i,i]/((H.E[i]-H.E[3-i]+2.0im*p.eta)^2))*imag(f(H.E[i]+1.0im*p.eta, p.T))
+        app_QM += 2.0*p.eta*real(H.Vx[i,3-i]*H.Vx[3-i,i])/((H.E[i]-H.E[3-i])^2+4.0*p.eta^2)*(-df(H.E[i], p.T))
+    end
+    return Drude, Drude0, BC, dQM, app_QM
+end
+@everywhere function Green_DCL_2D(p::Parm, H::Hamiltonian)
+    XX::Float64 = 0.0
+    dw::Float64 = p.W_MAX/p.W_SIZE/pi
+    for w in collect(-p.W_MAX:2.0p.W_MAX/p.W_SIZE:p.W_MAX)
+        #range(-p.W_MAX, p.W_MAX, length=p.W_SIZE)
+        G = Green(Gk(w,p,H)...)
+        XX += real(tr(H.Vx*G.GR*H.Vx*G.GRmA))*df(w,p.T)
+    end
+    return dw*XX
+end
+
 using DataFrames
 using CSV
 using Plots
