@@ -8,7 +8,7 @@
 #Pkg.add("Plots")
 
 using Distributed
-addprocs(26)
+addprocs(32)
 
 @everywhere using LinearAlgebra
 @everywhere sigma = [[1.0 0.0; 0.0 1.0], [0.0 1.0; 1.0 0.0], [0.0 -1.0im; 1.0im 0.0], [1.0 0.0; 0.0 -1.0]]
@@ -154,7 +154,6 @@ end
     H.Vzz = Vzz_BI
 end
 
-
 @everywhere function Green_ZZ_BI(p::Parm, H::Hamiltonian)
     
     Drude::Float64 = 0.0
@@ -168,11 +167,13 @@ end
     for i = 1:2
         Drude += -real(H.Vz[i,i]*H.Vz[i,i])*real(df(H.E[i]+1.0im*p.eta, p.T))/(2.0p.eta)
         Drude0 += -real(H.Vz[i,i]*H.Vz[i,i])*real(df(H.E[i], p.T))/(2.0p.eta)
-        #BC += 2.0*imag(H.Vz[i,3-i]*H.Vz[3-i,i]/((H.E[i]-H.E[3-i]+2.0im*p.eta)^2))*real(f(H.E[i]+1.0im*p.eta, p.T))
-        BC += 2.0*p.eta*real(H.Vz[i,3-i]*H.Vz[3-i,i]/((H.E[i]-H.E[3-i])^2+4.0*p.eta^2))*real(-df(H.E[i]+1.0im*p.eta, p.T))
+        #BC += 2.0*imag(H.Vz[i,3-i]*H.Vz[3-i,i]/(H.E[i]-H.E[3-i]+2.0im*p.eta)/(H.E[i]-H.E[3-i]+2.0im*p.eta))*real(f(H.E[i]+1.0im*p.eta, p.T))
+        #BC += -imag(H.Vz[i,3-i]*H.Vz[3-i,i]/((H.E[i]-H.E[3-i]+2.0im*p.eta)))*real(df(H.E[i]+1.0im*p.eta, p.T))
+        BC += 2.0p.eta*real(H.Vz[i,3-i]*H.Vz[3-i,i]/((H.E[i]-H.E[3-i])^2+4.0*p.eta^2))*real(-df(H.E[i]+1.0im*p.eta, p.T))
         #dQM += 2.0*real(H.Vz[i,3-i]*H.Vz[3-i,i]/((H.E[i]-H.E[3-i]+2.0im*p.eta)^2))*imag(f(H.E[i]+1.0im*p.eta, p.T))
-        dQM += 2.0*(H.E[i]-H.E[3-i])*real(H.Vz[i,3-i]*H.Vz[3-i,i]/((H.E[i]-H.E[3-i])^2+4.0*p.eta^2))*imag(df(H.E[i]+1.0im*p.eta, p.T))
-        app_QM += 2.0*p.eta*real(H.Vz[i,3-i]*H.Vz[3-i,i])/((H.E[i]-H.E[3-i])^2+4.0*p.eta^2)*(-df(H.E[i], p.T))
+        dQM += real(H.E[i]-H.E[3-i])*real(H.Vz[i,3-i]*H.Vz[3-i,i]/((H.E[i]-H.E[3-i])^2+4.0*p.eta^2))*imag(df(H.E[i]+1.0im*p.eta, p.T))
+        #dQM += -real(H.Vz[i,3-i]*H.Vz[3-i,i]/((H.E[i]-H.E[3-i]+2.0im*p.eta)))*imag(df(H.E[i]+1.0im*p.eta, p.T))
+        app_QM += p.eta*real(H.Vz[i,3-i]*H.Vz[3-i,i])/((H.E[i]-H.E[3-i])^2+4.0*p.eta^2)*(-df(H.E[i], p.T))
     end
     return Drude, Drude0, BC, dQM, app_QM
 end
@@ -184,10 +185,27 @@ end
     for w in collect(-mi:2.0mi/p.W_SIZE:mi)
         #range(-p.W_MAX, p.W_MAX, length=p.W_SIZE)
         G = Green(Gk(w,p,H)...)
-        ZZ += -real(tr(H.Vz*G.GR*H.Vz*G.GA))*df(w,p.T)
+        ZZ += real(tr(H.Vz*G.GR*H.Vz*G.GRmA))*df(w,p.T)
         #ZZ += -2.0real(tr(H.Vz*G.dGR*H.Vz*G.GR))*f(w,p.T)
     end
     return dw*ZZ
+end
+
+@everywhere function Green_DC_BI(p::Parm, H::Hamiltonian)
+    DrG::Float64 = 0.0
+    totG::Float64 = 0.0
+    #dw::Float64 = p.W_MAX/p.W_SIZE/pi
+    mi = minimum([p.W_MAX,12p.T])
+    dw::Float64 = mi/p.W_SIZE/pi
+    for w in collect(-mi:2.0mi/p.W_SIZE:mi)
+        #range(-p.W_MAX, p.W_MAX, length=p.W_SIZE)
+        G = Green(Gk(w,p,H)...)
+        for i in 1:2
+            DrG += real(H.Vz[i,i]*G.GR[i,i]*H.Vz[i,i]*G.GRmA[i,i])*df(w,p.T)
+        end
+        totG += real(tr(H.Vz*G.GR*H.Vz*G.GRmA))*df(w,p.T)
+    end
+    return dw*DrG, dw*totG
 end
 
 using DataFrames
@@ -198,7 +216,7 @@ using Plots
 function main(arg::Array{String,1})
     #println(arg)
     println("t, p0, v, mu, Delta, eta, T, K_SIZE, W_MAX, W_SIZE")
-    mu0 = [0.005, 0.01, 0.015, 0.02]
+    mu0 = [0.005, 0.01, 0.015, 0.02, 0.03, 0.04, 0.05, 0.06, 0.08, 0.1]
     #[0.005, 0.01, 0.0125, 0.015, 0.0175, 0.02, 0.025, 0.03, 0.035, 0.04]
     #[0.005, 0.01, 0.0125, 0.015, 0.0175, 0.02, 0.025, 0.03, 0.035, 0.04, 0.05, 0.06, 0.08, 0.1]
     #collect(-0.2:0.02:0.2)
@@ -225,9 +243,9 @@ function main(arg::Array{String,1})
             Dr0, Dr00, BC0, dQM0, app_QM0, Green0 = @distributed (+) for i in 1:length(k2)
                 k = (k2[i][1], k2[i][2], kz)
                 Hamk = Hamiltonian(HandV(k,p)...)
-                Green = Green_DC_2D(p, Hamk)
                 Dr, Dr_0, BC, dQM, app_QM = Green_ZZ_BI(p,Hamk)
-                [Dr/(p.K_SIZE^3), Dr_0/(p.K_SIZE^3), BC/(p.K_SIZE^3), dQM/(p.K_SIZE^3), app_QM/(p.K_SIZE^3), Green/(p.K_SIZE^3)]
+                Green_Dr, Green_BC = Green_DC_BI(p, Hamk)
+                [Dr/(p.K_SIZE^3), Green_Dr/(p.K_SIZE^3), BC/(p.K_SIZE^3), dQM/(p.K_SIZE^3), app_QM/(p.K_SIZE^3), Green_BC/(p.K_SIZE^3)]
             end
             DrudeX_mu[j] += Dr0
             Drude0_mu[j] += Dr00
@@ -236,17 +254,23 @@ function main(arg::Array{String,1})
             app_QM_mu[j] += app_QM0
             Green_mu[j] += Green0
         end
+        if j == 1
+            println(p)
+        end
+        println("T, Drude, QM_re, QM_im, Green_sum, TF_sum")
+        println(mu0[j], ", ", DrudeX_mu[j], ", ", BCX_mu[j], ", ", dQMX_mu[j], ", ", Green_mu[j], ", ", Green_mu[j]-DrudeX_mu[j]-BCX_mu[j]-dQMX_mu[j])
     end
     println("finish the calculation!")
     # headerの名前を(Q,E1,E2)にして、CSVファイル形式を作成
-    save_data = DataFrame(mu=mu0, Drude=DrudeX_mu, BCD=BCX_mu, dQM=dQMX_mu, Drude0=Drude0_mu, app_QM=app_QM_mu, Green=Green_mu)
+    save_data = DataFrame(T=mu0, Drude=DrudeX_mu, BCD=BCX_mu, dQM=dQMX_mu, Green_Dr=Drude0_mu, app_QM=app_QM_mu, Green_tot=Green_mu)
     #「./」で現在の(tutorial.ipynbがある)ディレクトリにファイルを作成の意味、指定すれば別のディレクトリにファイルを作ることも出来る。
     CSV.write("./mu_dep_ZZ.csv", save_data)
 
     #gr()
     ENV["GKSwstype"]="nul"
-    p1=plot(mu0, DrudeX_mu, label="Drude",xlabel="T",ylabel="σ",title="nonlinear conductivity", width=2.0, marker=:circle)
-    p1=plot!(mu0, BCX_mu+dQMX_mu, label="sQM", width=2.0, marker=:circle)
+    p1=plot(mu0, DrudeX_mu, label="Drude",xlabel="μ",ylabel="σ",title="linear conductivity", width=2.0, marker=:circle)
+    p1=plot!(mu0, BCX_mu, label="sQM_re", width=2.0, marker=:circle)
+    p1=plot!(mu0, dQMX_mu, label="sQM_im", width=2.0, marker=:circle)
     p1=plot!(mu0, Green_mu-DrudeX_mu-BCX_mu-dQMX_mu, label="TF", width=2.0, marker=:circle)
     p1=plot!(mu0, Green_mu, label="Green", width=2.0, marker=:circle)
     savefig(p1,"./T_dep_ZZ.png")
