@@ -52,12 +52,14 @@ end
     GR::Array{ComplexF64,2}
     GA::Array{ComplexF64,2}
     dGR::Array{ComplexF64,2}
+    dGA::Array{ComplexF64,2}
     ddGR::Array{ComplexF64,2}
     GRmA::Array{ComplexF64,2}
+    #=
     GRp::Array{ComplexF64,2}
     GAp::Array{ComplexF64,2}
     GRm::Array{ComplexF64,2}
-    GAm::Array{ComplexF64,2}
+    GAm::Array{ComplexF64,2}=#
 end
 #=
 @everywhere mutable struct Hamiltonian_3D
@@ -115,6 +117,28 @@ end
 @everywhere function Gk(w::Float64, p::Parm, Ham::Hamiltonian)
     #Green関数のinverse
     GR0::Array{ComplexF64,2} = -Ham.Hk + Matrix{Complex{Float64}}(w*I,2,2) + p.eta*Matrix{Complex{Float64}}(1.0im*I,2,2)
+
+    GR::Array{ComplexF64,2} = inv(GR0)
+    GA::Array{ComplexF64,2} = GR'
+    GRmA::Array{ComplexF64,2} = GR - GA
+    dGR::Array{ComplexF64,2} = - GR * GR
+    dGA::Array{ComplexF64,2} = - GA * GA
+    ddGR::Array{ComplexF64,2} = 2.0 * GR * GR * GR
+    #=
+    GRp0::Array{ComplexF64,2} = -Ham.Hk + (w+p.W_in)*Matrix{Complex{Float64}}(I,2,2) + p.eta*Matrix{Complex{Float64}}(1.0im*I,2,2)
+    GRp = inv(GRp0)
+    GAp = GRp'
+
+    GRm0::Array{ComplexF64,2} = -Ham.Hk + (w-p.W_in)*Matrix{Complex{Float64}}(I,2,2) + p.eta*Matrix{Complex{Float64}}(1.0im*I,2,2)
+    GRm = inv(GRm0)
+    GAm = GRm'=#
+    return GR, GA, dGR, dGA, ddGR, GRmA
+end
+
+@everywhere function G_M(m::Int, p::Parm, Ham::Hamiltonian)
+    #Green関数のinverse
+    wm::Float64 = pi*(2m+1)*p.T
+    GR0::Array{ComplexF64,2} = -Ham.Hk + Matrix{Complex{Float64}}(wm*I,2,2) + p.eta*Matrix{Complex{Float64}}(1.0im*I,2,2)
 
     GR::Array{ComplexF64,2} = inv(GR0)
     GA::Array{ComplexF64,2} = GR'
