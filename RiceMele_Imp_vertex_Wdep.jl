@@ -156,7 +156,7 @@ end
         Jxxx += dk * dw * imag(tr(Hk.Vx * Gkw.GRp * Hk.Vx * Gkw.GRmA * Hk.Vx * Gkw.GAp)) * f(w,p.T)
         Jxxx += dk * dw * imag(tr(Hk.Vx * Gkw.GRmA * Hk.Vx * (Gkw.GAp+Gkw.GAm) * Hk.Vx * Gkw.GA)) * f(w,p.T)
     end
-    return Jxxx/(4*pi*pi)/(p.W_in^2)
+    return Jxxx/(2*pi)/(p.W_in^2)
 end
 
 @everywhere function calcu_imp_scattering(p::Parm)
@@ -193,14 +193,14 @@ function main(arg::Array{String,1})
 
     for j in 1:length(mu0)
         #Parm(t_i, t_e, t_aa, t_bb, Delta, mu, eta, Ni, U, T, hx, hy, hz, K_SIZE, W_MAX, W_SIZE, W_in)
-        p = Parm(parse(Float64,arg[1]), parse(Float64,arg[2]), 0.1, 0.2, parse(Float64,arg[3]), parse(Float64,arg[8]), 0.02, 0.02, parse(Float64,arg[4]),parse(Float64,arg[5]), 0.6, 0.0, 0.0, parse(Int,arg[6]), 1.5, parse(Int,arg[7]),mu0[j])
+        p = Parm(parse(Float64,arg[1]), parse(Float64,arg[2]), 0.1, 0.2, parse(Float64,arg[3]), parse(Float64,arg[8]), 0.02, 0.02, parse(Float64,arg[4]),parse(Float64,arg[5]), 0.6, 0.0, 0.0, parse(Int,arg[6]), 3.0, parse(Int,arg[7]),mu0[j])
         #eta_mu[j] = calcu_imp_scattering(p)
         #new_eta::Float64 = eta_mu[j] + p.eta
         new_eta::Float64 = calcu_imp_scattering(p) + p.eta
-        PV_XXX_ver_mu[j], PV_XXX_mu[j] = @distributed (+) for i in 1:p.K_SIZE 
+        PV_XXX_ver_mu[j], PV_XXX_mu[j] = @distributed (+) for i in 1:length(kk)
             a1 = dk * PV_calcu_ver(p, kk[i], new_eta) 
             a2 = dk * PV_calcu_simple(p, kk[i], new_eta)
-            [a1, a2]
+            [a1/(2pi), a2/(2pi)]
         end
         if(j==1)
             println(new_eta)
