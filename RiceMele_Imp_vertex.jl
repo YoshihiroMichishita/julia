@@ -31,25 +31,34 @@ end
     GR::Array{ComplexF64,2}
     GA::Array{ComplexF64,2}
     GRmA::Array{ComplexF64,2}
-    dGR::Array{ComplexF64,2}
-    dGA::Array{ComplexF64,2}
-    ddGR::Array{ComplexF64,2}
+    GRp::Array{ComplexF64,2}
+    GAp::Array{ComplexF64,2}
+    GRm::Array{ComplexF64,2}
+    GAm::Array{ComplexF64,2}
 end
 
 @everywhere using LinearAlgebra
 
-@everywhere function Gk(w::Float64, Ham::Hamiltonian, eta::Float64)
+@everywhere function Gk(w::Float64, Ham::Hamiltonian, p::Parm, eta::Float64)
     #Green関数のinverse
     GR0::Array{ComplexF64,2} = -Ham.Hk + Matrix{Complex{Float64}}(w*I,2,2) + eta*Matrix{Complex{Float64}}(1.0im*I,2,2)
 
     GR::Array{ComplexF64,2} = inv(GR0)
     GA::Array{ComplexF64,2} = GR'
     GRmA::Array{ComplexF64,2} = GR - GA
-    dGR::Array{ComplexF64,2} = - GR * GR
-    dGA::Array{ComplexF64,2} = - GA * GA
-    ddGR::Array{ComplexF64,2} = 2.0* GR * GR * GR
+
+    GRp0::Array{ComplexF64,2} = -Ham.Hk + (w+p.W_in)*Matrix{Complex{Float64}}(I,2,2) + eta*Matrix{Complex{Float64}}(1.0im*I,2,2)
+    GRp::Array{ComplexF64,2} = inv(GRp0)
+    GAp::Array{ComplexF64,2} = GRp'
+
+    GRm0::Array{ComplexF64,2} = -Ham.Hk + (w-p.W_in)*Matrix{Complex{Float64}}(I,2,2) + eta*Matrix{Complex{Float64}}(1.0im*I,2,2)
+    GRm::Array{ComplexF64,2} = inv(GRm0)
+    GAm::Array{ComplexF64,2} = GRm'
+    #dGR::Array{ComplexF64,2} = - GR * GR
+    #dGA::Array{ComplexF64,2} = - GA * GA
+    #ddGR::Array{ComplexF64,2} = 2.0* GR * GR * GR
     
-    return GR, GA, GRmA, dGR, dGA, ddGR
+    return GR, GA, GRmA, GRp, GAp, GRm, GAm
 end
 
 @everywhere function G_M(m::Int, p::Parm, Ham::Hamiltonian, eta::Float64)
@@ -122,12 +131,12 @@ end
     for q in collect(-pi:dk:pi-dk)
         Hq = Hamiltonian(HandV(k+q,p)...)
         for w in collect(-p.W_MAX:dw:p.W_MAX)
-            Gkw = Green(Gk(w,Hk,eta)...)
-            Gqw = Green(Gk(w,Hq,eta)...)
-            Jxxx += dk * dw * imag(tr(Hk.Vx * Gkw.GR * Gqw.GR * Hq.Vx * (Gqw.GRp + Gqw.GRm) * Hq.Vx * (Gqw.GR * Gkw.GR - Gqw.GA * Gkq.GA))) * f(w,p.T)
-            Jxxx += dk * dw * imag(tr(Hk.Vx * Gkw.GRm * Gqw.GRm * Hq.Vx * Gqw.GRmA * Hq.Vx * Gqw.GAm * Gkq.GAm)) * f(w,p.T)
-            Jxxx += dk * dw * imag(tr(Hk.Vx * Gkw.GRp * Gqw.GRp * Hq.Vx * Gqw.GRmA * Hq.Vx * Gqw.GAp * Gkq.GAp)) * f(w,p.T)
-            Jxxx += dk * dw * imag(tr(Hk.Vx * (Gkw.GR * Gqw.GR - Gkw.GA * Gqw.GA) * Hq.Vx * (Gqw.GAp+Gqw.GAm) * Hq.Vx * Gqw.GA * Gkq.GA)) * f(w,p.T)
+            Gkw = Green(Gk(w,Hk,p,eta)...)
+            Gqw = Green(Gk(w,Hq,p,eta)...)
+            Jxxx += dk * dw * imag(tr(Hk.Vx * Gkw.GR * Gqw.GR * Hq.Vx * (Gqw.GRp + Gqw.GRm) * Hq.Vx * (Gqw.GR * Gkw.GR - Gqw.GA * Gkw.GA))) * f(w,p.T)
+            Jxxx += dk * dw * imag(tr(Hk.Vx * Gkw.GRm * Gqw.GRm * Hq.Vx * Gqw.GRmA * Hq.Vx * Gqw.GAm * Gkw.GAm)) * f(w,p.T)
+            Jxxx += dk * dw * imag(tr(Hk.Vx * Gkw.GRp * Gqw.GRp * Hq.Vx * Gqw.GRmA * Hq.Vx * Gqw.GAp * Gkw.GAp)) * f(w,p.T)
+            Jxxx += dk * dw * imag(tr(Hk.Vx * (Gkw.GR * Gqw.GR - Gkw.GA * Gqw.GA) * Hq.Vx * (Gqw.GAp+Gqw.GAm) * Hq.Vx * Gqw.GA * Gkw.GA)) * f(w,p.T)
         end
     end
     return p.U*p.U*p.Ni*Jxxx/(4*pi*pi)
@@ -139,11 +148,11 @@ end
     Hk = Hamiltonian(HandV(k,p)...)
     Jxxx::Float64 = 0.0
     for w in collect(-p.W_MAX:dw:p.W_MAX)
-        Gkw = Green(Gk(w,Hk,eta)...)
+        Gkw = Green(Gk(w,Hk,p,eta)...)
         Jxxx += dk * dw * imag(tr(Hk.Vx * Gkw.GR * Hk.Vx * (Gkw.GRp + Gkw.GRm) * Hk.Vx * Gkw.GRmA)) * f(w,p.T)
-        Jxxx += dk * dw * imag(tr(Hk.Vx * Gkw.GRm * Hk.Vx * Gkw.GRmA * Hq.Vx * Gkq.GAm)) * f(w,p.T)
-        Jxxx += dk * dw * imag(tr(Hk.Vx * Gkw.GRp * Hk.Vx * Gkw.GRmA * Hq.Vx * Gkq.GAp)) * f(w,p.T)
-        Jxxx += dk * dw * imag(tr(Hk.Vx * Gkw.GRmA * Hk.Vx * (Gkw.GAp+Gkw.GAm) * Hk.Vx * Gkq.GA)) * f(w,p.T)
+        Jxxx += dk * dw * imag(tr(Hk.Vx * Gkw.GRm * Hk.Vx * Gkw.GRmA * Hk.Vx * Gkw.GAm)) * f(w,p.T)
+        Jxxx += dk * dw * imag(tr(Hk.Vx * Gkw.GRp * Hk.Vx * Gkw.GRmA * Hk.Vx * Gkw.GAp)) * f(w,p.T)
+        Jxxx += dk * dw * imag(tr(Hk.Vx * Gkw.GRmA * Hk.Vx * (Gkw.GAp+Gkw.GAm) * Hk.Vx * Gkw.GA)) * f(w,p.T)
     end
     return Jxxx/(4*pi*pi)
 end
@@ -155,12 +164,16 @@ end
     for kk in collect(-pi:dk:pi-dk)
         Hk = Hamiltonian(HandV(kk,p)...)
         for ww in collect(-p.W_MAX:dw:p.W_MAX)
-            Gkw = Green(Gk(w,Hk,p.eta)...)
+            Gkw = Green(Gk(ww,Hk,p,p.eta)...)
             n += dw * dk * imag(tr(Gkw.GRmA)) * f(ww, p.T)
         end
     end
     return p.U*p.U*p.Ni*n
 end
+
+using DataFrames
+using CSV
+using Plots
 
 function main(arg::Array{String,1})
     K_SIZE = parse(Int,arg[6])
@@ -178,14 +191,13 @@ function main(arg::Array{String,1})
 
     for j in 1:length(mu0)
         #Parm(t_i, t_e, Delta, mu, eta, Ni, U, T, hx, hy, hz, K_SIZE, W_MAX, W_SIZE, W_in)
-        p = Parm(parse(Float64,arg[1]), parse(Float64,arg[2]), parse(Float64,arg[3]), mu0[j], 0.02, 1.0, parse(Float64,arg[4]),parse(Float64,arg[5]), 0.0, 0.0, 0.0, parse(Int,arg[6]),
-         1.5, parse(Int,arg[7]),parse(Float64,arg[8]))
+        p = Parm(parse(Float64,arg[1]), parse(Float64,arg[2]), parse(Float64,arg[3]), mu0[j], 0.02, 1.0, parse(Float64,arg[4]),parse(Float64,arg[5]), 0.0, 0.0, 0.0, parse(Int,arg[6]), 1.5, parse(Int,arg[7]),parse(Float64,arg[8]))
         eta_mu[j] = calcu_imp_scattering(p)
-        new_eta = eta_mu[j] + p.eta
+        new_eta::Float64 = eta_mu[j] + p.eta
         PV_XXX_ver_mu[j], PV_XXX_mu[j] = @distributed (+) for i in 1:p.K_SIZE 
-            a1 = dk * PV_calcu_ver(p, kk[i], new_eta), 
+            a1 = dk * PV_calcu_ver(p, kk[i], new_eta) 
             a2 = dk * PV_calcu_simple(p, kk[i], new_eta)
-            a1, a2
+            [a1, a2]
         end
     end
 
@@ -211,11 +223,13 @@ function main(arg::Array{String,1})
 
     ENV["GKSwstype"]="nul"
     Plots.scalefontsizes(1.4)
-    p1 = plot(kk, e1, label="e1",xlabel="kx",ylabel="e",title="dispersion", width=4.0, marker=:circle, markersize = 4.8)
-    p1 = plot!(kk, e2, width=4.0, marker=:circle, markersize = 4.8)
+    p1 = plot(kk, e1_k, label="e1",xlabel="kx",ylabel="e",title="dispersion", width=4.0, marker=:circle, markersize = 4.8)
+    p1 = plot!(kk, e2_k, width=4.0, marker=:circle, markersize = 4.8)
     savefig(p1,"./disp.png")
 
     p2 = plot(mu0, PV_XXX_mu, label="w/o vertex",xlabel="mu",ylabel="PV",title="μ-dependence", width=4.0, marker=:circle, markersize = 4.8)
     p2 = plot!(mu0, PV_XXX_ver_mu, width=4.0, marker=:circle, markersize = 4.8)
     savefig(p2,"./mudep_PV_XXX.png")
 end
+
+@time main(ARGS)
