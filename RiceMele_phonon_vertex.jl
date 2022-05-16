@@ -220,7 +220,7 @@ end
 
 @everywhere f(e::Float64,T::Float64) = 1.0/(1.0+exp(e/T))
 @everywhere df(e::Float64,T::Float64) = -1.0/(1.0+exp(e/T))/(1.0+exp(-e/T))/T
-@everywhere b(e::Float64,T::Float64) = 1.0/(1.0-exp(e/T))
+@everywhere b(e::Float64,T::Float64) = 1.0/(exp((e+0.005)/T)-1.0)
 
 #自己エネルギーを入れてGRを更新
 function calcu_phonon_scattering(p::Parm,H::Hamiltonian, G::Green)
@@ -234,7 +234,7 @@ function calcu_phonon_scattering(p::Parm,H::Hamiltonian, G::Green)
                 kk = (k+q)%p.K_SIZE
                 for wp in 0:p.W_SIZE-1
                     if(wp+w<=p.W_SIZE)
-                        wp0 = p.W_MAX*wp/p.W_SIZE
+                        wp0 = 2p.W_MAX*wp/p.W_SIZE
                         Σw[k,w,:,:] += dk * dw * G.GR[kk,w+wp,:,:] * Gp(wp0,q0,p) * b(wp0, p.T)
                     end
                 end
@@ -268,7 +268,7 @@ function PV_calcu_ver(p::Parm, H::Hamiltonian, G::Green)
                 for wp in 0:p.W_SIZE-1
                     w0 = wp + w
                     if(w0<=p.W_SIZE)
-                        wp0 = p.W_MAX*wp/p.W_SIZE
+                        wp0 = 2p.W_MAX*wp/p.W_SIZE
                         DRq, DAq = Gp(wp0,q0,p)
                         Jxxx[k] += dk * dw * imag(tr(H.Vx[k,:,:] * G.GR[k,w,:,:] * G.GR[kk,w0,:,:] * H.Vxx[kk,:,:] *G.GR[kk,w0,:,:] * DRq * G.GRmA[k,w,:,:])) * f(ww,p.T) *b(wp0,p.T)
                         Jxxx[k] += dk * dw * imag(tr(H.Vx[k,:,:] * G.GR[k,w,:,:] * G.GA[kk,w0,:,:] * H.Vxx[kk,:,:] *G.GA[kk,w0,:,:] * DAq * G.GRmA[k,w,:,:])) * f(ww,p.T) *b(wp0,p.T)
@@ -347,7 +347,7 @@ function PV_calcu_ver(p::Parm, H::Hamiltonian, G::Green)
                             end
 
                             Jxxx[k] += dk * dw * imag(tr(H.Vx[k,:,:] * G.GRmA[k,w,:,:] * G.GR[kk,w0,:,:] * H.Vx[kk,:,:] * (G.GR[kk,w0-wi,:,:]) * H.Vx[kk,:,:] *G.GR[kk,w0,:,:] * DRq * G.GA[k,w,:,:])) * f(ww+wp0,p.T) *b(wp0,p.T)
-                            Jxxx += dk * dw * imag(tr(H.Vx[k,:,:] * G.GRmA[k,w,:,:] * G.GA[kk,w0,:,:] * H.Vx[kk,:,:] * (G.GA[kk,w0-wi,:,:]) * H.Vx[kk,:,:] *G.GA[kk,w0,:,:] * DAq * G.GA[k,w,:,:])) * f(ww+wp0,p.T) *b(wp0,p.T)
+                            Jxxx[k] += dk * dw * imag(tr(H.Vx[k,:,:] * G.GRmA[k,w,:,:] * G.GA[kk,w0,:,:] * H.Vx[kk,:,:] * (G.GA[kk,w0-wi,:,:]) * H.Vx[kk,:,:] *G.GA[kk,w0,:,:] * DAq * G.GA[k,w,:,:])) * f(ww+wp0,p.T) *b(wp0,p.T)
                             #Jxxx += dk * dw * imag(tr(Hk.Vx * Gkw.GRmA * Gqw.GR * Hq.Vx * (Gqw.GRp + Gqw.GRm) * Hq.Vx *Gqw.GR * DRq * Gkw.GA)) * f(w,p.T) *b(wp,p.T)
                             #Jxxx += dk * dw * imag(tr(Hk.Vx * Gkw.GRmA * Gqw.GA * Hq.Vx * (Gqw.GAp + Gqw.GAm) * Hq.Vx *Gqw.GA * DAq * Gkw.GA)) * f(w,p.T) *b(wp,p.T)
                         end
