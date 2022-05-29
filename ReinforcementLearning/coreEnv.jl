@@ -24,7 +24,7 @@ function step(c::coreEnv, act)
     rwd::Float64 = 1.0
     done::Bool = true
 
-    c.doce = done
+    c.done = done
     obs = zeros(Int,4)
 
     return rwd, done, obs
