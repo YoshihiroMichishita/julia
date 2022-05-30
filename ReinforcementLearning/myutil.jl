@@ -110,3 +110,10 @@ function load_json(file::String)
     data = JSON.parsefile(file)
     return data
 end
+
+function wait_for_key(msg::String)
+    println(msg)
+    r = read(stdin, Char)
+    string(r)
+    return r
+end

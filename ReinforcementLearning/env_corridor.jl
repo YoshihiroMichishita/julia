@@ -1,7 +1,9 @@
 using "coreEnv.jl"
+using "myutil.jl"
 #using .core
 
 using Images
+using ImageView
 
 PATH_BLANK = "image/blank.png"
 PATH_ROBOT = "image/robot_right.png"
@@ -147,15 +149,119 @@ function step(en::CorridorEnv ,st::stat, act)
     return rwd, done, obs
 end
 
-function render(en::CorridorEnv)
+function is_target(col::RGB{N0f8})
+    return col == (224,224,224)
+end
+
+function draw_robot(img, en::CorridorEnv, st::stat)
+    col_target::RGB{N0f8} = (224, 224, 224)
+    col_fail::RGB{N0f8} = (0, 0, 225)
+    col_success::RGB{N0f8} = (0, 200, 0)
+
+    img_robot = copy(en.img_robot)
+
+    idx = findall(is_target, img_robot)
+    if(st.robot_state=="fail")
+        img_robot[idx] = col_fail
+    elseif(st.robot_state=="success")
+        img_obj2[idx] = col_success
+    end
+    x0::Int = st.robot_pos*en.unit
+
+    img = copy_img(img, img_robot, x0, 0, true)
+    return img
+end
+
+
+
+function render(en::CorridorEnv, st::stat)
     width = en.unit * en.field_length
     height = en.unit
 
-    img = zeros{RGB{N0f8},(3, width, height)}
+    img = zeros{RGB{N0f8},(width, height)}
     for i in 1:en.field_length
-        
+        img = copy_img(img, en.img_blank, en.unit*i, 0, false)
     end
+
+    if(st.robot_state!=="success")
+        img = copy_img(img, en.img_crystal, en.unit*st.crystal_pos, 0, true)
+    end
+
+    img = draw_robot(img, en, st)
+
+    return img
 end
 
+function msg()
+    println()
+    println("------操作方法---------------")
+    println("[f] 右に進む")
+    println("[d] 拾う")
+    println("[q] 終了")
+    println("クリスタルを拾うと成功")
+    println("----------------------------")
+end
+
+function show_info(t::Int, act, rwd, done, obs, isFirst::Bool)
+    if(rwd==nothing)
+        tt::Int
+        if(isFirst)
+            tt = t
+        else
+            tt = t+1
+        end
+        
+        println()
+        println("x("*string(tt)*")="*string(obs))
+    else
+        ts = string(t)
+        acts = string(act)
+        rwds = string(rwd)
+        dones = string(done)
+        obss = string(obs)
+        println("a("*ts*")="*acts)
+        println("r("*ts*")="*rwds)
+        println("done("*ts*")="*dones)
+        println("obs("*ts*")="*obss)
+    end
+end
+function main()
+    msg()
+    en = CorridorEnv(init_corridor_env()...)
+    st = stat(init_stat()...)
+
+    t::Int = 0
+    obs = reset(en,st)
+    act::Int = nothing
+    rwd::Float64 = nothing
+    done::Bool = nothing
+    println()
+    println("あなたのプレイ開始")
+    show_info(t,act,rwd,done,obs,true)
+
+    while(true)
+        img = render(en,st)
+        imshow(img)
+        key = wait_for_key("press q or d or f")
+        if(key == "q")
+            break
+        end
+        if(key == "d")
+            act = 0
+        elseif(key == "f")
+            act = 1
+        else
+            continue
+        end
+
+        rwd, done, obs = step(en, st,act)
+
+        show_info(t,act,rwd,done,obs,false)
+        t += 1
+    end
+
+
+
+end
 
 
