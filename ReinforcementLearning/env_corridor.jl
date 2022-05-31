@@ -59,9 +59,12 @@ end
 
 function init_stat()
     c = coreEnv(coreEnv_init()...)
-    r_pos::Int = nothing
-    c_pos::Int = nothing
-    r_stat::String = nothing
+    r_pos::Int = -1
+    #nothing
+    c_pos::Int = -1
+    #nothing
+    r_stat::String = "normal"
+    #nothing
     return c, r_pos, c_pos, r_stat
 end
     
@@ -160,7 +163,8 @@ function draw_robot(img, en::CorridorEnv, st::stat)
 
     img_robot = copy(en.img_robot)
 
-    idx = findall(is_target, img_robot)
+    #idx = findall(is_target, img_robot)
+    idx = findall(isequal(col_target), img_robot)
     if(st.robot_state=="fail")
         img_robot[idx] = col_fail
     elseif(st.robot_state=="success")
@@ -203,8 +207,9 @@ function msg()
 end
 
 function show_info(t::Int, act, rwd, done, obs, isFirst::Bool)
-    if(rwd==nothing)
-        tt::Int
+    #if(rwd===nothing)
+    if(rwd === nothing)
+        tt::Int = 0
         if(isFirst)
             tt = t
         else
@@ -225,6 +230,7 @@ function show_info(t::Int, act, rwd, done, obs, isFirst::Bool)
         println("obs("*ts*")="*obss)
     end
 end
+
 function main()
     msg()
     en = CorridorEnv(init_corridor_env()...)
@@ -232,9 +238,9 @@ function main()
 
     t::Int = 0
     obs = reset(en,st)
-    act::Int = nothing
-    rwd::Float64 = nothing
-    done::Bool = nothing
+    act = nothing
+    rwd = nothing
+    done = nothing
     println()
     println("あなたのプレイ開始")
     show_info(t,act,rwd,done,obs,true)
