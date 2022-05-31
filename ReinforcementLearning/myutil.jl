@@ -1,15 +1,18 @@
 """
 共通で使う関数
 """
-using JSON
+
 using Plots
 using DataFrames
 using CSV
+using JSON
+using Images
+using ImageView
 #using PyPlot
 #import matplotlib.pyplot as plt
 
 function isWhite(a::RGB{N0f8})
-    if(a==(255,255,255))
+    if(a==RGB(224/255,224/255,224/255))
         return true
     else
         return false
@@ -41,18 +44,19 @@ function copy_img(img_back::Array{RGB{N0f8},2}, img_obj::Array{RGB{N0f8},2}, x::
     # 引数のimg_backとimg_objが書き変わらないようにコピーする (A)
     img_obj2 = copy(img_obj)
     img_back2 = copy(img_back)
-    w, h, _ = size(img_obj2)...
+    h, w = size(img_obj2)
 
     if(isTrans)
         # img_obj2の白領域を透明にする処理 (B)
         # img_obj2の白領域に背景画像をコピーする
-        idx = findall(iswhite, img_obj2)
-        img_back_rect = copy(img_back[x:x+w, y:y+h])
-        img_obj2[idx] = img_back_rect[idx]
+        idx = findall(isWhite, img_obj2)
+        #println(idx)
+        img_back_rect = copy(img_back[y+1:y+h,x+1:x+w])
+        img_obj2[idx] .= img_back_rect[idx]
     end
 
     # img_obj2をimg_back2にコピー(C)
-    img_back2[x:x+w, y:y+h] = img_obj2
+    img_back2[y+1:y+h, x+1:x+w] = img_obj2
     return img_back2
 end
 

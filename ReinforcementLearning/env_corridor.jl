@@ -1,12 +1,10 @@
-using "coreEnv.jl"
-using "myutil.jl"
+include("coreEnv.jl")
+include("myutil.jl")
 #using .core
 
-using Images
-using ImageView
 
 PATH_BLANK = "image/blank.png"
-PATH_ROBOT = "image/robot_right.png"
+PATH_ROBOT = "image/robo_right.png"
 PATH_CRYSTAL = "image/crystal_small.png"
 
 struct CorridorEnv
@@ -35,12 +33,20 @@ mutable struct stat
     robot_state::String
 end
 
+function show_stat(st::stat)
+    println("-----status-----")
+    println("robot_pos: "*string(st.robot_pos))
+    println("crystal_pos: "*string(st.crystal_pos))
+    println("robot_state: "*st.robot_state)
+    println("----------------")
+end
+
 function init_corridor_env()
     ID_blank::Int = 0
     ID_robot::Int = 1
     ID_crystal::Int =2
     field_length::Int = 4
-    crystal_candidate::Tuple{Int, Int} = (2,3)
+    crystal_candidate::Tuple{Int, Int} = (3,4)
     rwd_fail::Float64 = -1.0
     rwd_move::Float64 = -1.0
     rwd_crystal::Float64 = 5.0
@@ -50,7 +56,7 @@ function init_corridor_env()
     img_robot = load(PATH_ROBOT)
     img_crystal = load(PATH_CRYSTAL)
     img_blank = load(PATH_BLANK)
-    unit = size(img_robot)
+    unit = size(img_robot)[1]
     #c = coreEnv(coreEnv_init()...)
 
     #return c, ID_blank, ID_robot, ID_crystal, field_length, crystal_candidate, rwd_fail, rwd_move, rwd_crystal, robot_pos, crystal_pos, robot_state, img_robot, img_crystal, img_blank, unit
@@ -109,7 +115,7 @@ function reset(en::CorridorEnv ,st::stat)
     st.robot_state = "normal"
     st.robot_pos = 1
 
-    st.crystal_pos = rand{Int}(en.crystal_candidate[1]:en.crystal_candidate[2])
+    st.crystal_pos = rand(en.crystal_candidate[1]:en.crystal_candidate[2])
     obs = make_obs(en, st)
     
     return obs
@@ -157,20 +163,20 @@ function is_target(col::RGB{N0f8})
 end
 
 function draw_robot(img, en::CorridorEnv, st::stat)
-    col_target::RGB{N0f8} = (224, 224, 224)
-    col_fail::RGB{N0f8} = (0, 0, 225)
-    col_success::RGB{N0f8} = (0, 200, 0)
+    col_target::RGB{N0f8} = RGB(224/255, 224/255, 224/255)
+    col_fail::RGB{N0f8} = RGB(1.0, 0.0, 0.0)
+    col_success::RGB{N0f8} = RGB(0.0, 1.0, 0.0)
 
     img_robot = copy(en.img_robot)
 
     #idx = findall(is_target, img_robot)
     idx = findall(isequal(col_target), img_robot)
     if(st.robot_state=="fail")
-        img_robot[idx] = col_fail
+        img_robot[idx] .= col_fail
     elseif(st.robot_state=="success")
-        img_obj2[idx] = col_success
+        img_robot[idx] .= col_success
     end
-    x0::Int = st.robot_pos*en.unit
+    x0::Int = (st.robot_pos-1)*en.unit
 
     img = copy_img(img, img_robot, x0, 0, true)
     return img
@@ -182,13 +188,14 @@ function render(en::CorridorEnv, st::stat)
     width = en.unit * en.field_length
     height = en.unit
 
-    img = zeros{RGB{N0f8},(width, height)}
-    for i in 1:en.field_length
+    img = zeros(RGB{N0f8}, height, width)
+    
+    for i in 0:(en.field_length-1)
         img = copy_img(img, en.img_blank, en.unit*i, 0, false)
     end
 
     if(st.robot_state!=="success")
-        img = copy_img(img, en.img_crystal, en.unit*st.crystal_pos, 0, true)
+        img = copy_img(img, en.img_crystal, en.unit*(st.crystal_pos-1), 0, true)
     end
 
     img = draw_robot(img, en, st)
@@ -236,6 +243,9 @@ function main()
     en = CorridorEnv(init_corridor_env()...)
     st = stat(init_stat()...)
 
+    println(typeof(en.unit))
+    println(typeof(en.unit * en.field_length))
+
     t::Int = 0
     obs = reset(en,st)
     act = nothing
@@ -245,16 +255,18 @@ function main()
     println("あなたのプレイ開始")
     show_info(t,act,rwd,done,obs,true)
 
+
     while(true)
+        show_stat(st)
         img = render(en,st)
         imshow(img)
         key = wait_for_key("press q or d or f")
-        if(key == "q")
+        if(key == 'q')
             break
         end
-        if(key == "d")
+        if(key == 'd')
             act = 0
-        elseif(key == "f")
+        elseif(key == 'f')
             act = 1
         else
             continue
