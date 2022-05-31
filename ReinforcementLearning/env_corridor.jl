@@ -265,9 +265,8 @@ function main()
         show_info(t,act,rwd,done,obs,false)
         t += 1
     end
-
-
-
 end
+
+@time main()
 
 
