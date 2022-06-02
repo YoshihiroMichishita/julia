@@ -32,6 +32,11 @@ function model_f(nq::netQAgt, x)
     return m(Flux.flatten(x)')
 end
 
+mutable struct models
+    model
+    opt
+    loss
+end
 
 function build_Qnet(nq::netQAgt)
     model = Chain(Flux.flatten, Dense(nq.input_size, nq.n_dense, relu), Dense(nq.n_dense, nq.n_act))
