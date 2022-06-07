@@ -32,7 +32,7 @@ function init_nQ(s::String = "test")
 
     return n_act, input_size, n_dense, ϵ, γ, filepath
 end
-
+#=
 function model(nq::netQAgt, x)
     m = Chain(Dense(nq.input_size, nq.n_dense, relu), Dense(nq.n_dense, nq.n_act))
     return m(x)
@@ -41,7 +41,7 @@ end
 function model_f(nq::netQAgt, x)
     m = Chain(Dense(nq.input_size, nq.n_dense, relu), Dense(nq.n_dense, nq.n_act))
     return m(Flux.flatten(x)')
-end
+end=#
 
 mutable struct models
     model
