@@ -43,7 +43,7 @@ end
 
 using RandomMatrices
 
-function decide_action(nq::netQAgt, m::models, obs)
+function decide_action(nq::agtQ, m::models, obs)
 
     if(rand()< nq.ϵ)
         her = GaussianHermite(2)
@@ -54,4 +54,24 @@ function decide_action(nq::netQAgt, m::models, obs)
     end
 
     return act
+end
+
+function learn(nq::agtQ, m::models, obs, act, rwd, done, next_obs)
+    if(isnothing(rwd))
+        return
+    end
+
+    y = get_U(obs)
+    target = copy(y)
+
+    if(!done)
+        next_y = get_Q(next_obs)
+        target_act = rwd + nq.γ*maximum(next_y)
+    else
+        target_act = rwd
+    end
+
+    target[act] = target_act
+
+    Flux.train!(m.loss,Flux.params(m.model),obs, m.opt)
 end
