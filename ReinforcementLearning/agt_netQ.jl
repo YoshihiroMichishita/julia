@@ -92,7 +92,7 @@ function learn(nq::netQAgt, m::models, obs, act, rwd, done, next_obs)
 
     target[act] = target_act
 
-    Flux.train!(m.loss,Flux.params(m.model),obs, m.opt)
+    Flux.train!(m.loss,Flux.params(m.model), target, m.opt)
 end
 
 using BSON: @save

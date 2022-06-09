@@ -26,15 +26,21 @@ mutable struct models
     loss
 end
 
+function micro_motion(x, y)
+    K = vec_to_matrix(x)
+    
+
+#NNの初期化
 function build_model(nq::agtQ)
     #model = Chain(Flux.flatten', Dense(nq.input_size, nq.n_dense, relu), Dense(nq.n_dense, nq.n_act))
     model = Chain(Dense(nq.input_size, nq.n_dense, relu), Dense(nq.n_dense, nq.n_dense, relu), Dense(nq.n_dense, nq.out_size))
     opt = ADAM()
-    loss(x,y) = Flux.mse(model(x),y)
+    #loss(x,y) = Flux.mse(model(x),y)
 
     return model, opt, loss
 end
 
+#U: NNから出力されるKick Operator(Hermite)をベクトル表示したものを出力
 function get_U(m::models , obs)
     U = m.model(Flux.flatten(obs)')
     return U
@@ -43,6 +49,7 @@ end
 
 using RandomMatrices
 
+#ある確率でランダムなKick Operatorを出力、そうでないならNNから出力
 function decide_action(nq::agtQ, m::models, obs)
 
     if(rand()< nq.ϵ)
