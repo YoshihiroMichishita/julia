@@ -28,6 +28,10 @@ end
 
 function micro_motion(x, y)
     K = vec_to_matrix(x)
+    e, v = eigen(K-y)
+    l = e'* e
+    return l
+end
     
 
 #NNの初期化
