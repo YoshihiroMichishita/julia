@@ -54,7 +54,7 @@ end
 function diff_norm(V::Vector{Float64})
     M = vec_to_matrix(V)
     e, v = eigen(M)
-    n = e' * e
+    n::Float64 = e' * e
     return n
 end
 
@@ -75,6 +75,8 @@ function loss_F(en::TS_env, ag::agtQ, t::Int, sw::Int)
     end
     return l
 end
+
+function loss_t()
 
 
     
