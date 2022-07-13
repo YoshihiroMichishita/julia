@@ -25,12 +25,12 @@ mutable struct TS_env
     V_t::Matrix{ComplexF64}
 end
 
-function init_env()
-    t_size::Int=100
+function init_env(t::Int=100, Ω0::Float64 = 10.0, ξ0::Float64 = 0.2, Jz0::Float16 = 1.0, Jx0::Float16 = 0.7, hz0::Float64 = 0.5)
+    t_size::Int=t
     HS_size::Int = 4
     num_parm::Int = 5
-    Ω::Float64 = 10.0
-    ξ::Float64 = 0.2
+    Ω::Float64 = Ω0
+    ξ::Float64 = ξ0
     Jz::Float16 = 1.0
     Jx::Float16 = 0.7
     hz::Float64 = 0.5

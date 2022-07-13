@@ -133,3 +133,7 @@ function learn(nq::agtQ, m::models, obs, act, rwd, done, next_obs)
 
     Flux.train!(m.loss,Flux.params(m.model),obs, m.opt)
 end
+
+function main(arg::Array{String,1})
+
+end
