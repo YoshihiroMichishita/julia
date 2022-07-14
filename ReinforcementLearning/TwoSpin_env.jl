@@ -12,7 +12,7 @@ G6::Matrix{ComplexF64} = [0.0 0.0 0.0 0.0; 0.0 0.0 1.0 0.0; 0.0 1.0 0.0 0.0; 0.0
 =#
 
 
-mutable struct TS_env
+struct TS_env
     t_size::Int
     HS_size::Int
     num_parm::Int
@@ -31,9 +31,9 @@ function init_env(t::Int=100, Ω0::Float64 = 10.0, ξ0::Float64 = 0.2, Jz0::Floa
     num_parm::Int = 5
     Ω::Float64 = Ω0
     ξ::Float64 = ξ0
-    Jz::Float16 = 1.0
-    Jx::Float16 = 0.7
-    hz::Float64 = 0.5
+    Jz::Float16 = Jz0
+    Jx::Float16 = Jx0
+    hz::Float64 = hz0
     H_0::Matrix{ComplexF64} = [ -Jz-2hz, 0, 0, -Jx; 0, Jz, -Jx, 0; 0, -Jx, Jz, 0; -Jx, 0, 0, -Jz+2hz]
     V_t::Matrix{ComplexF64} = [ 0 , -ξ, -ξ, 0; -ξ, 0, 0, -ξ; -ξ, 0, 0, -ξ; 0, -ξ, -ξ, 0]
 
