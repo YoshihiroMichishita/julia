@@ -27,8 +27,8 @@ mutable struct models
 end
 
 function micro_motion(x, y)
-    K = vec_to_matrix(x)
-    e, v = eigen(K-y)
+    Kp = vec_to_matrix(x)
+    e, v = eigen(Kp-y)
     l = e'* e
     return l
 end
