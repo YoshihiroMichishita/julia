@@ -45,20 +45,31 @@ end
 #using FFTW
 
 #K'(t)からK(t),H_F^a(t)を計算する関数
-function micro_motion(Kp_t, K_t, en::TS_env, t::Int)
+function micro_motion(Kp_t::Vector{Float64}, K_t::Vector{Float64}, en::TS_env, t::Int)
     Kp = vec_to_matrix(Kp_t)
     K_t_new = K_t + (2pi/en.t_size/en.Ω) * Kp_t 
     Kt = vec_to_matrix(K_t_new)
-    HF_m = exp(1.0im*Kt)*(en.H_0 + en.V_t*sin(2pi*t/en.t_size) - Kp)*exp(-1.0im*Kt)
+    HF_m = Hermitian(exp(1.0im*Kt)*(en.H_0 + en.V_t*sin(2pi*t/en.t_size) - Kp)*exp(-1.0im*Kt))
     HF = matrix_to_vec(HF_m)
     return K_t_new, HF
+end
+
+function micro_motion2(Kp_t::Vector{Float64}, K_t::Vector{Float64}, en::TS_env, t::Int)
+    Kp = vec_to_matrix(Kp_t)
+    K_t_new = K_t + (2pi/en.t_size/en.Ω) * Kp_t 
+    Kt = vec_to_matrix(K_t_new)
+    HF_m = Hermitian(exp(1.0im*Kt)*(en.H_0 + en.V_t*sin(2pi*t/en.t_size) - Kp)*exp(-1.0im*Kt))
+    HF = matrix_to_vec(HF_m)
+    return HF
 end
 
 
 function diff_norm(V::Vector{Float64})
     M = vec_to_matrix(V)
     e, v = eigen(M)
+    #n::Float64 = V' * V
     n::Float64 = e' * e
+    #n = sum(e[n]^2 for n in 1:size(e))
     return n
 end
 
@@ -66,7 +77,7 @@ end
 #lossの関数
 function loss_F(en::TS_env, ag::agtQ, t::Int, sw::Int)
     l::Float64 = 0.0
-    for n in 1:en.t_size-1 
+    for n in 1:(en.t_size-1) 
         if(n<t)
             lt = t-n
         elseif(n==t)
@@ -77,9 +88,44 @@ function loss_F(en::TS_env, ag::agtQ, t::Int, sw::Int)
                 break
             end
         end
-        l -= ag.γ^(n-1) * diff_norm(ag.HF_TL[t,:]-ag.HF_TL[lt,:])
+        l -= (ag.γ^(n-1)) * diff_norm(ag.HF_TL[t,:]-ag.HF_TL[lt,:])
     end
     return l
+end
+
+function loss_F2(en::TS_env, ag::agtQ,H_t::Vector{Float64}, t::Int, sw::Int)
+    l::Float64 = 0.0
+    for n in 1:(en.t_size-1) 
+        if(n<t)
+            lt = t-n
+        elseif(n==t)
+            lt = en.t_size
+        else
+            lt = t-n+en.t_size
+            if(sw==1) 
+                break
+            end
+        end
+        l -= (ag.γ^(n-1)) * diff_norm(H_t-ag.HF_TL[lt,:])
+    end
+    return l
+end
+
+function loss_t(model0, en::TS_env, ag::agtQ, t::Int, it::Int)
+    if(t==1)
+        tt=en.t_size
+    else
+        tt=t-1
+    end
+    p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
+    x = vcat([p, ag.K_TL[tt,:], ag.HF_TL[tt,:]]...)
+    Kp = model0(x)
+    
+    #ag.K_TL[t,:] += Kp
+    #HF_t = micro_motion2(Kp, ag.K_TL[tt,:],en,t)
+    l = loss_F2(en, ag, Kp, t, it)
+    #l = Kp' * Kp
+    return l 
 end
 
 function loss_t!(model0, en::TS_env, ag::agtQ, t::Int, it::Int)
@@ -89,10 +135,13 @@ function loss_t!(model0, en::TS_env, ag::agtQ, t::Int, it::Int)
         tt=t-1
     end
     p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
-    x = [p ag.K_TL[tt,:] ag.HF_TL[tt,:]]
+    x = vcat([p, ag.K_TL[tt,:], ag.HF_TL[tt,:]]...)
     Kp = model0(x)
+    
+    #ag.K_TL[t,:] += Kp
     ag.K_TL[t,:], ag.HF_TL[t,:] = micro_motion(Kp, ag.K_TL[tt,:],en,t)
     l = loss_F(en, ag, t, it)
+    #l = Kp' * Kp
     return l 
 end
  
@@ -156,6 +205,8 @@ function learn(nq::agtQ, m::models, obs, act, rwd, done, next_obs)
 end
 =#
 
+using DataFrames
+using CSV
 function main(arg::Array{String,1})
 
     en = TS_env(init_env(parse(Int,arg[1]), parse(Float64,arg[2]), parse(Float64,arg[3]), parse(Float64,arg[4]), parse(Float64,arg[5]), parse(Float64,arg[6]))...)
@@ -165,21 +216,27 @@ function main(arg::Array{String,1})
     ag.HF_TL[en.t_size,:] = matrix_to_vec(en.H_0)
     ag.K_TL[en.t_size,:] = -matrix_to_vec(en.V_t)/en.Ω
 
-    model = Chain(Dense(ag.input_size, ag.n_dense, relu), Dense(ag.n_dense, ag.n_dense, relu), Dense(ag.n_dense, ag.out_size))
+    model = Chain(Dense(ag.in_size, ag.n_dense, relu), Dense(ag.n_dense, ag.n_dense, relu), Dense(ag.n_dense, ag.out_size))
     opt = ADAM()
 
 
     it_MAX = parse(Int,arg[9])
     ll_it = zeros(Float64, it_MAX)
+    println("start!")
+    #ll_it[1] = loss_t!(model,en, ag, 2, 1)
+    #println(ll_it[1])
+    
     for it in 1:it_MAX
         for t_step in 1:en.t_size
             grads = Flux.gradient(Flux.params(model)) do
-                loss_t!(model,en, ag, t_step, it)
+                loss_t(model, en, ag, t_step, it)
+                #loss_t!(model, en, ag, t_step, it)
             end
             Flux.Optimise.update!(opt, Flux.params(model), grads)
-            ll_it[it] += loss_t!(model,en, ag, t_step, it)
+            #ll_it[it] = loss_t!(model,en, ag, t_step, it)
         end
-        println(ll_it[it])
+        #println(ll_it[it])
+        #=
         if(it%10 == 0)
             ee = zeros(Float64, en.t_size, en.HS_size)
             for t_step in 1:en.t_size
@@ -193,6 +250,10 @@ function main(arg::Array{String,1})
             save_data2 = DataFrame(transpose(ag.K_TL))
             CSV.write("./Kt_Ω.csv", save_data2)
         end
+        =#
         
     end
+    
 end
+
+@time main(ARGS)
