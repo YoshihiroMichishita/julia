@@ -12,7 +12,7 @@ G6::Matrix{ComplexF64} = [0.0 0.0 0.0 0.0; 0.0 0.0 1.0 0.0; 0.0 1.0 0.0 0.0; 0.0
 =#
 
 
-mutable struct TS_env
+struct TS_env
     t_size::Int
     HS_size::Int
     num_parm::Int
@@ -21,21 +21,27 @@ mutable struct TS_env
     Jz::Float64
     Jx::Float64
     hz::Float64
-    H_0::Matrix{ComplexF64}
-    V_t::Matrix{ComplexF64}
+    #H_0::Matrix{ComplexF64}
+    #V_t::Matrix{ComplexF64}
+    H_0::Hermitian{ComplexF64, Matrix{ComplexF64}}
+    V_t::Hermitian{ComplexF64, Matrix{ComplexF64}}
 end
 
-function init_env()
-    t_size::Int=100
+function init_env(t::Int=100, Ω0::Float64 = 10.0, ξ0::Float64 = 0.2, Jz0::Float64 = 1.0, Jx0::Float64 = 0.7, hz0::Float64 = 0.5)
+    t_size::Int=t
     HS_size::Int = 4
     num_parm::Int = 5
-    Ω::Float64 = 10.0
-    ξ::Float64 = 0.2
-    Jz::Float16 = 1.0
-    Jx::Float16 = 0.7
-    hz::Float64 = 0.5
-    H_0::Matrix{ComplexF64} = [ -Jz-2hz, 0, 0, -Jx; 0, Jz, -Jx, 0; 0, -Jx, Jz, 0; -Jx, 0, 0, -Jz+2hz]
-    V_t::Matrix{ComplexF64} = [ 0 , -ξ, -ξ, 0; -ξ, 0, 0, -ξ; -ξ, 0, 0, -ξ; 0, -ξ, -ξ, 0]
+    Ω::Float64 = Ω0
+    ξ::Float64 = ξ0
+    Jz::Float16 = Jz0
+    Jx::Float16 = Jx0
+    hz::Float64 = hz0
+    #H_0::Matrix{ComplexF64} = [ -Jz-2hz 0 0 -Jx; 0 Jz -Jx 0; 0 -Jx Jz 0; -Jx 0 0 -Jz+2hz]
+    #V_t::Matrix{ComplexF64} = [ 0 -ξ -ξ 0; -ξ 0 0 -ξ; -ξ 0 0 -ξ; 0 -ξ -ξ 0]
+
+    H_0::Hermitian{ComplexF64, Matrix{ComplexF64}} = Hermitian([ -Jz-2hz 0 0 -Jx; 0 Jz -Jx 0; 0 -Jx Jz 0; -Jx 0 0 -Jz+2hz])
+    V_t::Hermitian{ComplexF64, Matrix{ComplexF64}} = Hermitian([ 0 -ξ -ξ 0; -ξ 0 0 -ξ; -ξ 0 0 -ξ; 0 -ξ -ξ 0])
+
 
     return t_size, HS_size, num_parm, Ω, ξ, Jz, Jx, hz, H_0, V_t
 end
@@ -45,10 +51,12 @@ function vec_to_matrix(v::Vector{Float64})
     M = zeros(ComplexF64,d,d)
     for i in 1:d
         for j in i:d
-            l = (i-1)*d + 2*(j-1)
+            #l = (i-1)*d + 2*(j-1)
             if(i==j)
-                M[i,j] = v[l+1]
+                l = 2(d+1-i)*(i-1) + (i-1)^2 + 1
+                M[i,j] = v[l]
             else
+                l = 2(d+1-i)*(i-1) + (i-1)^2 + 2*(j-i)
                 M[i,j] = v[l] + im*v[l+1]
             end
         end
@@ -59,15 +67,21 @@ function vec_to_matrix(v::Vector{Float64})
 end
 
 function matrix_to_vec(M::Hermitian{ComplexF64, Matrix{ComplexF64}})
-    d = sinze(M)[1]
-    v::Vector{Float64} = []
+    d = size(M)[1]
+    #v::Vector{Float64} = []
+    v = zeros(Float64,d^2)
     for i in 1:d
         for j in i:d
             if(i==j)
-                push!(v, M[i,j])
+                l = 2(d+1-i)*(i-1) + (i-1)^2 + 1
+                v[l] = real(M[i,j])
+                #push!(v, M[i,j])
             else
-                push!(v,M[i,j].real)
-                push!(v,M[i,j].imag)
+                l = 2(d+1-i)*(i-1) + (i-1)^2 + 2*(j-i)
+                v[l] = real(M[i,j])
+                v[l+1] = imag(M[i,j])
+                #push!(v,real(M[i,j]))
+                #push!(v,imag(M[i,j]))
             end
         end
         
