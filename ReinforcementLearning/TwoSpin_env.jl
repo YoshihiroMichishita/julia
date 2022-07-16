@@ -25,6 +25,38 @@ struct TS_env
     #V_t::Matrix{ComplexF64}
     H_0::Hermitian{ComplexF64, Matrix{ComplexF64}}
     V_t::Hermitian{ComplexF64, Matrix{ComplexF64}}
+    σ_vec::Vector{Hermitian{ComplexF64, Matrix{ComplexF64}}}
+end
+
+function generate_M(H_size::Int)
+    A::Vector{Hermitian{ComplexF64, Matrix{ComplexF64}}} =[]
+    for i in 1:H_size
+        for j in i:H_size
+            if(i==j)
+                #l = 2(d+1-i)*(i-1) + (i-1)^2 + 1
+                B = zeros(ComplexF64,H_size,H_size)
+                B[i,j] = 1.0
+                B = Hermitian(B)
+                push!(A,B)
+                #A[l,:,:] = B[:,:]
+            else
+                #l = 2(d+1-i)*(i-1) + (i-1)^2 + 2*(j-i)
+                B = zeros(ComplexF64,H_size,H_size)
+                B[i,j] = 0.5
+                B[j,i] = 0.5
+                B = Hermitian(B)
+                B2 = zeros(ComplexF64,H_size,H_size)
+                B2[i,j] = 0.5im
+                B2[j,i] = -0.5im
+                B2 = Hermitian(B2)
+                #A[l,:,:] = B[:,:]
+                #A[l+1,:,:] = B2[:,:]
+                push!(A,B)
+                push!(A,B2)
+            end
+        end
+    end
+    return A
 end
 
 function init_env(t::Int=100, Ω0::Float64 = 10.0, ξ0::Float64 = 0.2, Jz0::Float64 = 1.0, Jx0::Float64 = 0.7, hz0::Float64 = 0.5)
@@ -42,51 +74,19 @@ function init_env(t::Int=100, Ω0::Float64 = 10.0, ξ0::Float64 = 0.2, Jz0::Floa
     H_0::Hermitian{ComplexF64, Matrix{ComplexF64}} = Hermitian([ -Jz-2hz 0 0 -Jx; 0 Jz -Jx 0; 0 -Jx Jz 0; -Jx 0 0 -Jz+2hz])
     V_t::Hermitian{ComplexF64, Matrix{ComplexF64}} = Hermitian([ 0 -ξ -ξ 0; -ξ 0 0 -ξ; -ξ 0 0 -ξ; 0 -ξ -ξ 0])
 
+    σ_vec = generate_M(HS_size)
 
-    return t_size, HS_size, num_parm, Ω, ξ, Jz, Jx, hz, H_0, V_t
+    return t_size, HS_size, num_parm, Ω, ξ, Jz, Jx, hz, H_0, V_t, σ_vec
 end
 
-function vec_to_matrix(v::Vector{Float64})
-    d::Int = sqrt(length(v))
-    M = zeros(ComplexF64,d,d)
-    for i in 1:d
-        for j in i:d
-            #l = (i-1)*d + 2*(j-1)
-            if(i==j)
-                l = 2(d+1-i)*(i-1) + (i-1)^2 + 1
-                M[i,j] = v[l]
-            else
-                l = 2(d+1-i)*(i-1) + (i-1)^2 + 2*(j-i)
-                M[i,j] = v[l] + im*v[l+1]
-            end
-        end
-    end
-    Kt = Hermitian(M)
-    
-    return Kt
+function VtoM(V::Vector{Float64},en::TS_env)
+    M = V' * en.σ_vec
+    return M
 end
 
-function matrix_to_vec(M::Hermitian{ComplexF64, Matrix{ComplexF64}})
-    d = size(M)[1]
-    #v::Vector{Float64} = []
-    v = zeros(Float64,d^2)
-    for i in 1:d
-        for j in i:d
-            if(i==j)
-                l = 2(d+1-i)*(i-1) + (i-1)^2 + 1
-                v[l] = real(M[i,j])
-                #push!(v, M[i,j])
-            else
-                l = 2(d+1-i)*(i-1) + (i-1)^2 + 2*(j-i)
-                v[l] = real(M[i,j])
-                v[l+1] = imag(M[i,j])
-                #push!(v,real(M[i,j]))
-                #push!(v,imag(M[i,j]))
-            end
-        end
-        
-    end
-    return v
+function MtoV(M::Hermitian{ComplexF64, Matrix{ComplexF64}}, en::TS_env)
+    V = real.(tr.(en.σ_vec .* (M,)))
+    return V
 end
 
 function reward(v_old::Vector{Float64}, v_new::Vector{Float64}, en::TS_env)

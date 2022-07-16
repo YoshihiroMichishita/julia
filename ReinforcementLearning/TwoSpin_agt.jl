@@ -46,26 +46,26 @@ end
 
 #K'(t)からK(t),H_F^a(t)を計算する関数
 function micro_motion(Kp_t::Vector{Float64}, K_t::Vector{Float64}, en::TS_env, t::Int)
-    Kp = vec_to_matrix(Kp_t)
+    Kp = VtoM(Kp_t,en)
     K_t_new = K_t + (2pi/en.t_size/en.Ω) * Kp_t 
-    Kt = vec_to_matrix(K_t_new)
+    Kt = VtoM(K_t_new,en)
     HF_m = Hermitian(exp(1.0im*Kt)*(en.H_0 + en.V_t*sin(2pi*t/en.t_size) - Kp)*exp(-1.0im*Kt))
-    HF = matrix_to_vec(HF_m)
+    HF = MtoV(HF_m, en)
     return K_t_new, HF
 end
 
 function micro_motion2(Kp_t::Vector{Float64}, K_t::Vector{Float64}, en::TS_env, t::Int)
-    Kp = vec_to_matrix(Kp_t)
+    Kp = VtoM(Kp_t,en)
     K_t_new = K_t + (2pi/en.t_size/en.Ω) * Kp_t 
-    Kt = vec_to_matrix(K_t_new)
+    Kt = VtoM(K_t_new,en)
     HF_m = Hermitian(exp(1.0im*Kt)*(en.H_0 + en.V_t*sin(2pi*t/en.t_size) - Kp)*exp(-1.0im*Kt))
-    HF = matrix_to_vec(HF_m)
+    HF = MtoV(HF_m,en)
     return HF
 end
 
 
-function diff_norm(V::Vector{Float64})
-    M = vec_to_matrix(V)
+function diff_norm(V::Vector{Float64}, en::TS_env)
+    M = VtoM(V,en)
     e, v = eigen(M)
     #n::Float64 = V' * V
     n::Float64 = e' * e
@@ -88,7 +88,7 @@ function loss_F(en::TS_env, ag::agtQ, t::Int, sw::Int)
                 break
             end
         end
-        l -= (ag.γ^(n-1)) * diff_norm(ag.HF_TL[t,:]-ag.HF_TL[lt,:])
+        l -= (ag.γ^(n-1)) * diff_norm(ag.HF_TL[t,:]-ag.HF_TL[lt,:],en)
     end
     return l
 end
@@ -106,7 +106,7 @@ function loss_F2(en::TS_env, ag::agtQ,H_t::Vector{Float64}, t::Int, sw::Int)
                 break
             end
         end
-        l -= (ag.γ^(n-1)) * diff_norm(H_t-ag.HF_TL[lt,:])
+        l -= (ag.γ^(n-1)) * diff_norm((H_t-ag.HF_TL[lt,:]),en)
     end
     return l
 end
@@ -213,8 +213,8 @@ function main(arg::Array{String,1})
 
     ag = agtQ(init_nQ(en,parse(Int,arg[7]),parse(Float64,arg[8]))...)
 
-    ag.HF_TL[en.t_size,:] = matrix_to_vec(en.H_0)
-    ag.K_TL[en.t_size,:] = -matrix_to_vec(en.V_t)/en.Ω
+    ag.HF_TL[en.t_size,:] = MtoV(en.H_0, en)
+    ag.K_TL[en.t_size,:] = -MtoV(en.V_t, en)/en.Ω
 
     model = Chain(Dense(ag.in_size, ag.n_dense, relu), Dense(ag.n_dense, ag.n_dense, relu), Dense(ag.n_dense, ag.out_size))
     opt = ADAM()
