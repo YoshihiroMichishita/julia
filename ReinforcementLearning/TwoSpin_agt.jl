@@ -122,8 +122,8 @@ function loss_t(model0, en::TS_env, ag::agtQ, t::Int, it::Int)
     Kp = model0(x)
     
     #ag.K_TL[t,:] += Kp
-    #HF_t = micro_motion2(Kp, ag.K_TL[tt,:],en,t)
-    l = loss_F2(en, ag, Kp, t, it)
+    HF_t = micro_motion2(Kp, ag.K_TL[tt,:],en,t)
+    l = -loss_F2(en, ag, HF_t, t, it)
     #l = Kp' * Kp
     return l 
 end
@@ -140,7 +140,7 @@ function loss_t!(model0, en::TS_env, ag::agtQ, t::Int, it::Int)
     
     #ag.K_TL[t,:] += Kp
     ag.K_TL[t,:], ag.HF_TL[t,:] = micro_motion(Kp, ag.K_TL[tt,:],en,t)
-    l = loss_F(en, ag, t, it)
+    l = -loss_F(en, ag, t, it)
     #l = Kp' * Kp
     return l 
 end
@@ -207,6 +207,7 @@ end
 
 using DataFrames
 using CSV
+using Plots
 function main(arg::Array{String,1})
 
     en = TS_env(init_env(parse(Int,arg[1]), parse(Float64,arg[2]), parse(Float64,arg[3]), parse(Float64,arg[4]), parse(Float64,arg[5]), parse(Float64,arg[6]))...)
@@ -233,9 +234,10 @@ function main(arg::Array{String,1})
                 #loss_t!(model, en, ag, t_step, it)
             end
             Flux.Optimise.update!(opt, Flux.params(model), grads)
-            #ll_it[it] = loss_t!(model,en, ag, t_step, it)
+            #println(loss_t!(model, en, ag, t_step, it))
+            ll_it[it] += loss_t!(model,en, ag, t_step, it)
         end
-        #println(ll_it[it])
+        println(ll_it[it])
         #=
         if(it%10 == 0)
             ee = zeros(Float64, en.t_size, en.HS_size)
@@ -249,10 +251,18 @@ function main(arg::Array{String,1})
         if(it == it_MAX)
             save_data2 = DataFrame(transpose(ag.K_TL))
             CSV.write("./Kt_Ω.csv", save_data2)
-        end
-        =#
-        
+        end=#
     end
+    E = zeros(Float64, en.t_size, en.HS_size)
+    for t_step in 1:en.t_size
+        E[t_step,:], v = eigen(VtoM(ag.HF_TL[t_step,:],en))
+    end
+
+    p1 = plot(E[:,1], xlabel="t_step", ylabel="E of HF_t", width=3.0)
+    p1 = plot!(E[:,2], width=3.0)
+    p1 = plot!(E[:,3], width=3.0)
+    p1 = plot!(E[:,4], width=3.0)
+    savefig(p1,"./HF_t.png")
     
 end
 
