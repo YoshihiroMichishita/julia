@@ -253,10 +253,28 @@ function main(arg::Array{String,1})
             CSV.write("./Kt_Ω.csv", save_data2)
         end=#
     end
+    println("Learning finish!!")
+
+    for t in 1:en.t_size
+        if(t==1)
+            tt=en.t_size
+        else
+            tt=t-1
+        end
+        p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
+        x = vcat([p, ag.K_TL[tt,:], ag.HF_TL[tt,:]]...)
+        Kp = model(x)
+        
+        #ag.K_TL[t,:] += Kp
+        ag.K_TL[t,:], ag.HF_TL[t,:] = micro_motion(Kp, ag.K_TL[tt,:],en,t)
+    end
+
     E = zeros(Float64, en.t_size, en.HS_size)
     for t_step in 1:en.t_size
         E[t_step,:], v = eigen(VtoM(ag.HF_TL[t_step,:],en))
     end
+
+    println("Eigenvalue calculation Finish!!")
 
     p1 = plot(E[:,1], xlabel="t_step", ylabel="E of HF_t", width=3.0)
     p1 = plot!(E[:,2], width=3.0)
@@ -266,4 +284,5 @@ function main(arg::Array{String,1})
     
 end
 
-@time main(ARGS)
+main(ARGS)
+#@time main(ARGS)
