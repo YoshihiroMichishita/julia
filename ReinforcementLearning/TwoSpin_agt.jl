@@ -75,7 +75,7 @@ end
 
 
 #lossの関数
-function loss_F(en::TS_env, ag::agtQ, t::Int, sw::Int)
+function loss_fn(en::TS_env, ag::agtQ, t::Int, sw::Int)
     l::Float64 = 0.0
     for n in 1:(en.t_size-1) 
         if(n<t)
@@ -93,7 +93,7 @@ function loss_F(en::TS_env, ag::agtQ, t::Int, sw::Int)
     return l
 end
 
-function loss_F2(en::TS_env, ag::agtQ,H_t::Vector{Float64}, t::Int, sw::Int)
+function loss_fn_given(en::TS_env, ag::agtQ,H_t::Vector{Float64}, t::Int, sw::Int)
     l::Float64 = 0.0
     for n in 1:(en.t_size-1) 
         if(n<t)
@@ -111,7 +111,29 @@ function loss_F2(en::TS_env, ag::agtQ,H_t::Vector{Float64}, t::Int, sw::Int)
     return l
 end
 
-function loss_t(model0, en::TS_env, ag::agtQ, t::Int, it::Int)
+function loss_fn_simple(en::TS_env, HF_given::Vector{Float64}, HF_calc::Vector{Float64})
+    l = -diff_norm(HF_given - HF_calc,en)
+    return l
+end
+
+function loss_calc0(model0, en::TS_env, ag::agtQ, t::Int, HF_given::Vector{Float64})
+    if(t==1)
+        tt=en.t_size
+    else
+        tt=t-1
+    end
+    p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
+    x = vcat([p, ag.K_TL[tt,:], ag.HF_TL[tt,:]]...)
+    Kp = model0(x)
+    
+    #ag.K_TL[t,:] += Kp
+    HF_calc = micro_motion2(Kp, ag.K_TL[tt,:],en,t)
+    l = -loss_fn_simple(en, HF_given, HF_calc)
+    #l = Kp' * Kp
+    return l 
+end
+
+function loss_calc(model0, en::TS_env, ag::agtQ, t::Int, it::Int)
     if(t==1)
         tt=en.t_size
     else
@@ -123,12 +145,12 @@ function loss_t(model0, en::TS_env, ag::agtQ, t::Int, it::Int)
     
     #ag.K_TL[t,:] += Kp
     HF_t = micro_motion2(Kp, ag.K_TL[tt,:],en,t)
-    l = -loss_F2(en, ag, HF_t, t, it)
+    l = -loss_fn_given(en, ag, HF_t, t, it)
     #l = Kp' * Kp
     return l 
 end
 
-function loss_t!(model0, en::TS_env, ag::agtQ, t::Int, it::Int)
+function loss_calc!(model0, en::TS_env, ag::agtQ, t::Int, HF_given::Vector{Float64})
     if(t==1)
         tt=en.t_size
     else
@@ -140,7 +162,8 @@ function loss_t!(model0, en::TS_env, ag::agtQ, t::Int, it::Int)
     
     #ag.K_TL[t,:] += Kp
     ag.K_TL[t,:], ag.HF_TL[t,:] = micro_motion(Kp, ag.K_TL[tt,:],en,t)
-    l = -loss_F(en, ag, t, it)
+    l = -loss_fn_simple(en, HF_given, ag.HF_TL[t,:])
+    #l = -loss_fn(en, ag, t, it)
     #l = Kp' * Kp
     return l 
 end
@@ -208,12 +231,14 @@ end
 using DataFrames
 using CSV
 using Plots
+
 function main(arg::Array{String,1})
 
     en = TS_env(init_env(parse(Int,arg[1]), parse(Float64,arg[2]), parse(Float64,arg[3]), parse(Float64,arg[4]), parse(Float64,arg[5]), parse(Float64,arg[6]))...)
 
     ag = agtQ(init_nQ(en,parse(Int,arg[7]),parse(Float64,arg[8]))...)
 
+    #二次の高周波展開で初期値を代入
     ag.HF_TL[en.t_size,:] = MtoV(en.H_0, en)
     ag.K_TL[en.t_size,:] = -MtoV(en.V_t, en)/en.Ω
 
@@ -228,14 +253,32 @@ function main(arg::Array{String,1})
     #println(ll_it[1])
     
     for it in 1:it_MAX
+        HF_it = zeros(Float64, en.HS_size^2) 
+        for t_step in 1:en.t_size
+            if(t_step==1)
+                tt=en.t_size
+            else
+                tt=t_step-1
+            end
+            p = [en.Ω, en.ξ*sin(2pi*t_step/en.t_size), en.Jz, en.Jx, en.hz]
+            x = vcat([p, ag.K_TL[tt,:], ag.HF_TL[tt,:]]...)
+            Kp = model(x)
+            #ag.K_TL[t,:] += Kp
+            HF_it += micro_motion2(Kp, ag.K_TL[tt,:],en,t_step)/en.t_size
+        end
+
         for t_step in 1:en.t_size
             grads = Flux.gradient(Flux.params(model)) do
-                loss_t(model, en, ag, t_step, it)
+                loss_calc0(model, en, ag, t_step, HF_it)
+                #loss_t(model, en, ag, t_step, it)
                 #loss_t!(model, en, ag, t_step, it)
             end
             Flux.Optimise.update!(opt, Flux.params(model), grads)
             #println(loss_t!(model, en, ag, t_step, it))
-            ll_it[it] += loss_t!(model,en, ag, t_step, it)
+        end
+
+        for t_step in 1:en.t_size
+            ll_it[it] += loss_calc!(model,en, ag, t_step, HF_it)
         end
         println(ll_it[it])
         #=
