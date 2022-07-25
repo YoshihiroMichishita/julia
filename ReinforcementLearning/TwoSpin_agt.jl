@@ -12,7 +12,7 @@ mutable struct agtQ
     K_TL::Matrix{Float64}
 end
 
-function init_nQ(en::TS_env, n::Int=32, γ0::Float64=0.9)
+function init_nQ(en::TS_env, n::Int=32, γ0::Float64=0.9, ϵ0::Float64=1.0)
     #H_0,V_tのパラメータの数＋K_tの行列＋H_F^a(t)の行列
     in_size::Int = en.num_parm + 2*en.HS_size^2 
 
@@ -23,7 +23,7 @@ function init_nQ(en::TS_env, n::Int=32, γ0::Float64=0.9)
     n_dense::Int = n
 
     #乱数発生用のパラメータ
-    ϵ::Float64 = 0.1
+    ϵ::Float64 = ϵ0
 
     #割引率
     γ::Float64 = γ0
@@ -128,7 +128,42 @@ function loss_t(model0, en::TS_env, ag::agtQ, t::Int, it::Int)
     return l 
 end
 
-function loss_t!(model0, en::TS_env, ag::agtQ, t::Int, it::Int)
+function loss_calc_hyb(model0, en::TS_env, ag::agtQ, t::Int, HF_given::Vector{Float64})
+    if(t==1)
+        tt=en.t_size
+    else
+        tt=t-1
+    end
+    p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
+    x = vcat([p, ag.K_TL[tt,:], ag.HF_TL[tt,:]]...)
+    Kp = model0(x)
+    
+    #ag.K_TL[t,:] += Kp
+    HF_calc = micro_motion2(Kp, ag.K_TL[tt,:],en,t)
+    l = loss_fn_hybrid(en,ag, HF_given, HF_calc,t)
+    #l = loss_fn_hybrid(en,ag, HF_given, Kp, t)
+    #l = Kp' * Kp
+    return l 
+end
+
+function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, t::Int, HF_given::Vector{Float64})
+    if(t==1)
+        tt=en.t_size
+    else
+        tt=t-1
+    end
+    p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
+    x = vcat([p, ag.K_TL[tt,:], ag.HF_TL[tt,:]]...)
+    Kp = model0(x)
+    
+    #ag.K_TL[t,:] += Kp
+    ag.K_TL[t,:], ag.HF_TL[t,:] = micro_motion(Kp, ag.K_TL[tt,:],en,t)
+    l = loss_fn_hybrid(en,ag, HF_given, ag.HF_TL[t,:],t)
+    #l = Kp' * Kp
+    return l 
+end
+
+function loss_calc!(model0, en::TS_env, ag::agtQ, t::Int, HF_given::Vector{Float64})
     if(t==1)
         tt=en.t_size
     else
@@ -212,7 +247,7 @@ function main(arg::Array{String,1})
 
     en = TS_env(init_env(parse(Int,arg[1]), parse(Float64,arg[2]), parse(Float64,arg[3]), parse(Float64,arg[4]), parse(Float64,arg[5]), parse(Float64,arg[6]))...)
 
-    ag = agtQ(init_nQ(en,parse(Int,arg[7]),parse(Float64,arg[8]))...)
+    ag = agtQ(init_nQ(en,parse(Int,arg[7]),parse(Float64,arg[8]),parse(Float64,arg[9]))...)
 
     ag.HF_TL[en.t_size,:] = MtoV(en.H_0, en)
     ag.K_TL[en.t_size,:] = -MtoV(en.V_t, en)/en.Ω
@@ -221,21 +256,44 @@ function main(arg::Array{String,1})
     opt = ADAM()
 
 
-    it_MAX = parse(Int,arg[9])
+    it_MAX = parse(Int,arg[10])
     ll_it = zeros(Float64, it_MAX)
     println("start!")
     #ll_it[1] = loss_t!(model,en, ag, 2, 1)
     #println(ll_it[1])
     
     for it in 1:it_MAX
+        HF_it = zeros(Float64, en.HS_size^2) 
+        for t_step in 1:en.t_size
+            if(t_step==1)
+                tt=en.t_size
+            else
+                tt=t_step-1
+            end
+            p = [en.Ω, en.ξ*sin(2pi*t_step/en.t_size), en.Jz, en.Jx, en.hz]
+            x = vcat([p, ag.K_TL[tt,:], ag.HF_TL[tt,:]]...)
+            Kp = model(x)
+            #ag.K_TL[t,:] += Kp
+            HF_it += micro_motion2(Kp, ag.K_TL[tt,:],en,t_step)/en.t_size
+        end
+        if(it==1) 
+            println("HF_calc Finish!")
+        end
         for t_step in 1:en.t_size
             grads = Flux.gradient(Flux.params(model)) do
-                loss_t(model, en, ag, t_step, it)
+                loss_calc_hyb(model, en, ag, t_step, HF_it)
+                #loss_calc0(model, en, ag, t_step, HF_it)
+                #loss_t(model, en, ag, t_step, it)
                 #loss_t!(model, en, ag, t_step, it)
             end
             Flux.Optimise.update!(opt, Flux.params(model), grads)
             #println(loss_t!(model, en, ag, t_step, it))
-            ll_it[it] += loss_t!(model,en, ag, t_step, it)
+        end
+        if(it==1) 
+            println("First Learning Finish!")
+        end
+        for t_step in 1:en.t_size
+            ll_it[it] += loss_calc_hyb!(model,en, ag, t_step, HF_it)
         end
         println(ll_it[it])
         #=
@@ -253,16 +311,22 @@ function main(arg::Array{String,1})
             CSV.write("./Kt_Ω.csv", save_data2)
         end=#
     end
+    println("Learning Finish!")
     E = zeros(Float64, en.t_size, en.HS_size)
     for t_step in 1:en.t_size
         E[t_step,:], v = eigen(VtoM(ag.HF_TL[t_step,:],en))
     end
 
+    println("Eval Finish! Using Plots")
+
     p1 = plot(E[:,1], xlabel="t_step", ylabel="E of HF_t", width=3.0)
-    p1 = plot!(E[:,2], width=3.0)
-    p1 = plot!(E[:,3], width=3.0)
-    p1 = plot!(E[:,4], width=3.0)
+    #p1 = plot!(E[:,2], width=3.0)
+    #p1 = plot!(E[:,3], width=3.0)
+    #p1 = plot!(E[:,4], width=3.0)
     savefig(p1,"./HF_t.png")
+    println("Drawing Finish!")
+    println(E[:,4])
+    
     
 end
 
