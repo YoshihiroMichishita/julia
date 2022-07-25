@@ -10,6 +10,7 @@ mutable struct agtQ
     γ::Float64
     HF_TL::Matrix{Float64}
     K_TL::Matrix{Float64}
+    Kp_TL::Matrix{Float64}
 end
 
 function init_nQ(en::TS_env, n::Int=32, γ0::Float64=0.9, ϵ0::Float64=1.0)
@@ -30,8 +31,9 @@ function init_nQ(en::TS_env, n::Int=32, γ0::Float64=0.9, ϵ0::Float64=1.0)
 
     HF_TL = zeros(Float64, en.t_size, en.HS_size^2)
     K_TL = zeros(Float64, en.t_size, en.HS_size^2)
+    Kp_TL = zeros(Float64, en.t_size, en.HS_size^2)
 
-    return in_size, out_size, n_dense, ϵ, γ, HF_TL, K_TL
+    return in_size, out_size, n_dense, ϵ, γ, HF_TL, K_TL, Kp_TL
 end
 
 #=
@@ -173,7 +175,7 @@ function loss_calc_hyb(model0, en::TS_env, ag::agtQ, t::Int, HF_given::Vector{Fl
         tt=t-1
     end
     p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
-    x = vcat([p, ag.K_TL[tt,:], ag.HF_TL[tt,:]]...)
+    x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
     Kp = model0(x)
     
     #ag.K_TL[t,:] += Kp
@@ -191,11 +193,11 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, t::Int, HF_given::Vector{F
         tt=t-1
     end
     p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
-    x = vcat([p, ag.K_TL[tt,:], ag.HF_TL[tt,:]]...)
-    Kp = model0(x)
-    
+    x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+    #Kp = model0(x)
+    ag.Kp_TL[t,:] = model0(x)
     #ag.K_TL[t,:] += Kp
-    ag.K_TL[t,:], ag.HF_TL[t,:] = micro_motion(Kp, ag.K_TL[tt,:],en,t)
+    ag.K_TL[t,:], ag.HF_TL[t,:] = micro_motion(ag.Kp_TL[t,:], ag.K_TL[tt,:],en,t)
     l = loss_fn_hybrid(en,ag, HF_given, ag.HF_TL[t,:],t)
     #l = Kp' * Kp
     return l 
@@ -312,10 +314,10 @@ function main(arg::Array{String,1})
                 tt=t_step-1
             end
             p = [en.Ω, en.ξ*sin(2pi*t_step/en.t_size), en.Jz, en.Jx, en.hz]
-            x = vcat([p, ag.K_TL[tt,:], ag.HF_TL[tt,:]]...)
-            Kp = model(x)
+            x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+            ag.Kp_TL[t_step,:] = model(x)
             #ag.K_TL[t,:] += Kp
-            HF_it += micro_motion2(Kp, ag.K_TL[tt,:],en,t_step)/en.t_size
+            HF_it += micro_motion2(ag.Kp_TL[t_step,:], ag.K_TL[tt,:],en,t_step)/en.t_size
         end
         if(it==1) 
             println("HF_calc Finish!")
