@@ -130,7 +130,7 @@ function loss_fn_hybrid(en::TS_env, ag::agtQ, HF_given::Vector{Float64}, HF_calc
         end
         l += ag.ϵ*(ag.γ^(n-1)) * diff_norm((HF_calc-ag.HF_TL[lt,:]),en)/en.t_size
     end
-    l += diff_norm(HF_given - HF_calc,en)
+    #l += diff_norm(HF_given - HF_calc,en)
     return l
 end
 
@@ -181,6 +181,14 @@ function loss_calc_hyb(model0, en::TS_env, ag::agtQ, t::Int, HF_given::Vector{Fl
     #ag.K_TL[t,:] += Kp
     HF_calc = micro_motion2(Kp, ag.K_TL[tt,:],en,t)
     l = loss_fn_hybrid(en,ag, HF_given, HF_calc,t)
+    #=
+    if((t+en.t_size/10)>=en.t_size)
+        v = ag.K_TL[t,:]
+        l += ag.γ^(en.t_size-t) * (v' * v)
+    elseif(t <= en.t_size/10)
+        v = ag.K_TL[t,:]
+        l += ag.γ^(t) * (v' * v)
+    end=#
     #l = loss_fn_hybrid(en,ag, HF_given, Kp, t)
     #l = Kp' * Kp
     return l 
@@ -199,6 +207,14 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, t::Int, HF_given::Vector{F
     #ag.K_TL[t,:] += Kp
     ag.K_TL[t,:], ag.HF_TL[t,:] = micro_motion(ag.Kp_TL[t,:], ag.K_TL[tt,:],en,t)
     l = loss_fn_hybrid(en,ag, HF_given, ag.HF_TL[t,:],t)
+    #=
+    if((t+en.t_size/10)>=en.t_size)
+        v = ag.K_TL[t,:]
+        l += ag.γ^(en.t_size-t) * (v' * v)
+    elseif(t <= en.t_size/10)
+        v = ag.K_TL[t,:]
+        l += ag.γ^(t) * (v' * v)
+    end=#
     #l = Kp' * Kp
     return l 
 end
@@ -281,6 +297,14 @@ function learn(nq::agtQ, m::models, obs, act, rwd, done, next_obs)
 end
 =#
 
+function init_HF(en::TS_env)
+    jp = en.Jz + en.hz
+    jm = en.Jz - en.hz
+    VHmHV::Vector{Float64} = 4*en.ξ*[0.0, 0.0, jp, 0.0, jp, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -jm, 0.0, 0.0, -jm, 0.0]
+    init = MtoV(en.H_0, en) + VHmHV
+    return init
+end
+
 using DataFrames
 using CSV
 using Plots
@@ -292,10 +316,12 @@ function main(arg::Array{String,1})
     ag = agtQ(init_nQ(en,parse(Int,arg[7]),parse(Float64,arg[8]),parse(Float64,arg[9]))...)
 
     #二次の高周波展開で初期値を代入
-    ag.HF_TL[en.t_size,:] = MtoV(en.H_0, en)
-    ag.K_TL[en.t_size,:] = -MtoV(en.V_t, en)/en.Ω
+    ag.HF_TL[en.t_size,:] = init_HF(en)
+    ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
+    #-MtoV(en.V_t, en)/en.Ω
 
-    model = Chain(Dense(ag.in_size, ag.n_dense, relu), Dense(ag.n_dense, ag.n_dense, relu), Dense(ag.n_dense, ag.out_size))
+    #model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
+    model = Chain(Dense(zeros(Float64, ag.n_dense, ag.in_size), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.n_dense, ag.n_dense), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.out_size, ag.n_dense), zeros(Float64, ag.out_size)))
     opt = ADAM()
 
 
@@ -316,8 +342,9 @@ function main(arg::Array{String,1})
             p = [en.Ω, en.ξ*sin(2pi*t_step/en.t_size), en.Jz, en.Jx, en.hz]
             x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
             ag.Kp_TL[t_step,:] = model(x)
+            ag.K_TL[t_step,:], ag.HF_TL[t_step,:] = micro_motion(ag.Kp_TL[t_step,:], ag.K_TL[tt,:],en,t_step)
             #ag.K_TL[t,:] += Kp
-            HF_it += micro_motion2(ag.Kp_TL[t_step,:], ag.K_TL[tt,:],en,t_step)/en.t_size
+            HF_it += ag.HF_TL[t_step,:]/en.t_size
         end
         if(it==1) 
             println("HF_calc Finish!")
@@ -369,6 +396,14 @@ function main(arg::Array{String,1})
     savefig(p1,"./HF_t.png")
     println("Drawing Finish!")
     #println(E[:,4])
+    p2 = plot(ag.K_TL[:,1], xlabel="t_step", ylabel="E of HF_t", width=2.0)
+    for i in 2:en.HS_size^2
+        p2 = plot!(ag.K_TL[:,i], width=2.0)
+    end
+    save_data1 = DataFrame(ag.K_TL, :auto)
+    CSV.write("./K_TL.csv", save_data1)
+    savefig(p2,"./K_t.png")
+    println("Drawing Finish!")
     
     
 end
