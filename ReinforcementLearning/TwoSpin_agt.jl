@@ -126,7 +126,8 @@ function loss_fn_hybrid(en::TS_env, ag::agtQ, HF_given::Vector{Float64}, HF_calc
         elseif(n==t)
             lt = en.t_size
         else
-            lt = t-n+en.t_size
+            break
+            #lt = t-n+en.t_size
         end
         l += ag.ϵ*(ag.γ^(n-1)) * diff_norm((HF_calc-ag.HF_TL[lt,:]),en)/en.t_size
     end
@@ -168,45 +169,48 @@ function loss_calc(model0, en::TS_env, ag::agtQ, t::Int, it::Int)
     return l 
 end
 
-function loss_calc_hyb(model0, en::TS_env, ag::agtQ, t::Int, HF_given::Vector{Float64})
-    if(t==1)
-        tt=en.t_size
-    else
-        tt=t-1
+function loss_calc_hyb(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
+    l::Float64 = 0.0
+    kp_sum = zeros(Float64, en.HS_size^2)
+    for t in 1:en.t_size
+        if(t==1)
+            tt=en.t_size
+        else
+            tt=t-1
+        end
+        p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
+        x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+        Kp = model0(x)
+        kp_sum += Kp
+        #ag.K_TL[t,:] += Kp
+        HF_calc = micro_motion2(Kp, ag.K_TL[tt,:],en,t)
+        l += loss_fn_hybrid(en,ag, HF_given, HF_calc,t)
+        l += ag.ϵ^2*diff_norm(kp_sum,en)/en.t_size
+        #l += ag.γ^(5*(en.t_size/2 - abs(en.t_size/2-t))) * diff_norm(ag.K_TL[t,:],en)
     end
-    p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
-    x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
-    Kp = model0(x)
-    
-    #ag.K_TL[t,:] += Kp
-    HF_calc = micro_motion2(Kp, ag.K_TL[tt,:],en,t)
-    l = loss_fn_hybrid(en,ag, HF_given, HF_calc,t)
-    #=
-    if((t+en.t_size/10)>=en.t_size)
-        v = ag.K_TL[t,:]
-        l += ag.γ^(en.t_size-t) * (v' * v)
-    elseif(t <= en.t_size/10)
-        v = ag.K_TL[t,:]
-        l += ag.γ^(t) * (v' * v)
-    end=#
-    #l = loss_fn_hybrid(en,ag, HF_given, Kp, t)
-    #l = Kp' * Kp
     return l 
 end
 
-function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, t::Int, HF_given::Vector{Float64})
-    if(t==1)
-        tt=en.t_size
-    else
-        tt=t-1
+function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
+    l::Float64 = 0.0
+    kp_sum = zeros(Float64, en.HS_size^2)
+    for t in 1:en.t_size
+        if(t==1)
+            tt=en.t_size
+        else
+            tt=t-1
+        end
+        p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
+        x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+        #Kp = model0(x)
+        ag.Kp_TL[t,:] = model0(x)
+        kp_sum += ag.Kp_TL[t,:]
+        #ag.K_TL[t,:] += Kp
+        ag.K_TL[t,:], ag.HF_TL[t,:] = micro_motion(ag.Kp_TL[t,:], ag.K_TL[tt,:],en,t)
+        l += loss_fn_hybrid(en,ag, HF_given, ag.HF_TL[t,:],t)
+        l += ag.ϵ^2*diff_norm(kp_sum,en)/en.t_size
+        #l += ag.γ^(5*(en.t_size/2 - abs(en.t_size/2-t))) * diff_norm(ag.K_TL[t,:],en)
     end
-    p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
-    x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
-    #Kp = model0(x)
-    ag.Kp_TL[t,:] = model0(x)
-    #ag.K_TL[t,:] += Kp
-    ag.K_TL[t,:], ag.HF_TL[t,:] = micro_motion(ag.Kp_TL[t,:], ag.K_TL[tt,:],en,t)
-    l = loss_fn_hybrid(en,ag, HF_given, ag.HF_TL[t,:],t)
     #=
     if((t+en.t_size/10)>=en.t_size)
         v = ag.K_TL[t,:]
@@ -320,8 +324,8 @@ function main(arg::Array{String,1})
     ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
     #-MtoV(en.V_t, en)/en.Ω
 
-    #model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
-    model = Chain(Dense(zeros(Float64, ag.n_dense, ag.in_size), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.n_dense, ag.n_dense), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.out_size, ag.n_dense), zeros(Float64, ag.out_size)))
+    model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
+    #model = Chain(Dense(zeros(Float64, ag.n_dense, ag.in_size), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.n_dense, ag.n_dense), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.out_size, ag.n_dense), zeros(Float64, ag.out_size)))
     opt = ADAM()
 
 
@@ -333,39 +337,43 @@ function main(arg::Array{String,1})
     
     for it in 1:it_MAX
         HF_it = zeros(Float64, en.HS_size^2) 
-        for t_step in 1:en.t_size
-            if(t_step==1)
-                tt=en.t_size
-            else
-                tt=t_step-1
+        if(it==1)
+            for t_step in 1:en.t_size
+                if(t_step==1)
+                    tt=en.t_size
+                else
+                    tt=t_step-1
+                end
+                p = [en.Ω, en.ξ*sin(2pi*t_step/en.t_size), en.Jz, en.Jx, en.hz]
+                x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+                ag.Kp_TL[t_step,:] = model(x)
+                ag.K_TL[t_step,:], ag.HF_TL[t_step,:] = micro_motion(ag.Kp_TL[t_step,:], ag.K_TL[tt,:],en,t_step)
+                #ag.K_TL[t,:] += Kp
+                HF_it += ag.HF_TL[t_step,:]/en.t_size
             end
-            p = [en.Ω, en.ξ*sin(2pi*t_step/en.t_size), en.Jz, en.Jx, en.hz]
-            x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
-            ag.Kp_TL[t_step,:] = model(x)
-            ag.K_TL[t_step,:], ag.HF_TL[t_step,:] = micro_motion(ag.Kp_TL[t_step,:], ag.K_TL[tt,:],en,t_step)
-            #ag.K_TL[t,:] += Kp
-            HF_it += ag.HF_TL[t_step,:]/en.t_size
-        end
-        if(it==1) 
             println("HF_calc Finish!")
         end
-        for t_step in 1:en.t_size
-            grads = Flux.gradient(Flux.params(model)) do
-                loss_calc_hyb(model, en, ag, t_step, HF_it)
-                #loss_calc0(model, en, ag, t_step, HF_it)
-                #loss_t(model, en, ag, t_step, it)
-                #loss_t!(model, en, ag, t_step, it)
-            end
-            Flux.Optimise.update!(opt, Flux.params(model), grads)
-            #println(loss_t!(model, en, ag, t_step, it))
+        
+
+        grads = Flux.gradient(Flux.params(model)) do
+            loss_calc_hyb(model, en, ag, HF_it)
+            #loss_calc0(model, en, ag, t_step, HF_it)
+            #loss_t(model, en, ag, t_step, it)
+            #loss_t!(model, en, ag, t_step, it)
         end
+        Flux.Optimise.update!(opt, Flux.params(model), grads)
+
         if(it==1) 
             println("First Learning Finish!")
         end
-        for t_step in 1:en.t_size
-            ll_it[it] += loss_calc_hyb!(model,en, ag, t_step, HF_it)
-        end
+
+        ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
+        ll_it[it] = loss_calc_hyb!(model,en, ag, HF_it)
         println(ll_it[it])
+
+        #if(ll_it[it]>100.0)
+        #    break
+        #end
         #=
         if(it%10 == 0)
             ee = zeros(Float64, en.t_size, en.HS_size)
@@ -396,13 +404,22 @@ function main(arg::Array{String,1})
     savefig(p1,"./HF_t.png")
     println("Drawing Finish!")
     #println(E[:,4])
-    p2 = plot(ag.K_TL[:,1], xlabel="t_step", ylabel="E of HF_t", width=2.0)
+    p2 = plot(ag.K_TL[:,1], xlabel="t_step", ylabel="E of K_t", width=2.0)
+    p4 = plot(ag.Kp_TL[:,1], xlabel="t_step", ylabel="E of Kp_t", width=2.0)
     for i in 2:en.HS_size^2
         p2 = plot!(ag.K_TL[:,i], width=2.0)
     end
     save_data1 = DataFrame(ag.K_TL, :auto)
     CSV.write("./K_TL.csv", save_data1)
     savefig(p2,"./K_t.png")
+    p4 = plot(ag.Kp_TL[:,1], xlabel="t_step", ylabel="E of Kp_t", width=2.0)
+    for i in 2:en.HS_size^2
+        p4 = plot!(ag.Kp_TL[:,i], width=2.0)
+    end
+    savefig(p4,"./Kp_t.png")
+
+    p3 = plot(ll_it, xlabel="it_step", ylabel="loss", yaxis=:log, width=3.0)
+    savefig(p3,"./loss_iterate.png")
     println("Drawing Finish!")
     
     
