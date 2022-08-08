@@ -131,7 +131,7 @@ function loss_fn_hybrid(en::TS_env, ag::agtQ, HF_given::Vector{Float64}, HF_calc
         end
         l += ag.ϵ*(ag.γ^(n-1)) * diff_norm((HF_calc-ag.HF_TL[lt,:]),en)/en.t_size
     end
-    #l += diff_norm(HF_given - HF_calc,en)
+    #l += diff_norm(HF_given - HF_calc,en)/en.t_size
     return l
 end
 
@@ -181,12 +181,13 @@ function loss_calc_hyb(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
         p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
         x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
         Kp = model0(x)
-        kp_sum += Kp
+        kp_sum = ag.γ*kp_sum + Kp
         #ag.K_TL[t,:] += Kp
         HF_calc = micro_motion2(Kp, ag.K_TL[tt,:],en,t)
         l += loss_fn_hybrid(en,ag, HF_given, HF_calc,t)
-        l += ag.ϵ^2*diff_norm(kp_sum,en)/en.t_size
-        #l += ag.γ^(5*(en.t_size/2 - abs(en.t_size/2-t))) * diff_norm(ag.K_TL[t,:],en)
+        #l += ag.ϵ^2*diff_norm(kp_sum,en)/en.t_size
+        l += diff_norm(kp_sum,en)/en.t_size
+        l += ag.γ^(5*(en.t_size/2 - abs(en.t_size/2-t))) * diff_norm(ag.K_TL[t,:],en)
     end
     return l 
 end
@@ -204,12 +205,13 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
         x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
         #Kp = model0(x)
         ag.Kp_TL[t,:] = model0(x)
-        kp_sum += ag.Kp_TL[t,:]
+        kp_sum = ag.γ*kp_sum + ag.Kp_TL[t,:]
         #ag.K_TL[t,:] += Kp
         ag.K_TL[t,:], ag.HF_TL[t,:] = micro_motion(ag.Kp_TL[t,:], ag.K_TL[tt,:],en,t)
         l += loss_fn_hybrid(en,ag, HF_given, ag.HF_TL[t,:],t)
-        l += ag.ϵ^2*diff_norm(kp_sum,en)/en.t_size
+        l += diff_norm(kp_sum,en)/en.t_size
         #l += ag.γ^(5*(en.t_size/2 - abs(en.t_size/2-t))) * diff_norm(ag.K_TL[t,:],en)
+        l += ag.γ^(5*(en.t_size - t)) * diff_norm(ag.K_TL[t,:],en)
     end
     #=
     if((t+en.t_size/10)>=en.t_size)
@@ -324,7 +326,8 @@ function main(arg::Array{String,1})
     ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
     #-MtoV(en.V_t, en)/en.Ω
 
-    model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
+    model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
+    #model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
     #model = Chain(Dense(zeros(Float64, ag.n_dense, ag.in_size), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.n_dense, ag.n_dense), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.out_size, ag.n_dense), zeros(Float64, ag.out_size)))
     opt = ADAM()
 
@@ -369,8 +372,10 @@ function main(arg::Array{String,1})
 
         ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
         ll_it[it] = loss_calc_hyb!(model,en, ag, HF_it)
-        println(ll_it[it])
-
+        if(it%10 == 0)
+            println("it:"*string(it))
+            println(ll_it[it])
+        end
         #if(ll_it[it]>100.0)
         #    break
         #end
@@ -405,7 +410,6 @@ function main(arg::Array{String,1})
     println("Drawing Finish!")
     #println(E[:,4])
     p2 = plot(ag.K_TL[:,1], xlabel="t_step", ylabel="E of K_t", width=2.0)
-    p4 = plot(ag.Kp_TL[:,1], xlabel="t_step", ylabel="E of Kp_t", width=2.0)
     for i in 2:en.HS_size^2
         p2 = plot!(ag.K_TL[:,i], width=2.0)
     end
