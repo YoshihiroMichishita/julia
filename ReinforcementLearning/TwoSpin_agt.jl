@@ -263,6 +263,7 @@ end
 using DataFrames
 using CSV
 using Plots
+ENV["GKSwstype"]="nul"
 
 function main(arg::Array{String,1})
 
