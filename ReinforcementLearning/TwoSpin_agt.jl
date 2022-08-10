@@ -222,7 +222,7 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
         l += ag.γ^(t) * (v' * v)
     end=#
     #l = Kp' * Kp
-    return l 
+    return l, kp_sum/en.t_size
 end
 
 function loss_calc!(model0, en::TS_env, ag::agtQ, t::Int, HF_given::Vector{Float64})
@@ -242,66 +242,15 @@ function loss_calc!(model0, en::TS_env, ag::agtQ, t::Int, HF_given::Vector{Float
     #l = Kp' * Kp
     return l 
 end
- 
 
-#NNの初期化
-#=
-function build_model(nq::agtQ)
-    #model = Chain(Flux.flatten', Dense(nq.input_size, nq.n_dense, relu), Dense(nq.n_dense, nq.n_act))
-    model = Chain(Dense(nq.input_size, nq.n_dense, relu), Dense(nq.n_dense, nq.n_dense, relu), Dense(nq.n_dense, nq.out_size))
-    opt = ADAM()
-    #loss(x,y) = Flux.mse(model(x),y)
-
-    return model, opt, loss
-end
-=#
-
-#U: NNから出力されるKick Operator(Hermite)の微分をベクトル表示したものを出力
-#=
-function get_U(m::models , obs)
-    U = m.model(Flux.flatten(obs)')
-    return U
-end
-=#
-
-#using RandomMatrices
-
-#ある確率でランダムなKick Operatorを出力、そうでないならNNから出力
-#=
-function decide_action(nq::agtQ, m::models, obs)
-
-    if(rand()< nq.ϵ)
-        her = GaussianHermite(2)
-        U = rand(her,4)
-        act = matrix_to_vec(U)
-    else
-        act = get_U(m, obs)
+function updata_KpK!(en::TS_env, ag::agtQ, Kp_av::Vector{Float64})
+    for t in 1:en.t_size
+        ag.Kp_TL[t,:] = ag.Kp_TL[t,:] - Kp_av
+        ag.K_TL[t,:] = ag.K_TL[t,:] - t*Kp_av
+        ag.HF_TL[t,:] = micro_motion2(ag.Kp_TL[t,:], ag.K_TL[t,:], en, t)
     end
-
-    return act
 end
-=#
-#=
-function learn(nq::agtQ, m::models, obs, act, rwd, done, next_obs)
-    if(isnothing(rwd))
-        return
-    end
 
-    y = get_U(obs)
-    target = copy(y)
-
-    if(!done)
-        next_y = get_Q(next_obs)
-        target_act = rwd + nq.γ*maximum(next_y)
-    else
-        target_act = rwd
-    end
-
-    target[act] = target_act
-
-    Flux.train!(m.loss,Flux.params(m.model),obs, m.opt)
-end
-=#
 
 function init_HF(en::TS_env)
     jp = en.Jz + en.hz
@@ -326,8 +275,8 @@ function main(arg::Array{String,1})
     ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
     #-MtoV(en.V_t, en)/en.Ω
 
-    model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
-    #model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
+    #model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
+    model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
     #model = Chain(Dense(zeros(Float64, ag.n_dense, ag.in_size), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.n_dense, ag.n_dense), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.out_size, ag.n_dense), zeros(Float64, ag.out_size)))
     opt = ADAM()
 
@@ -371,8 +320,12 @@ function main(arg::Array{String,1})
         end
 
         ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
-        ll_it[it] = loss_calc_hyb!(model,en, ag, HF_it)
+        ll_it[it], Kp_av = loss_calc_hyb!(model,en, ag, HF_it)
+        
         if(it%10 == 0)
+            if(it!=it_MAX)
+                updata_KpK!(en, ag, Kp_av)
+            end
             println("it:"*string(it))
             println(ll_it[it])
         end
@@ -402,10 +355,10 @@ function main(arg::Array{String,1})
 
     println("Eval Finish! Using Plots")
 
-    p1 = plot(E[:,1], xlabel="t_step", ylabel="E of HF_t", width=3.0)
-    p1 = plot!(E[:,2], width=3.0)
-    p1 = plot!(E[:,3], width=3.0)
-    p1 = plot!(E[:,4], width=3.0)
+    p1 = plot(E[:,1].-E[1,1], xlabel="t_step", ylabel="E of HF_t", width=3.0)
+    p1 = plot!(E[:,2].-E[1,2], width=3.0)
+    p1 = plot!(E[:,3].-E[1,3], width=3.0)
+    p1 = plot!(E[:,4].-E[1,4], width=3.0)
     savefig(p1,"./HF_t.png")
     println("Drawing Finish!")
     #println(E[:,4])
