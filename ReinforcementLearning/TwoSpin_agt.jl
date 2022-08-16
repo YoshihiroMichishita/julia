@@ -188,6 +188,9 @@ function loss_calc_hyb(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
         #l += ag.ϵ^2*diff_norm(kp_sum,en)/en.t_size
         l += diff_norm(kp_sum,en)/en.t_size
         l += ag.γ^(5*(en.t_size/2 - abs(en.t_size/2-t))) * diff_norm(ag.K_TL[t,:],en)
+        if(t==t_size)
+            l += diff_norm(HF_calc-ag.HF_TL[1,:],en)
+        end
     end
     return l 
 end
@@ -212,6 +215,9 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
         l += diff_norm(kp_sum,en)/en.t_size
         #l += ag.γ^(5*(en.t_size/2 - abs(en.t_size/2-t))) * diff_norm(ag.K_TL[t,:],en)
         l += ag.γ^(5*(en.t_size - t)) * diff_norm(ag.K_TL[t,:],en)
+        if(t==t_size)
+            l += diff_norm(ag.HF_TL[t,:]-ag.HF_TL[1,:],en)
+        end
     end
     #=
     if((t+en.t_size/10)>=en.t_size)
@@ -262,6 +268,7 @@ end
 
 using DataFrames
 using CSV
+using BSON: @save
 using Plots
 ENV["GKSwstype"]="nul"
 
@@ -342,13 +349,36 @@ function main(arg::Array{String,1})
             save_data1 = DataFrame(transpose(ee))
             CSV.write("./HFt_it="*"$it" *".csv", save_data1)
 
-        end
-        if(it == it_MAX)
-            save_data2 = DataFrame(transpose(ag.K_TL))
-            CSV.write("./Kt_Ω.csv", save_data2)
         end=#
+        if(it%1000 == 0 && it!=0)
+            E = zeros(Float64, en.t_size, en.HS_size)
+            for t_step in 1:en.t_size
+                E[t_step,:], v = eigen(VtoM(ag.HF_TL[t_step,:],en))
+            end
+
+            p1 = plot(E[:,1].-E[1,1], xlabel="t_step", ylabel="E of HF_t", width=3.0)
+            p1 = plot!(E[:,2].-E[1,2], width=3.0)
+            p1 = plot!(E[:,3].-E[1,3], width=3.0)
+            p1 = plot!(E[:,4].-E[1,4], width=3.0)
+            savefig(p1,"./HF_t$(it).png")
+            println("Drawing Finish!")
+            #println(E[:,4])
+            p2 = plot(ag.K_TL[:,1], xlabel="t_step", ylabel="E of K_t", width=2.0)
+            for i in 2:en.HS_size^2
+                p2 = plot!(ag.K_TL[:,i], width=2.0)
+            end
+            save_data1 = DataFrame(ag.K_TL, :auto)
+            CSV.write("./K_TL$(it).csv", save_data1)
+            savefig(p2,"./K_t$(it).png")
+            p4 = plot(ag.Kp_TL[:,1], xlabel="t_step", ylabel="E of Kp_t", width=2.0)
+            for i in 2:en.HS_size^2
+                p4 = plot!(ag.Kp_TL[:,i], width=2.0)
+            end
+            savefig(p4,"./Kp_t$(it).png")
+        end
     end
     println("Learning Finish!")
+    #=
     E = zeros(Float64, en.t_size, en.HS_size)
     for t_step in 1:en.t_size
         E[t_step,:], v = eigen(VtoM(ag.HF_TL[t_step,:],en))
@@ -374,11 +404,13 @@ function main(arg::Array{String,1})
     for i in 2:en.HS_size^2
         p4 = plot!(ag.Kp_TL[:,i], width=2.0)
     end
-    savefig(p4,"./Kp_t.png")
+    savefig(p4,"./Kp_t.png")=#
 
     p3 = plot(ll_it, xlabel="it_step", ylabel="loss", yaxis=:log, width=3.0)
     savefig(p3,"./loss_iterate.png")
     println("Drawing Finish!")
+
+    @save "mymodel.bson" model
     
     
 end
