@@ -1,8 +1,10 @@
-include("2D_TMD_parm.jl")
+#include("2D_TMD_parm.jl")
 
-@everywhere using LinearAlgebra
+#@everywhere 
+using LinearAlgebra
 
-@everywhere mutable struct Hamiltonian
+#@everywhere 
+mutable struct Hamiltonian
     Hk::Array{ComplexF64,2}
     Va::Array{ComplexF64,2}
     Vb::Array{ComplexF64,2}
@@ -15,7 +17,8 @@ include("2D_TMD_parm.jl")
 end
 
 # when you focus on the DC (input is also DC) conductivity
-@everywhere mutable struct DC_Green
+#@everywhere 
+mutable struct DC_Green
     GR::Array{ComplexF64,2}
     GA::Array{ComplexF64,2}
     GRmA::Array{ComplexF64,2}
@@ -24,7 +27,8 @@ end
     ddGR::Array{ComplexF64,2}
 end
 
-@everywhere function set_DC_Gk(w::Float64, p::Parm, Ham::Hamiltonian)
+#@everywhere 
+function set_DC_Gk(w::Float64, p::Parm, Ham::Hamiltonian)
     #Green関数のinverse
     GR0::Array{ComplexF64,2} = -Ham.Hk + Matrix{Complex{Float64}}(w*I,2,2) + p.eta*Matrix{Complex{Float64}}(1.0im*I,2,2)
 
@@ -41,7 +45,8 @@ end
 end
 
 # when you focus on the photo-voltaic effect
-@everywhere mutable struct PV_Green
+#@everywhere 
+mutable struct PV_Green
     GR::Array{ComplexF64,2}
     GA::Array{ComplexF64,2}
     GRmA::Array{ComplexF64,2}
@@ -51,7 +56,8 @@ end
     GAm::Array{ComplexF64,2}
 end
 
-@everywhere function set_PV_Gk(w::Float64, p::Parm, Ham::Hamiltonian)
+#@everywhere 
+function set_PV_Gk(w::Float64, p::Parm, Ham::Hamiltonian)
     #Green関数のinverse
     GR0::Array{ComplexF64,2} = -Ham.Hk + Matrix{Complex{Float64}}(w*I,2,2) + p.eta*Matrix{Complex{Float64}}(1.0im*I,2,2)
 
@@ -74,7 +80,8 @@ end
 end
 
 # when you focus on the second harmonic generation
-@everywhere mutable struct SHG_Green
+#@everywhere 
+mutable struct SHG_Green
     GR::Array{ComplexF64,2}
     GA::Array{ComplexF64,2}
     GRmA::Array{ComplexF64,2}
@@ -88,7 +95,8 @@ end
     GAmm::Array{ComplexF64,2}
 end
 
-@everywhere function set_SHG_Gk(w::Float64, p::Parm, Ham::Hamiltonian)
+#@everywhere 
+function set_SHG_Gk(w::Float64, p::Parm, Ham::Hamiltonian)
     #Green関数のinverse
     GR0::Array{ComplexF64,2} = -Ham.Hk + Matrix{Complex{Float64}}(w*I,2,2) + p.eta*Matrix{Complex{Float64}}(1.0im*I,2,2)
 
@@ -121,32 +129,43 @@ end
 end
 
 #change the basis to the band-index representation
-@everywhere function HV_BI!(H::Hamiltonian)
+#@everywhere 
+function HV_BI!(H::Hamiltonian)
 
     H.E, BI::Array{ComplexF64,2} = eigen(H.Hk)
     H.Hk = [H.E[1] 0.0; 0.0 H.E[2]]
-    Vx_BI::Array{ComplexF64,2} = BI' * H.Vx * BI
-    Vy_BI::Array{ComplexF64,2} = BI' * H.Vy * BI
-    Vxx_BI::Array{ComplexF64,2} = BI' * H.Vxx * BI
-    Vxy_BI::Array{ComplexF64,2} = BI' * H.Vxy * BI
-    Vyy_BI::Array{ComplexF64,2} = BI' * H.Vyy * BI
+    Va_BI::Array{ComplexF64,2} = BI' * H.Va * BI
+    Vb_BI::Array{ComplexF64,2} = BI' * H.Vb * BI
+    Vc_BI::Array{ComplexF64,2} = BI' * H.Vc * BI
+    Vab_BI::Array{ComplexF64,2} = BI' * H.Vab * BI
+    Vbc_BI::Array{ComplexF64,2} = BI' * H.Vbc * BI
+    Vca_BI::Array{ComplexF64,2} = BI' * H.Vca * BI
+    Vabc_BI::Array{ComplexF64,2} = BI' * H.Vabc * BI
     
 
-    H.Vx = Vx_BI
-    H.Vy = Vy_BI
-    H.Vxx = Vxx_BI
-    H.Vxy = Vxy_BI
-    H.Vyy = Vyy_BI
+    H.Va = Va_BI
+    H.Vb = Vb_BI
+    H.Vc = Vc_BI
+    H.Vab = Vab_BI
+    H.Vbc = Vbc_BI
+    H.Vca = Vca_BI
+    H.Vabc = Vabc_BI
+    
 end
 
-@everywhere f(e::Float64,T::Float64) = 1.0/(1.0+exp(e/T))
-@everywhere df(e::Float64,T::Float64) = -1.0/(1.0+exp(e/T))/(1.0+exp(-e/T))/T
+#@everywhere 
+f(e::Float64,T::Float64) = 1.0/(1.0+exp(e/T))
+#@everywhere 
+df(e::Float64,T::Float64) = -1.0/(1.0+exp(e/T))/(1.0+exp(-e/T))/T
 
-@everywhere f(e::ComplexF64,T::Float64) = 1.0/(1.0+exp(e/T))
-@everywhere df(e::ComplexF64,T::Float64) = -1.0/(1.0+exp(e/T))/(1.0+exp(-e/T))/T
+#@everywhere 
+f(e::ComplexF64,T::Float64) = 1.0/(1.0+exp(e/T))
+#@everywhere 
+df(e::ComplexF64,T::Float64) = -1.0/(1.0+exp(e/T))/(1.0+exp(-e/T))/T
 
 #calculate the DC (input is also DC) linear conductivity in band-index representation with teh imaginary part of the Fermi distribution function
-@everywhere function Green_DC_BI_linear_full(p::Parm, H::Hamiltonian)
+#@everywhere 
+function Green_DC_BI_linear_full(p::Parm, H::Hamiltonian)
     
     Drude::Float64 = 0.0
     Drude0::Float64 = 0.0
@@ -168,7 +187,8 @@ end
 end
 
 #calculate DC conductivity with the Green function method
-@everywhere function Green_DC(p::Parm, H::Hamiltonian)
+#@everywhere 
+function Green_DC(p::Parm, H::Hamiltonian)
     sym::Float64 = 0.0
     asym::Float64 =0.0
     #dw::Float64 = p.W_MAX/p.W_SIZE/pi
@@ -182,13 +202,16 @@ end
         asym += -real(tr(H.Va*G.dGR*H.Vb*G.GRmA))*f(w,p.T)
     end
     for w in collect(-p.W_MAX:dw1:-mi)
+        G = DC_Green(set_DC_Gk(w,p,H)...)
         asym += -real(tr(H.Va*G.dGR*H.Vb*G.GRmA))*f(w,p.T)
     end
     return dw*sym/(2pi), dw*asym/(2pi)
 end
 
 #calculate the DC (input is also DC) nonlinear conductivity in band-index representation with teh imaginary part of the Fermi distribution function
-@everywhere function Green_DC_BI_nonlinear_full(p::Parm, H::Hamiltonian)
+#@everywhere 
+#=
+function Green_DC_BI_nonlinear_full(p::Parm, H::Hamiltonian)
     
     Drude::Float64 = 0.0
     BCD::Float64 = 0.0
@@ -213,22 +236,50 @@ end
         G = Green(Green_BI(w,p,H)...)
     end=#
     return Drude, BCD, sQMD, dQMD, Inter, dInter
+end=#
+
+function Green_DC_BI_nonlinear_full(p::Parm, H::Hamiltonian)
+    BCD::Float64 = 0.0
+    Drude::Float64 = 0.0
+    ChS::Float64 = 0.0
+    gBC::Float64 = 0.0
+    HV_BI!(H)
+    for i = 1:2
+        BCD += imag(H.Va[i,3-i]*H.Vb[3-i,i]*H.Vc[i,i] + H.Va[i,3-i]*H.Vc[3-i,i]*H.Vb[i,i])*real(1.0/((H.E[i]-H.E[3-i]+2.0im*p.eta)^2)*df(H.E[i]+1.0im*p.eta,p.T))/(2.0p.eta)
+        Drude+= real(H.Va[i,i]*(2.0*H.Vb[i,i]*H.Vc[i,i]/(2.0im*p.eta) + (H.Vb[i,3-i]*H.Vc[3-i,i]+H.Vc[i,3-i]*H.Vb[3-i,i] + H.Vbc[i,i])*real(1.0/(H.E[i]-H.E[3-i]+2.0im*p.eta)))/(-4.0*p.eta^2)*df(H.E[i]+1.0im*p.eta,p.T)) 
+        ChS += real(H.Va[i,3-i]*H.Vb[3-i,i]*H.Vc[i,i] + H.Va[i,3-i]*H.Vc[3-i,i]*H.Vb[i,i] + H.Va[i,3-i]*H.Vbc[3-i,i])*imag(1.0/((H.E[i]-H.E[3-i]+2.0im*p.eta)^2)*df(H.E[i]+1.0im*p.eta,p.T))/(2.0p.eta)
+        ChS += real(H.Va[i,i]*(H.Vb[i,3-i]*H.Vc[3-i,i]+H.Vc[i,3-i]*H.Vb[3-i,i])*2.0im/((H.E[i]-H.E[3-i])^2+4.0*p.eta^2)/(-4.0*p.eta)*df(H.E[i]+1.0im*p.eta,p.T)) 
+        ChS += real(H.Va[i,3-i]*(H.Vb[3-i,3-i]*H.Vc[3-i,i]+H.Vc[3-i,3-i]*H.Va[3-i,i]))*real(1.0/(H.E[i]-H.E[3-i]+2.0im*p.eta)^3*df(H.E[i]+1.0im*p.eta,p.T))
+        
+        gBC += -imag(H.Va[i,3-i]*(H.Vb[3-i,3-i]*H.Vc[3-i,i]+H.Vc[3-i,3-i]*H.Vb[3-i,i]))*imag(1.0/(H.E[i]-H.E[3-i]+2.0im*p.eta)^3*df(H.E[i]+1.0im*p.eta,p.T))
+        gBC += -imag(H.Va[i,3-i]*H.Vbc[3-i,i])*imag(1.0/(H.E[i]-H.E[3-i]+2.0im*p.eta)^2*df(H.E[i]+1.0im*p.eta,p.T))
+    end
+    return Drude, BCD, ChS, gBC
 end
 
 #calculate the Fermi surface term the DC (input is also DC) nonlinear conductivity with the Green function method
-@everywhere function Green_DC_nonlinear(p::Parm, H::Hamiltonian)
-    G0::Float64 = 0.0
+#@everywhere 
+function Green_DC_nonlinear(p::Parm, H::Hamiltonian)
+    G_sur::Float64 = 0.0
+    G_sea::Float64 = 0.0
     mi = minimum([p.W_MAX,10p.T])
     dw::Float64 = mi/p.W_SIZE/pi
     for w in collect(-mi:2.0mi/p.W_SIZE:mi)
         G = DC_Green(set_DC_Gk(w,p,H)...)
-        G0 += 2.0imag(tr(H.Va*G.dGR*(2.0*H.Vb*G.GR*H.Vc + H.Vbc)*G.GRmA)*df(w,p.T))
+        G_sur += 2.0imag(tr(H.Va*G.dGR*(2.0*H.Vb*G.GR*H.Vc + H.Vbc)*G.GRmA)*df(w,p.T))
+        G_sea += -2.0imag(tr(H.Va*G.dGR*(H.Vbc +2.0*H.Vb*G.GR*H.Vc)*G.dGR))*f(w,p.T)
     end
-    return dw*G0
+    for w in collect(-p.W_MAX:2.0mi/p.W_SIZE:-mi)
+        G = DC_Green(set_DC_Gk(w,p,H)...)
+        G_sea += -2.0imag(tr(H.Va*G.dGR*(H.Vbc +2.0*H.Vb*G.GR*H.Vc)*G.dGR))*f(w,p.T)
+    end
+    return dw*G_sur, dw*G_sea
 end
 
 #calculate the Fermi sea term the DC (input is also DC) nonlinear conductivity with the Green function
-@everywhere function Green_DC_sea_nonlinear(p::Parm, H::Hamiltonian)
+#@everywhere
+#= 
+function Green_DC_sea_nonlinear(p::Parm, H::Hamiltonian)
     G0::Float64 = 0.0
 
     mi = minimum([p.W_MAX,10p.T])
@@ -238,10 +289,11 @@ end
         G0 += -2.0imag(tr(H.Va*G.dGR*(H.Vbc +2.0*H.Vb*G.GR*H.Vc)*G.dGR))*f(w,p.T)
     end
     return dw*G0
-end
+end=#
 
 #Calculate photo voltaic effect with the Green function method
-@everywhere function Green_PV_nonlinear(p::Parm, H::Hamiltonian)
+#@everywhere 
+function Green_PV_nonlinear(p::Parm, H::Hamiltonian)
     G0::Float64 = 0.0
     mi = minimum([p.W_MAX,10p.T])
     dw::Float64 = (p.W_MAX+mi)/p.W_SIZE/(2.0pi)
@@ -261,7 +313,8 @@ end
 end
 
 #linear polarized
-@everywhere function Green_SHG_nonlinear(p::Parm, H::Hamiltonian)
+#@everywhere 
+function Green_SHG_nonlinear(p::Parm, H::Hamiltonian)
     G0::Float64 = 0.0
     mi = minimum([p.W_MAX,10p.T])
     dw::Float64 = (p.W_MAX+mi)/p.W_SIZE/(2.0pi)
@@ -285,7 +338,8 @@ end
 end
 
 #circular polarized
-@everywhere function Green_SHG_nonlinear_CP(p::Parm, H::Hamiltonian)
+#@everywhere 
+function Green_SHG_nonlinear_CP(p::Parm, H::Hamiltonian)
     G0::Float64 = 0.0
     mi = minimum([p.W_MAX,10p.T])
     dw::Float64 = (p.W_MAX+mi)/p.W_SIZE/(2.0pi)

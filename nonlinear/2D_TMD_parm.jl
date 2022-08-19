@@ -1,8 +1,9 @@
-using Distributed
+#using Distributed
 #addprocs(30)
 
-#Parm(t_i, a_u, a_d, Pr, mu, eta, T, hx, hy, hz, K_SIZE, W_MAX, W_SIZE)
-@everywhere struct Parm
+#Parm(t_i, a_u, a_d, Pr, mu, eta, T, hx, hy, hz, K_SIZE, W_MAX, W_in, W_SIZE, α, β, γ)
+#@everywhere 
+struct Parm
     t_i::Float64
     a_u::Float64
     a_d::Float64
@@ -22,7 +23,8 @@ using Distributed
     γ::Char
 end
 
-@everywhere function set_parm(arg::Array{String,1})
+#@everywhere 
+function set_parm(arg::Array{String,1})
     t_i = parse(Float64,arg[1])
     a_u = parse(Float64,arg[2])
     a_d = parse(Float64,arg[3])
@@ -44,7 +46,8 @@ end
     return t_i, a_u, a_d, Pr, mu0, eta, T, hx, hy, hz, K_SIZE, W_MAX, W_in, W_SIZE, α, β, γ
 end
 
-@everywhere function set_parm_mudep(arg::Array{String,1}, mu::Float64)
+#@everywhere 
+function set_parm_mudep(arg::Array{String,1}, mu::Float64)
     t_i = parse(Float64,arg[1])
     a_u = parse(Float64,arg[2])
     a_d = parse(Float64,arg[3])
@@ -66,7 +69,8 @@ end
     return t_i, a_u, a_d, Pr, mu0, eta, T, hx, hy, hz, K_SIZE, W_MAX, W_in, W_SIZE, α, β, γ
 end
 
-@everywhere function set_parm_etadep(arg::Array{String,1}, eta0::Float64)
+#@everywhere 
+function set_parm_etadep(arg::Array{String,1}, eta0::Float64)
     t_i = parse(Float64,arg[1])
     a_u = parse(Float64,arg[2])
     a_d = parse(Float64,arg[3])
@@ -81,14 +85,18 @@ end
     W_MAX = parse(Float64,arg[12])
     W_in = parse(Float64,arg[13])
     W_SIZE = parse(Int,arg[14])
-    α = parse(Char, arg[15])
-    β = parse(Char, arg[16])
-    γ = parse(Char, arg[17])
+    α = (arg[15])[1]
+    #parse(Char, arg[15])
+    β = (arg[16])[1]
+    #parse(Char, arg[16])
+    γ = (arg[17])[1]
+    #parse(Char, arg[17])
 
     return t_i, a_u, a_d, Pr, mu0, eta, T, hx, hy, hz, K_SIZE, W_MAX, W_in, W_SIZE, α, β, γ
 end
 
-@everywhere function set_parm_Wdep(arg::Array{String,1}, Win::Float64)
+#@everywhere 
+function set_parm_Wdep(arg::Array{String,1}, Win::Float64)
     t_i = parse(Float64,arg[1])
     a_u = parse(Float64,arg[2])
     a_d = parse(Float64,arg[3])
@@ -111,14 +119,19 @@ end
 end
 
 
-@everywhere a1 = [1.0, 0.0]
-@everywhere a2 = [-0.5, sqrt(3.0)/2]
-@everywhere a3 = [0.5, sqrt(3.0)/2]
-@everywhere sigma = [[1.0 0.0; 0.0 1.0], [0.0 1.0; 1.0 0.0], [0.0 -1.0im; 1.0im 0.0], [1.0 0.0; 0.0 -1.0]]
+#@everywhere 
+a1 = [1.0, 0.0]
+#@everywhere 
+a2 = [-0.5, sqrt(3.0)/2]
+#@everywhere 
+a3 = [0.5, sqrt(3.0)/2]
+#@everywhere 
+sigma = [[1.0 0.0; 0.0 1.0], [0.0 1.0; 1.0 0.0], [0.0 -1.0im; 1.0im 0.0], [1.0 0.0; 0.0 -1.0]]
 
 
 #functions to set Hamiltonian and Velocity operators
-@everywhere function set_H(k::Vector{Float64},p::Parm)
+#@everywhere 
+function set_H(k::Vector{Float64},p::Parm)
     eps::Float64 = 2.0p.t_i*(p.Pr*cos(k'*a1) + cos(k'*a2) + cos(k'*a3)) + p.mu
     g_x::Float64 = p.a_u*(sin(k'*a3) + sin(k'*a2))/2 - p.hx
     g_y::Float64 = -p.a_u * (sin(k'*a1) + (sin(k'*a3) - sin(k'*a2))/2)/sqrt(3.0) - p.hy
@@ -128,7 +141,8 @@ end
     return H
 end
 
-@everywhere function set_vx(k::Vector{Float64},p::Parm)
+#@everywhere 
+function set_vx(k::Vector{Float64},p::Parm)
     eps_vx::Float64 = 2.0p.t_i*(-p.Pr*sin(k'*a1) + 0.5sin(k'*a2) - 0.5sin(k'*a3))
     gx_vx::Float64 = p.a_u*(cos(k'*a3) - cos(k'*a2))/4 
     gy_vx::Float64 = -p.a_u * (cos(k'*a1) + 0.5*(cos(k'*a3) + cos(k'*a2))/2)/sqrt(3.0)
@@ -138,7 +152,8 @@ end
     return Vx
 end
 
-@everywhere function set_vy(k::Vector{Float64},p::Parm)
+#@everywhere 
+function set_vy(k::Vector{Float64},p::Parm)
     eps_vy::Float64 = sqrt(3.0)*p.t_i*(-sin(k'*a2) - sin(k'*a3))
     gx_vy::Float64 = sqrt(3.0)*p.a_u*(cos(k'*a3) + cos(k'*a2))/4 
     gy_vy::Float64 = -p.a_u * ((cos(k'*a3) - cos(k'*a2))/4)
@@ -148,7 +163,8 @@ end
     return Vy
 end
 
-@everywhere function set_vxx(k::Vector{Float64},p::Parm)
+#@everywhere 
+function set_vxx(k::Vector{Float64},p::Parm)
     eps_vxx::Float64 = 2.0p.t_i*(-p.Pr*cos(k'*a1) - 0.25cos(k'*a2) - 0.25cos(k'*a3))
     gx_vxx::Float64 = p.a_u*(-sin(k'*a3) - sin(k'*a2))/8 
     gy_vxx::Float64 = -p.a_u * (-sin(k'*a1) + 0.25*(-sin(k'*a3) + sin(k'*a2))/2)/sqrt(3.0)
@@ -158,7 +174,8 @@ end
     return Vxx
 end
 
-@everywhere function set_vxy(k::Vector{Float64},p::Parm)
+#@everywhere 
+function set_vxy(k::Vector{Float64},p::Parm)
     eps_vxy::Float64 = sqrt(3.0)*p.t_i*(cos(k'*a2) - cos(k'*a3))/2
     gx_vxy::Float64 = sqrt(3.0)*p.a_u*(-sin(k'*a3) + sin(k'*a2))/8 
     gy_vxy::Float64 = -p.a_u * ((-sin(k'*a3) - sin(k'*a2))/8)
@@ -168,7 +185,8 @@ end
     return Vxy
 end
 
-@everywhere function set_vyy(k::Vector{Float64},p::Parm)
+#@everywhere 
+function set_vyy(k::Vector{Float64},p::Parm)
     eps_vyy::Float64 = 1.5*p.t_i*(-cos(k'*a2) - cos(k'*a3))
     gx_vyy::Float64 = 3.0*p.a_u*(-sin(k'*a3) - sin(k'*a2))/8 
     gy_vyy::Float64 = -p.a_u * sqrt(3.0) * ((-sin(k'*a3) + sin(k'*a2))/8)
@@ -178,7 +196,8 @@ end
     return Vyy
 end
 
-@everywhere function set_vxxx(k::Vector{Float64},p::Parm)
+#@everywhere 
+function set_vxxx(k::Vector{Float64},p::Parm)
     eps::Float64 = 2.0p.t_i*(p.Pr*sin(k'*a1) - 0.125sin(k'*a2) + 0.125sin(k'*a3))
     gx::Float64 = p.a_u*(-cos(k'*a3) + cos(k'*a2))/16 
     gy::Float64 = -p.a_u * (-cos(k'*a1) + 0.125*(-cos(k'*a3) - cos(k'*a2))/2)/sqrt(3.0)
@@ -188,7 +207,8 @@ end
     return Vxxx
 end
 
-@everywhere function set_vxxy(k::Vector{Float64},p::Parm)
+#@everywhere 
+function set_vxxy(k::Vector{Float64},p::Parm)
     eps::Float64 = sqrt(3.0)*p.t_i*(sin(k'*a2) + sin(k'*a3))/4
     gx::Float64 = sqrt(3.0)*p.a_u*(-cos(k'*a3) - cos(k'*a2))/16 
     gy::Float64 = -p.a_u * ((-cos(k'*a3) + cos(k'*a2))/16)
@@ -197,7 +217,8 @@ end
     Vxxy::Array{ComplexF64,2} = gg_xxy' * sigma
     return Vxxy
 end
-@everywhere function set_vxyy(k::Vector{Float64},p::Parm)
+#@everywhere 
+function set_vxyy(k::Vector{Float64},p::Parm)
     eps::Float64 = 0.75*p.t_i*(-sin(k'*a2) + sin(k'*a3))
     gx::Float64 = 3.0*p.a_u*(-cos(k'*a3) + cos(k'*a2))/16 
     gy::Float64 = -p.a_u * sqrt(3.0) * ((-cos(k'*a3) - cos(k'*a2))/16)
@@ -206,7 +227,8 @@ end
     Vxyy::Array{ComplexF64,2} = gg_xyy' * sigma
     return Vxyy
 end
-@everywhere function set_vyyy(k::Vector{Float64},p::Parm)
+#@everywhere 
+function set_vyyy(k::Vector{Float64},p::Parm)
     eps::Float64 = 0.75*p.t_i*(sin(k'*a2) + sin(k'*a3))*sqrt(3.0)
     gx::Float64 = 3.0*sqrt(3.0)*p.a_u*(-cos(k'*a3) - cos(k'*a2))/16 
     gy::Float64 = -p.a_u * 3.0 * ((-cos(k'*a3) + cos(k'*a2))/16)
@@ -218,7 +240,8 @@ end
 
 
 # set Hamiltoniann and velocity operator
-@everywhere function HandV(k0::NTuple{2, Float64},p::Parm)
+#@everywhere 
+function HandV(k0::NTuple{2, Float64},p::Parm)
     k = [k0[1], k0[2]]
 
     H = set_H(k,p)
@@ -293,7 +316,8 @@ end
 end
 
 #create mesh over the BZ
-@everywhere function get_kk(K_SIZE::Int)
+#@everywhere 
+function get_kk(K_SIZE::Int)
     kk = Vector{NTuple{2, Float64}}(undef,0)
     dk = 4pi/(3K_SIZE)
     #dk2 = 2.0/(3*sqrt(3.0)*K_SIZE*K_SIZE)
