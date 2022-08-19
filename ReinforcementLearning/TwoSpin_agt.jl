@@ -361,12 +361,12 @@ function main(arg::Array{String,1})
     println("Eval Finish! Using Plots")
 
     p1 = plot(E[:,1], xlabel="t_step", ylabel="E of HF_t", width=3.0)
-    #p1 = plot!(E[:,2], width=3.0)
-    #p1 = plot!(E[:,3], width=3.0)
-    #p1 = plot!(E[:,4], width=3.0)
+    p1 = plot!(E[:,2], width=3.0)
+    p1 = plot!(E[:,3], width=3.0)
+    p1 = plot!(E[:,4], width=3.0)
     savefig(p1,"./HF_t.png")
     println("Drawing Finish!")
-    println(E[:,4])
+    #println(E[:,4])
     
     
 end
