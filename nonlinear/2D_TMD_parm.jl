@@ -39,9 +39,9 @@ function set_parm(arg::Array{String,1})
     W_MAX = parse(Float64,arg[12])
     W_in = parse(Float64,arg[13])
     W_SIZE = parse(Int,arg[14])
-    α = parse(Char, arg[15])
-    β = parse(Char, arg[16])
-    γ = parse(Char, arg[17])
+    α = (arg[15])[1]
+    β = (arg[16])[1]
+    γ = (arg[17])[1]
 
     return t_i, a_u, a_d, Pr, mu0, eta, T, hx, hy, hz, K_SIZE, W_MAX, W_in, W_SIZE, α, β, γ
 end
@@ -62,9 +62,9 @@ function set_parm_mudep(arg::Array{String,1}, mu::Float64)
     W_MAX = parse(Float64,arg[12])
     W_in = parse(Float64,arg[13])
     W_SIZE = parse(Int,arg[14])
-    α = parse(Char, arg[15])
-    β = parse(Char, arg[16])
-    γ = parse(Char, arg[17])
+    α = (arg[15])[1]
+    β = (arg[16])[1]
+    γ = (arg[17])[1]
 
     return t_i, a_u, a_d, Pr, mu0, eta, T, hx, hy, hz, K_SIZE, W_MAX, W_in, W_SIZE, α, β, γ
 end
@@ -86,11 +86,8 @@ function set_parm_etadep(arg::Array{String,1}, eta0::Float64)
     W_in = parse(Float64,arg[13])
     W_SIZE = parse(Int,arg[14])
     α = (arg[15])[1]
-    #parse(Char, arg[15])
     β = (arg[16])[1]
-    #parse(Char, arg[16])
     γ = (arg[17])[1]
-    #parse(Char, arg[17])
 
     return t_i, a_u, a_d, Pr, mu0, eta, T, hx, hy, hz, K_SIZE, W_MAX, W_in, W_SIZE, α, β, γ
 end
@@ -111,9 +108,9 @@ function set_parm_Wdep(arg::Array{String,1}, Win::Float64)
     W_MAX = parse(Float64,arg[12])
     W_in = Win
     W_SIZE = parse(Int,arg[14])
-    α = parse(Char, arg[15])
-    β = parse(Char, arg[16])
-    γ = parse(Char, arg[17])
+    α = (arg[15])[1]
+    β = (arg[16])[1]
+    γ = (arg[17])[1]
 
     return t_i, a_u, a_d, Pr, mu0, eta, T, hx, hy, hz, K_SIZE, W_MAX, W_in, W_SIZE, α, β, γ
 end

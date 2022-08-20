@@ -1,8 +1,8 @@
-using Distributed
+#using Distributed
 #addprocs(30)
 
 #Parm(t_i, a_u, a_d, Pr, mu, eta, T, hx, hy, hz, K_SIZE, W_MAX, W_SIZE)
-@everywhere struct Parm
+struct Parm
     t1::Float64
     t2::Float64
     delta::Float64
@@ -19,7 +19,7 @@ using Distributed
     γ::Char
 end
 
-@everywhere function set_parm(arg::Array{String,1})
+function set_parm(arg::Array{String,1})
     t1 = parse(Float64,arg[1])
     t2 = parse(Float64,arg[2])
     delta = parse(Float64,arg[3])
@@ -31,14 +31,14 @@ end
     W_MAX = parse(Float64,arg[9])
     W_in = parse(Float64,arg[10])
     W_SIZE = parse(Int,arg[11])
-    α = parse(Char, arg[12])
-    β = parse(Char, arg[13])
-    γ = parse(Char, arg[14])
+    α = (arg[12])[1]
+    β = (arg[13])[1]
+    γ = (arg[14])[1]
 
     return t1, t2, delta, mu, kw, eta, T, K_SIZE, W_MAX, W_in, W_SIZE, α, β, γ
 end
 
-@everywhere function set_parm_mudep(arg::Array{String,1}, mu0::Float64)
+function set_parm_mudep(arg::Array{String,1}, mu0::Float64)
     t1 = parse(Float64,arg[1])
     t2 = parse(Float64,arg[2])
     delta = parse(Float64,arg[3])
@@ -50,14 +50,14 @@ end
     W_MAX = parse(Float64,arg[9])
     W_in = parse(Float64,arg[10])
     W_SIZE = parse(Int,arg[11])
-    α = parse(Char, arg[12])
-    β = parse(Char, arg[13])
-    γ = parse(Char, arg[14])
+    α = (arg[12])[1]
+    β = (arg[13])[1]
+    γ = (arg[14])[1]
 
     return t1, t2, delta, mu, kw, eta, T, K_SIZE, W_MAX, W_in, W_SIZE, α, β, γ
 end
 
-@everywhere function set_parm_etadep(arg::Array{String,1}, eta0::Float64)
+function set_parm_etadep(arg::Array{String,1}, eta0::Float64)
     t1 = parse(Float64,arg[1])
     t2 = parse(Float64,arg[2])
     delta = parse(Float64,arg[3])
@@ -69,14 +69,14 @@ end
     W_MAX = parse(Float64,arg[9])
     W_in = parse(Float64,arg[10])
     W_SIZE = parse(Int,arg[11])
-    α = parse(Char, arg[12])
-    β = parse(Char, arg[13])
-    γ = parse(Char, arg[14])
+    α = (arg[12])[1]
+    β = (arg[13])[1]
+    γ = (arg[14])[1]
 
     return t1, t2, delta, mu, kw, eta, T, K_SIZE, W_MAX, W_in, W_SIZE, α, β, γ
 end
 
-@everywhere function set_parm_Wdep(arg::Array{String,1}, Win::Float64)
+function set_parm_Wdep(arg::Array{String,1}, Win::Float64)
     t1 = parse(Float64,arg[1])
     t2 = parse(Float64,arg[2])
     delta = parse(Float64,arg[3])
@@ -88,21 +88,17 @@ end
     W_MAX = parse(Float64,arg[9])
     W_in = Win
     W_SIZE = parse(Int,arg[11])
-    α = parse(Char, arg[12])
-    β = parse(Char, arg[13])
-    γ = parse(Char, arg[14])
+    α = (arg[12])[1]
+    β = (arg[13])[1]
+    γ = (arg[14])[1]
 
     return t1, t2, delta, mu, kw, eta, T, K_SIZE, W_MAX, W_in, W_SIZE, α, β, γ
 end
 
-
-@everywhere a1 = [1.0, 0.0]
-@everywhere a2 = [-0.5, sqrt(3.0)/2]
-@everywhere a3 = [0.5, sqrt(3.0)/2]
-@everywhere sigma = [[1.0 0.0; 0.0 1.0], [0.0 1.0; 1.0 0.0], [0.0 -1.0im; 1.0im 0.0], [1.0 0.0; 0.0 -1.0]]
+sigma = [[1.0 0.0; 0.0 1.0], [0.0 1.0; 1.0 0.0], [0.0 -1.0im; 1.0im 0.0], [1.0 0.0; 0.0 -1.0]]
 
 #functions to set Hamiltonian and Velocity operators
-@everywhere function set_H(k::Vector{Float64},p::Parm)
+function set_H(k::Vector{Float64},p::Parm)
     e0 = p.t2*cos(k[1]+k[2]) + p.delta*cos(k[1]-k[2]) + p.mu
     ex = p.t1*(cos(p.kw)-cos(k[2])) + p.delta*(1.0-cos(k[3]))
     ey = p.t1*sin(k[3])
@@ -112,7 +108,7 @@ end
     return H
 end
 
-@everywhere function set_vx(k::Vector{Float64},p::Parm)
+function set_vx(k::Vector{Float64},p::Parm)
     eps_vx::Float64 = -p.t2*sin(k[1]+k[2]) - p.delta*sin(k[1]-k[2])
     gx_vx::Float64 = 0.0
     gy_vx::Float64 = 0.0
@@ -122,7 +118,7 @@ end
     return Vx
 end
 
-@everywhere function set_vy(k::Vector{Float64},p::Parm)
+function set_vy(k::Vector{Float64},p::Parm)
     eps_vy::Float64 = -p.t2*sin(k[1]+k[2]) + p.delta*sin(k[1]-k[2])
     gx_vy::Float64 = p.t1*sin(k[2])
     gy_vy::Float64 = 0.0
@@ -132,7 +128,7 @@ end
     return Vy
 end
 
-@everywhere function set_vz(k::Vector{Float64},p::Parm)
+function set_vz(k::Vector{Float64},p::Parm)
     eps_vz::Float64 = 0.0
     gx_vz::Float64 = p.delta*sin(k[3])
     gy_vz::Float64 = p.t1*cos(k[3])
@@ -142,83 +138,80 @@ end
     return Vz
 end
 
-@everywhere function set_vxx(k::Vector{Float64},p::Parm)
+function set_vxx(k::Vector{Float64},p::Parm)
     Vxx::Array{ComplexF64,2} = (-p.t2*cos(k[1]+k[2]) - p.delta*cos(k[1]-k[2]))*sigma[1] + (p.t1*cos(k[1]))*sigma[4]
     return Vxx
 end
 
-@everywhere function set_vxy(k::Vector{Float64},p::Parm)
+function set_vxy(k::Vector{Float64},p::Parm)
     Vxy::Array{ComplexF64,2} = (-p.t2*cos(k[1]+k[2]) + p.delta*cos(k[1]-k[2]))*sigma[1]
     return Vxy
 end
 
-@everywhere function set_vyy(k::Vector{Float64},p::Parm)
+function set_vyy(k::Vector{Float64},p::Parm)
     Vyy::Array{ComplexF64,2} = (-p.t2*cos(k[1]+k[2]) - p.delta*cos(k[1]-k[2]))*sigma[1] + (p.t1*cos(k[2]))*sigma[2]
     return Vyy
 end
 
-@everywhere function set_vzx(k::Vector{Float64},p::Parm)
+function set_vzx(k::Vector{Float64},p::Parm)
     Vzx = zeros(ComplexF64,2,2)
     return Vzx
 end
-@everywhere function set_vyz(k::Vector{Float64},p::Parm)
+function set_vyz(k::Vector{Float64},p::Parm)
     Vyz = zeros(ComplexF64,2,2)
     return Vyz
 end
-@everywhere function set_vzz(k::Vector{Float64},p::Parm)
+function set_vzz(k::Vector{Float64},p::Parm)
     Vzz::Array{ComplexF64,2} = p.delta*cos(k[3])*(sigma[2]+sigma[4]) - p.t1*sin(k[3])*sigma[3]
     return Vzz
 end
 
-@everywhere function set_vxxx(k::Vector{Float64},p::Parm)
+function set_vxxx(k::Vector{Float64},p::Parm)
     Vxxx::Array{ComplexF64,2} = (p.t2*sin(k[1]+k[2]) + p.delta*sin(k[1]-k[2]))*sigma[1] - (p.t1*sin(k[1]))*sigma[4]
     return Vxxx
 end
 
-@everywhere function set_vxxy(k::Vector{Float64},p::Parm)
+function set_vxxy(k::Vector{Float64},p::Parm)
     Vxxy::Array{ComplexF64,2} = (p.t2*sin(k[1]+k[2]) - p.delta*sin(k[1]-k[2]))*sigma[1]
     return Vxxy
 end
 
-@everywhere function set_vxxz(k::Vector{Float64},p::Parm)
+function set_vxxz(k::Vector{Float64},p::Parm)
     Vxxz = zeros(ComplexF64,2,2)
     return Vxxz
 end
 
-@everywhere function set_vxyy(k::Vector{Float64},p::Parm)
+function set_vxyy(k::Vector{Float64},p::Parm)
     Vxyy::Array{ComplexF64,2} = (p.t2*sin(k[1]+k[2]) + p.delta*sin(k[1]-k[2]))*sigma[1]
     return Vxyy
 end
-@everywhere function set_vxyz(k::Vector{Float64},p::Parm)
+function set_vxyz(k::Vector{Float64},p::Parm)
     Vxyz = zeros(ComplexF64,2,2)
     return Vxyz
 end
-@everywhere function set_vxzz(k::Vector{Float64},p::Parm)
+function set_vxzz(k::Vector{Float64},p::Parm)
     Vxzz = zeros(ComplexF64,2,2)
     return Vxzz
 end
-@everywhere function set_vyyy(k::Vector{Float64},p::Parm)
+function set_vyyy(k::Vector{Float64},p::Parm)
     Vyyy::Array{ComplexF64,2} = (p.t2*sin(k[1]+k[2]) - p.delta*sin(k[1]-k[2]))*sigma[1] - (p.t1*sin(k[2]))*sigma[2]
     return Vyyy
 end
-@everywhere function set_vyyz(k::Vector{Float64},p::Parm)
+function set_vyyz(k::Vector{Float64},p::Parm)
     Vyyz = zeros(ComplexF64,2,2)
     return Vyyz
 end
-@everywhere function set_vyzz(k::Vector{Float64},p::Parm)
+function set_vyzz(k::Vector{Float64},p::Parm)
     Vyzz = zeros(ComplexF64,2,2)
     return Vyzz
 end
-@everywhere function set_vzzz(k::Vector{Float64},p::Parm)
+function set_vzzz(k::Vector{Float64},p::Parm)
     Vzzz::Array{ComplexF64,2} = -p.delta*sin(k[3])*(sigma[2]+sigma[4]) - p.t1*cos(k[3])*sigma[3]
     return Vxzz
 end
 
-
 # set Hamiltoniann and velocity operator
-
-# set Hamiltoniann and velocity operator
-@everywhere function HandV(k0::NTuple{3, Float64},p::Parm)
+function HandV(k0::NTuple{3, Float64},p::Parm)
     k = [k0[1], k0[2], k0[3]]
 
     H = set_H(k,p)
@@ -409,37 +402,4 @@ end
     E::Array{ComplexF64,1} = zeros(2)
 
     return H, Va, Vb, Vc, Vab, Vbc, Vca, Vabc, E 
-end
-
-#create mesh over the BZ
-@everywhere function get_kk(K_SIZE::Int)
-    kk = Vector{NTuple{2, Float64}}(undef,0)
-    dk = 4pi/(3K_SIZE)
-    #dk2 = 2.0/(3*sqrt(3.0)*K_SIZE*K_SIZE)
-    for i in collect(dk:dk:4pi/3)
-        
-        for j in collect(0:dk:4pi/3)
-            k = j*a1 + i*a2
-            push!(kk,(k[1],k[2]))
-        end
-        
-        
-        for j in collect(dk:dk:4pi/3)
-            if (i+j) < (4pi/3+dk)
-                k = -j*a1 + i*a3
-                push!(kk,(k[1],k[2]))
-            end
-        end
-    end
-    l = length(kk)
-    for i in 1:l
-        k0 = kk[i]
-        k0 = -1 .* k0
-        push!(kk,k0)
-    end
-    for i in collect(-4pi/3:dk:4pi/3)
-        k = i*a1
-        push!(kk,(k[1],k[2]))
-    end
-    return kk
 end
