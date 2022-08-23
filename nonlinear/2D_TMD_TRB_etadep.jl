@@ -1,5 +1,5 @@
 using Distributed
-addprocs(30)
+addprocs(4)
 
 #Parm(t_i, a_u, a_d, Pr, mu, eta, T, hx, hy, hz, K_SIZE, W_MAX, W_SIZE)
 @everywhere struct Parm
@@ -425,13 +425,13 @@ function main(arg::Array{String,1})
     K_SIZE = parse(Int,arg[3])
     kk = get_kk(K_SIZE)
 
-    mu0 = collect(0.005:0.005:0.1)
+    mu0 = collect(0.01:0.01:0.1)
     #collect(0.005:0.005:0.15)
     #[0.0025, 0.005, 0.0075, 0.01, 0.015, 0.02, 0.025, 0.03, 0.035, 0.04, 0.045, 0.05, 0.055, 0.06, 0.065, 0.07, 0.075, 0.08]
     #collect(0.005:0.005:0.1)
 
     Green_XXX_mu = zeros(Float64,length(mu0))
-    Green_XXX_M = zeros(Float64,length(mu0))
+    Green_XXX_sea = zeros(Float64,length(mu0))
 
     Drude_XXX_mu = zeros(Float64,length(mu0))
     BCD_XXX_mu = zeros(Float64,length(mu0))
@@ -447,7 +447,7 @@ function main(arg::Array{String,1})
         #if mu0[j] < 0.01
         #    p = Parm(0.5, 0.08, 0.06, 0.7, parse(Float64,arg[1]), mu0[j], parse(Float64,arg[2]), 0.05, 0.0, 0.0, parse(Int,arg[3]), 3.0, 2*parse(Int,arg[4]))
         #else
-            p = Parm(0.5, 0.08, 0.06, 0.7, parse(Float64,arg[1]), mu0[j], parse(Float64,arg[2]), 0.05, 0.0, 0.0, parse(Int,arg[3]), 3.0, parse(Int,arg[4]))
+            p = Parm(0.5, 0.08, 0.06, 0.7, parse(Float64,arg[1]), mu0[j], parse(Float64,arg[2]), 0.05, 0.0, 0.0, parse(Int,arg[3]), 1.5, parse(Int,arg[4]))
         #end
         #p = Parm(0.5, 0.08, 0.06, 0.7, 0.7, 0.04, 0.06, 0.0, 0.0, 0.0, K_SIZE, 0.5, 1000)
 
@@ -459,31 +459,30 @@ function main(arg::Array{String,1})
             println(p)
         end
 
-        #Drude_XXX_mu[j], BCD_XXX_mu[j], sQMD_XXX_mu[j], dQMD_XXX_mu[j], Inter_XXX_mu[j], dInter_XXX_mu[j], Green_XXX_mu[j], Green_XXX_sea[j] 
-        Green_XXX_M[j] = @distributed (+) for i in 1:length(kk)
+        Drude_XXX_mu[j], BCD_XXX_mu[j], sQMD_XXX_mu[j], dQMD_XXX_mu[j], Inter_XXX_mu[j], dInter_XXX_mu[j], Green_XXX_mu[j], Green_XXX_sea[j] = @distributed (+) for i in 1:length(kk)
         #, Green_XXX_mu[j], Green_XXX_sea[j]
             Hamk = Hamiltonian(HandV(kk[i],p)...)
             #Green = Green_DC_2D(p, Hamk)
-            #Green_NL = Green_YYY(p,Hamk)
+            Green_NL = Green_YYY(p,Hamk)
             Green_sea = Green_YYY_M(p,Hamk)
-            dk2*Green_sea
+            #dk2*Green_sea
             #Green_YYY_sea(p,Hamk)
             #HV_BI(Hamk)
-            #Drude0, BCD0, sQMD0, dQMD0, Inter0, dInter0 = Green_YYY_BI(p,Hamk)
-            #[dk2*Drude0, dk2*BCD0, dk2*sQMD0, dk2*dQMD0, dk2*Inter0, dk2*dInter0, dk2*Green_NL, dk2*Green_sea]
+            Drude0, BCD0, sQMD0, dQMD0, Inter0, dInter0 = Green_YYY_BI(p,Hamk)
+            [dk2*Drude0, dk2*BCD0, dk2*sQMD0, dk2*dQMD0, dk2*Inter0, dk2*dInter0, dk2*Green_NL, dk2*Green_sea]
         end
         print("#")
     end
     println("finish the calculation!")
     # headerの名前を(Q,E1,E2)にして、CSVファイル形式を作成
-    save_data2 = DataFrame(mu=mu0, Drude=Drude_XXX_mu, BCD=BCD_XXX_mu, sQMD=sQMD_XXX_mu, dQMD=dQMD_XXX_mu, Inter=Inter_XXX_mu, dInter=dInter_XXX_mu, Green=Green_XXX_mu, Green_M=Green_XXX_M)
+    save_data2 = DataFrame(mu=mu0, Drude=Drude_XXX_mu, BCD=BCD_XXX_mu, sQMD=sQMD_XXX_mu, dQMD=dQMD_XXX_mu, Inter=Inter_XXX_mu, dInter=dInter_XXX_mu, Green=Green_XXX_mu, Green_sea=Green_XXX_sea)
     CSV.write("./etadep_YYYYY_T002_M_test.csv", save_data2)
 
     ENV["GKSwstype"]="nul"
     Plots.scalefontsizes(1.4)
-    p1 = plot(mu0, Green_XXX_M, label="Drude",xlabel="η",ylabel="σ",title="η-dependence", width=4.0, marker=:circle, markersize = 4.8)
-    #p1 = plot(mu0, -Drude_XXX_mu, label="Drude",xlabel="η",ylabel="σ",title="η-dependence", width=4.0, marker=:circle, markersize = 4.8)
-    #plot!(mu0, sQMD_XXX_mu, label="sQMD", width=2.0, marker=:circle)
+    #p1 = plot(mu0, Green_XXX_mu, label="Green",xlabel="η",ylabel="σ",title="η-dependence", width=4.0, marker=:circle, markersize = 4.8)
+    p1 = plot(mu0, -Drude_XXX_mu, label="Drude",xlabel="η",ylabel="σ",title="η-dependence", width=4.0, marker=:circle, markersize = 4.8)
+    plot!(mu0, sQMD_XXX_mu, label="sQMD", width=2.0, marker=:circle)
     #p1 = plot!(mu0, -BCD_XXX_mu, label="BCD", width=4.0, marker=:circle, markersize = 4.8)
     #p1 = plot!(mu0, -dQMD_XXX_mu-sQMD_XXX_mu, label="ChS", width=4.0, marker=:circle, markersize = 4.8)
     #p1 = plot!(mu0, -Inter_XXX_mu, label="Inter", width=4.0, marker=:circle, markersize = 4.8)

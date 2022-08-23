@@ -2,7 +2,6 @@
 #addprocs(30)
 
 #Parm(t_i, a_u, a_d, Pr, mu, eta, T, hx, hy, hz, K_SIZE, W_MAX, W_in, W_SIZE, α, β, γ)
-#@everywhere 
 struct Parm
     t_i::Float64
     a_u::Float64
@@ -23,7 +22,6 @@ struct Parm
     γ::Char
 end
 
-#@everywhere 
 function set_parm(arg::Array{String,1})
     t_i = parse(Float64,arg[1])
     a_u = parse(Float64,arg[2])
@@ -46,7 +44,6 @@ function set_parm(arg::Array{String,1})
     return t_i, a_u, a_d, Pr, mu0, eta, T, hx, hy, hz, K_SIZE, W_MAX, W_in, W_SIZE, α, β, γ
 end
 
-#@everywhere 
 function set_parm_mudep(arg::Array{String,1}, mu::Float64)
     t_i = parse(Float64,arg[1])
     a_u = parse(Float64,arg[2])
@@ -69,7 +66,6 @@ function set_parm_mudep(arg::Array{String,1}, mu::Float64)
     return t_i, a_u, a_d, Pr, mu0, eta, T, hx, hy, hz, K_SIZE, W_MAX, W_in, W_SIZE, α, β, γ
 end
 
-#@everywhere 
 function set_parm_etadep(arg::Array{String,1}, eta0::Float64)
     t_i = parse(Float64,arg[1])
     a_u = parse(Float64,arg[2])
@@ -92,7 +88,28 @@ function set_parm_etadep(arg::Array{String,1}, eta0::Float64)
     return t_i, a_u, a_d, Pr, mu0, eta, T, hx, hy, hz, K_SIZE, W_MAX, W_in, W_SIZE, α, β, γ
 end
 
-#@everywhere 
+function set_parm_etadep(arg::Array{String,1}, T0::Float64)
+    t_i = parse(Float64,arg[1])
+    a_u = parse(Float64,arg[2])
+    a_d = parse(Float64,arg[3])
+    Pr = parse(Float64,arg[4])
+    mu0 = parse(Float64,arg[5])
+    eta = parse(Float64,arg[6])
+    T = T0
+    hx = parse(Float64,arg[8])
+    hy = parse(Float64,arg[9])
+    hz = parse(Float64,arg[10])
+    K_SIZE = parse(Int,arg[11])
+    W_MAX = parse(Float64,arg[12])
+    W_in = parse(Float64,arg[13])
+    W_SIZE = parse(Int,arg[14])
+    α = (arg[15])[1]
+    β = (arg[16])[1]
+    γ = (arg[17])[1]
+
+    return t_i, a_u, a_d, Pr, mu0, eta, T, hx, hy, hz, K_SIZE, W_MAX, W_in, W_SIZE, α, β, γ
+end
+
 function set_parm_Wdep(arg::Array{String,1}, Win::Float64)
     t_i = parse(Float64,arg[1])
     a_u = parse(Float64,arg[2])
@@ -116,18 +133,14 @@ function set_parm_Wdep(arg::Array{String,1}, Win::Float64)
 end
 
 
-#@everywhere 
 a1 = [1.0, 0.0]
-#@everywhere 
 a2 = [-0.5, sqrt(3.0)/2]
-#@everywhere 
 a3 = [0.5, sqrt(3.0)/2]
-#@everywhere 
+
 sigma = [[1.0 0.0; 0.0 1.0], [0.0 1.0; 1.0 0.0], [0.0 -1.0im; 1.0im 0.0], [1.0 0.0; 0.0 -1.0]]
 
 
 #functions to set Hamiltonian and Velocity operators
-#@everywhere 
 function set_H(k::Vector{Float64},p::Parm)
     eps::Float64 = 2.0p.t_i*(p.Pr*cos(k'*a1) + cos(k'*a2) + cos(k'*a3)) + p.mu
     g_x::Float64 = p.a_u*(sin(k'*a3) + sin(k'*a2))/2 - p.hx
@@ -138,7 +151,6 @@ function set_H(k::Vector{Float64},p::Parm)
     return H
 end
 
-#@everywhere 
 function set_vx(k::Vector{Float64},p::Parm)
     eps_vx::Float64 = 2.0p.t_i*(-p.Pr*sin(k'*a1) + 0.5sin(k'*a2) - 0.5sin(k'*a3))
     gx_vx::Float64 = p.a_u*(cos(k'*a3) - cos(k'*a2))/4 
@@ -149,7 +161,6 @@ function set_vx(k::Vector{Float64},p::Parm)
     return Vx
 end
 
-#@everywhere 
 function set_vy(k::Vector{Float64},p::Parm)
     eps_vy::Float64 = sqrt(3.0)*p.t_i*(-sin(k'*a2) - sin(k'*a3))
     gx_vy::Float64 = sqrt(3.0)*p.a_u*(cos(k'*a3) + cos(k'*a2))/4 
@@ -160,7 +171,6 @@ function set_vy(k::Vector{Float64},p::Parm)
     return Vy
 end
 
-#@everywhere 
 function set_vxx(k::Vector{Float64},p::Parm)
     eps_vxx::Float64 = 2.0p.t_i*(-p.Pr*cos(k'*a1) - 0.25cos(k'*a2) - 0.25cos(k'*a3))
     gx_vxx::Float64 = p.a_u*(-sin(k'*a3) - sin(k'*a2))/8 
@@ -171,7 +181,6 @@ function set_vxx(k::Vector{Float64},p::Parm)
     return Vxx
 end
 
-#@everywhere 
 function set_vxy(k::Vector{Float64},p::Parm)
     eps_vxy::Float64 = sqrt(3.0)*p.t_i*(cos(k'*a2) - cos(k'*a3))/2
     gx_vxy::Float64 = sqrt(3.0)*p.a_u*(-sin(k'*a3) + sin(k'*a2))/8 
@@ -182,7 +191,6 @@ function set_vxy(k::Vector{Float64},p::Parm)
     return Vxy
 end
 
-#@everywhere 
 function set_vyy(k::Vector{Float64},p::Parm)
     eps_vyy::Float64 = 1.5*p.t_i*(-cos(k'*a2) - cos(k'*a3))
     gx_vyy::Float64 = 3.0*p.a_u*(-sin(k'*a3) - sin(k'*a2))/8 
@@ -193,7 +201,6 @@ function set_vyy(k::Vector{Float64},p::Parm)
     return Vyy
 end
 
-#@everywhere 
 function set_vxxx(k::Vector{Float64},p::Parm)
     eps::Float64 = 2.0p.t_i*(p.Pr*sin(k'*a1) - 0.125sin(k'*a2) + 0.125sin(k'*a3))
     gx::Float64 = p.a_u*(-cos(k'*a3) + cos(k'*a2))/16 
@@ -204,7 +211,6 @@ function set_vxxx(k::Vector{Float64},p::Parm)
     return Vxxx
 end
 
-#@everywhere 
 function set_vxxy(k::Vector{Float64},p::Parm)
     eps::Float64 = sqrt(3.0)*p.t_i*(sin(k'*a2) + sin(k'*a3))/4
     gx::Float64 = sqrt(3.0)*p.a_u*(-cos(k'*a3) - cos(k'*a2))/16 
@@ -214,7 +220,7 @@ function set_vxxy(k::Vector{Float64},p::Parm)
     Vxxy::Array{ComplexF64,2} = gg_xxy' * sigma
     return Vxxy
 end
-#@everywhere 
+
 function set_vxyy(k::Vector{Float64},p::Parm)
     eps::Float64 = 0.75*p.t_i*(-sin(k'*a2) + sin(k'*a3))
     gx::Float64 = 3.0*p.a_u*(-cos(k'*a3) + cos(k'*a2))/16 
@@ -224,7 +230,7 @@ function set_vxyy(k::Vector{Float64},p::Parm)
     Vxyy::Array{ComplexF64,2} = gg_xyy' * sigma
     return Vxyy
 end
-#@everywhere 
+
 function set_vyyy(k::Vector{Float64},p::Parm)
     eps::Float64 = 0.75*p.t_i*(sin(k'*a2) + sin(k'*a3))*sqrt(3.0)
     gx::Float64 = 3.0*sqrt(3.0)*p.a_u*(-cos(k'*a3) - cos(k'*a2))/16 
@@ -235,9 +241,7 @@ function set_vyyy(k::Vector{Float64},p::Parm)
     return Vyyy
 end
 
-
 # set Hamiltoniann and velocity operator
-#@everywhere 
 function HandV(k0::NTuple{2, Float64},p::Parm)
     k = [k0[1], k0[2]]
 
@@ -312,36 +316,188 @@ function HandV(k0::NTuple{2, Float64},p::Parm)
     return H, Va, Vb, Vc, Vab, Vbc, Vca, Vabc, E 
 end
 
-#create mesh over the BZ
-#@everywhere 
-function get_kk(K_SIZE::Int)
-    kk = Vector{NTuple{2, Float64}}(undef,0)
-    dk = 4pi/(3K_SIZE)
-    #dk2 = 2.0/(3*sqrt(3.0)*K_SIZE*K_SIZE)
-    for i in collect(dk:dk:4pi/3)
-        
-        for j in collect(0:dk:4pi/3)
-            k = j*a1 + i*a2
-            push!(kk,(k[1],k[2]))
+#If you want to use ForwardDiff
+using ForwardDiff
+function set_H_v(k,p::Parm)
+    eps = 2.0p.t_i*(p.Pr*cos(k'*a1) + cos(k'*a2) + cos(k'*a3)) + p.mu
+    g_x = p.a_u*(sin(k'*a3) + sin(k'*a2))/2 - p.hx
+    g_y = -p.a_u * (sin(k'*a1) + (sin(k'*a3) - sin(k'*a2))/2)/sqrt(3.0) - p.hy
+    g_z = 2p.a_d*(sin(k'*a1) + sin(k'*a2) - sin(k'*a3))/(3.0*sqrt(3.0)) - p.hz
+    gg = [eps, g_x, g_y, g_z]
+    return gg
+end
+
+function set_vx_fd(k,p::Parm)
+    m(k) = set_H_v(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,1]
+    #gg = (ForwardDiff.jacobian(k -> set_H_v(k,p), k)[1])[:,1]
+    #you can also write as below
+    #k0 = k[1]
+    #gg = ForwardDiff.jacobian(k0 -> set_H_v([k0,k[2],k[3]],p), k0)[1]
+    #V::Array{ComplexF64,2} = gg' * sigma
+    return gg
+end
+
+function set_vy_fd(k,p::Parm)
+    m(k) = set_H_v(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,2]
+    #gg = (ForwardDiff.jacobian(k -> set_H_v(k,p), k)[1])[:,2]
+    #you can also write as below
+    #k0 = k[2]
+    #gg = ForwardDiff.jacobian(k0 -> set_H_v([k[1],k0,k[3]],p), k0)[1]
+    #V::Array{ComplexF64,2} = gg' * sigma
+    return gg
+end
+
+function set_vxx_fd(k,p::Parm)
+    m(k) = set_vx_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,1]
+    #gg = ForwardDiff.jacobian(k -> set_vx_fd(k,p), k)[1]
+    #you can also write as below
+    #k0 = k[1]
+    #gg = ForwardDiff.jacobian(k0 -> set_vx_fd([k0,k[2],k[3]],p), k0)[1]
+    #V::Array{ComplexF64,2} = gg' * sigma
+    return gg
+end
+
+function set_vxy_fd(k,p::Parm)
+    m(k) = set_vy_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,1]
+    #gg = (ForwardDiff.jacobian(k -> set_vy_fd(k,p), k)[1])[:,1]
+    #you can also write as below
+    #k0 = k[1]
+    #gg = ForwardDiff.jacobian(k0 -> set_vy_fd([k0,k[2],k[3]],p), k0)[1]
+    #V::Array{ComplexF64,2} = gg' * sigma
+    return gg
+end
+
+function set_vyy_fd(k,p::Parm)
+    m(k) = set_vy_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,2]
+    #gg = (ForwardDiff.jacobian(k -> set_vy_fd(k,p), k)[1])[:,2]
+    #k0 = k[2]
+    #gg = ForwardDiff.jacobian(k0 -> set_vy_fd([k[1],k0,k[3]],p), k0)[1]
+    #V::Array{ComplexF64,2} = gg' * sigma
+    return gg
+end
+
+function set_vxxx_fd(k,p::Parm)
+    m(k) = set_vxx_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,1]
+    #gg = (ForwardDiff.jacobian(k -> set_vxx_fd(k,p), k)[1])[:,1]
+    #k0 = k[1]
+    #gg = ForwardDiff.jacobian(k0 -> set_vxx_fd([k0,k[2],k[3]],p), k0)[1]
+    #V::Array{ComplexF64,2} = gg' * sigma
+    return gg
+end
+
+function set_vxxy_fd(k,p::Parm)
+    m(k) = set_vxy_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,1]
+    #gg = (ForwardDiff.jacobian(k -> set_vxy_fd(k,p), k)[1])[:,1]
+    #you can also write as below
+    #k0 = k[1]
+    #gg = ForwardDiff.jacobian(k0 -> set_vxy_fd([k0,k[2],k[3]],p), k0)[1]
+    #V::Array{ComplexF64,2} = gg' * sigma
+    return gg
+end
+
+function set_vxyy_fd(k,p::Parm)
+    m(k) = set_vyy_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,1]
+    #gg = (ForwardDiff.jacobian(k -> set_vyy_fd(k,p), k)[1])[:,1]
+    #k0 = k[1]
+    #gg = ForwardDiff.jacobian(k0 -> set_vyy_fd([k0,k[2],k[3]],p), k0)[1]
+    #V::Array{ComplexF64,2} = gg' * sigma
+    return gg
+end
+
+function set_vyyy_fd(k,p::Parm)
+    m(k) = set_vyy_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,2]
+    #gg = (ForwardDiff.jacobian(k -> set_vyy_fd(k,p), k)[1])[:,2]
+    #you can also write as below
+    #k0 = k[2]
+    #gg = ForwardDiff.jacobian(k0 -> set_vx_fd([k[1],k0,k[3]],p), k0)[1]
+    #V::Array{ComplexF64,2} = gg' * sigma
+    return gg
+end
+
+function VtoM(v::Vector{Float64})
+    M::Array{ComplexF64,2} = v' * sigma 
+    return M
+end
+
+function HandV_fd(k0::NTuple{2, Float64},p::Parm)
+    k = [k0[1], k0[2]]
+
+    H = set_H(k,p)
+
+    if(p.α == 'X')
+        Va = VtoM(set_vx_fd(k,p))#set_vx(k,p)
+        if(p.β == 'X')
+            Vb = VtoM(set_vx_fd(k,p))
+            Vab = VtoM(set_vxx_fd(k,p))
+            if(p.γ == 'X')
+                Vc = VtoM(set_vx_fd(k,p))
+                Vbc = VtoM(set_vxx_fd(k,p))
+                Vca = VtoM(set_vxx_fd(k,p))
+                Vabc = VtoM(set_vxxx_fd(k,p))
+            elseif(p.γ == 'Y')
+                Vc = VtoM(set_vy_fd(k,p))
+                Vbc = VtoM(set_vxy_fd(k,p))
+                Vca = VtoM(set_vxy_fd(k,p))
+                Vabc = VtoM(set_vxxy_fd(k,p))
+            end
+        elseif(p.β == 'Y')
+            Vb = VtoM(set_vy_fd(k,p))
+            Vab = VtoM(set_vxy_fd(k,p))
+            if(p.γ == 'X')
+                Vc = VtoM(set_vx_fd(k,p))
+                Vbc = VtoM(set_vxy_fd(k,p))
+                Vca = VtoM(set_vxx_fd(k,p))
+                Vabc = VtoM(set_vxxy_fd(k,p))
+            elseif(p.γ == 'Y')
+                Vc = VtoM(set_vy_fd(k,p))
+                Vbc = VtoM(set_vyy_fd(k,p))
+                Vca = VtoM(set_vxy_fd(k,p))
+                Vabc = VtoM(set_vxyy_fd(k,p))
+            end
         end
-        
-        
-        for j in collect(dk:dk:4pi/3)
-            if (i+j) < (4pi/3+dk)
-                k = -j*a1 + i*a3
-                push!(kk,(k[1],k[2]))
+    elseif(p.α == 'Y')
+        Va = VtoM(set_vy_fd(k,p))#set_vx(k,p)
+        if(p.β == 'X')
+            Vb = VtoM(set_vx_fd(k,p))
+            Vab = VtoM(set_vxy_fd(k,p))
+            if(p.γ == 'X')
+                Vc = VtoM(set_vx_fd(k,p))
+                Vbc = VtoM(set_vxx_fd(k,p))
+                Vca = VtoM(set_vxy_fd(k,p))
+                Vabc = VtoM(set_vxxy_fd(k,p))
+            elseif(p.γ == 'Y')
+                Vc = VtoM(set_vy_fd(k,p))
+                Vbc = VtoM(set_vxy_fd(k,p))
+                Vca = VtoM(set_vyy_fd(k,p))
+                Vabc = VtoM(set_vxyy_fd(k,p))
+            end
+        elseif(p.β == 'Y')
+            Vb = VtoM(set_vy_fd(k,p))
+            Vab = VtoM(set_vyy_fd(k,p))
+            if(p.γ == 'X')
+                Vc = VtoM(set_vx_fd(k,p))
+                Vbc = VtoM(set_vxy_fd(k,p))
+                Vca = VtoM(set_vxy_fd(k,p))
+                Vabc = VtoM(set_vxyy_fd(k,p))
+            elseif(p.γ == 'Y')
+                Vc = VtoM(set_vy_fd(k,p))
+                Vbc = VtoM(set_vyy_fd(k,p))
+                Vca = VtoM(set_vyy_fd(k,p))
+                Vabc = VtoM(set_vyyy_fd(k,p))
             end
         end
     end
-    l = length(kk)
-    for i in 1:l
-        k0 = kk[i]
-        k0 = -1 .* k0
-        push!(kk,k0)
-    end
-    for i in collect(-4pi/3:dk:4pi/3)
-        k = i*a1
-        push!(kk,(k[1],k[2]))
-    end
-    return kk
+    
+    E::Array{ComplexF64,1} = zeros(2)
+
+    return H, Va, Vb, Vc, Vab, Vbc, Vca, Vabc, E 
 end

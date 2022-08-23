@@ -2,6 +2,7 @@ using Distributed
 addprocs(4)
 @everywhere include("./2D_TMD_parm.jl")
 @everywhere include("./transport.jl")
+@everywhere include("./k_C3.jl")
 
 
 using DataFrames
@@ -14,9 +15,6 @@ function main(arg::Array{String,1})
     kk = get_kk(K_SIZE)
 
     eta = collect(0.01:0.01:0.1)
-    #collect(0.005:0.005:0.15)
-    #[0.0025, 0.005, 0.0075, 0.01, 0.015, 0.02, 0.025, 0.03, 0.035, 0.04, 0.045, 0.05, 0.055, 0.06, 0.065, 0.07, 0.075, 0.08]
-    #collect(0.005:0.005:0.1)
 
     Green_eta = zeros(Float64,length(eta))
     Green_eta_sea = zeros(Float64,length(eta))
@@ -38,7 +36,8 @@ function main(arg::Array{String,1})
         end
 
         Drude_eta[j], BCD_eta[j], gBC_eta[j], ChS_eta[j], Green_eta[j], Green_eta_sea[j] = @distributed (+) for i in 1:length(kk)
-            Hamk = Hamiltonian(HandV(kk[i],p)...)
+            #Hamk = Hamiltonian(HandV(kk[i],p)...)
+            Hamk = Hamiltonian(HandV_fd(kk[i],p)...)
             Drude_eta0, BCD_eta0, gBC_eta0, ChS_eta0 = Green_DC_BI_nonlinear_full(p, Hamk)
             Green_eta0, Green_eta_sea0 = Green_DC_nonlinear(p, Hamk)
 
@@ -49,7 +48,7 @@ function main(arg::Array{String,1})
     println("finish the calculation!")
     # headerの名前を(Q,E1,E2)にして、CSVファイル形式を作成
     save_data2 = DataFrame(η=eta, Drude=Drude_eta, BCD=BCD_eta, gBC=gBC_eta, ChS=ChS_eta, Green=Green_eta, Green_sea=Green_eta_sea)
-    CSV.write("./etadep_"*arg[15]*arg[16]*arg[17]*"_T002_M_test.csv", save_data2)
+    CSV.write("./etadep_"*arg[15]*arg[16]*arg[17]*"_T"*arg[7]*".csv", save_data2)
 
     ENV["GKSwstype"]="nul"
     Plots.scalefontsizes(1.4)
