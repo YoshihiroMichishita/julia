@@ -1,12 +1,3 @@
-#Parm: m, lamda, hx, hy, hz, mu, eta, T, K_MAX, K_SIZE, W_in, W_MAX, W_SIZE
-#p = Parm(ARGS[1], ARGS[2], 0.0, 0.0, 0.0, ARGS[3], T0, ARGS[4], 1.0, ARGS[5], ARGS[6] , ARGS[7], ARGS[8])
-# ARGS =(m(tilting), lamda, eta, mu, K_SIZE, W_in, W_MAX, W_SIZE)
-
-#import Pkg
-#Pkg.add("DataFrames")
-#Pkg.add("CSV")
-#Pkg.add("Plots")
-
 using Distributed
 addprocs(32)
 
