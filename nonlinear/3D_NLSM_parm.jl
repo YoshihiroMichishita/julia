@@ -24,7 +24,7 @@ function set_parm(arg::Array{String,1})
     t2 = parse(Float64,arg[2])
     delta = parse(Float64,arg[3])
     mu = parse(Float64,arg[4])
-    kw = parse(Float64,arg[5])
+    kw = parse(Float64,arg[5])*pi
     eta = parse(Float64,arg[6])
     T = parse(Float64,arg[7])
     K_SIZE = parse(Int,arg[8])
@@ -43,7 +43,7 @@ function set_parm_mudep(arg::Array{String,1}, mu0::Float64)
     t2 = parse(Float64,arg[2])
     delta = parse(Float64,arg[3])
     mu = mu0
-    kw = parse(Float64,arg[5])
+    kw = parse(Float64,arg[5])*pi
     eta = parse(Float64,arg[6])
     T = parse(Float64,arg[7])
     K_SIZE = parse(Int,arg[8])
@@ -58,11 +58,11 @@ function set_parm_mudep(arg::Array{String,1}, mu0::Float64)
 end
 
 function set_parm_etadep(arg::Array{String,1}, eta0::Float64)
-    t1 = parse(Float64,arg[1])
-    t2 = parse(Float64,arg[2])
-    delta = parse(Float64,arg[3])
-    mu = parse(Float64,arg[4])
-    kw = parse(Float64,arg[5])
+    t1 = parse(Float64,arg[1])#t1
+    t2 = parse(Float64,arg[2])#v3
+    delta = parse(Float64,arg[3])#delta5
+    mu = parse(Float64,arg[4])#4
+    kw = parse(Float64,arg[5])*pi#p02
     eta = eta0
     T = parse(Float64,arg[7])
     K_SIZE = parse(Int,arg[8])
@@ -81,7 +81,7 @@ function set_parm_Wdep(arg::Array{String,1}, Win::Float64)
     t2 = parse(Float64,arg[2])
     delta = parse(Float64,arg[3])
     mu = parse(Float64,arg[4])
-    kw = parse(Float64,arg[5])
+    kw = parse(Float64,arg[5])*pi
     eta = parse(Float64,arg[6])
     T = parse(Float64,arg[7])
     K_SIZE = parse(Int,arg[8])
@@ -207,12 +207,13 @@ function set_vyzz(k::Vector{Float64},p::Parm)
 end
 function set_vzzz(k::Vector{Float64},p::Parm)
     Vzzz::Array{ComplexF64,2} = -p.delta*sin(k[3])*(sigma[2]+sigma[4]) - p.t1*cos(k[3])*sigma[3]
-    return Vxzz
+    return Vzzz
 end
 
 # set Hamiltoniann and velocity operator
-function HandV(k0::NTuple{3, Float64},p::Parm)
-    k = [k0[1], k0[2], k0[3]]
+function HandV(k::Vector{Float64},p::Parm)
+    #NTuple{3, Float64},p::Parm)
+    #k = [k0[1], k0[2], k0[3]]
 
     H = set_H(k,p)
 
@@ -402,4 +403,17 @@ function HandV(k0::NTuple{3, Float64},p::Parm)
     E::Array{ComplexF64,1} = zeros(2)
 
     return H, Va, Vb, Vc, Vab, Vbc, Vca, Vabc, E 
+end
+
+function get_kk(kz::Float64, K_SIZE::Int)
+    kk = Vector{NTuple{2, Float64}}(undef,0)
+    dk::Float64 = 2pi/K_SIZE
+    for kx in collect(-pi:dk:pi)
+        for ky in collect(-pi:dk:pi)
+            if(abs(kx)+abs(ky)+abs(kz)<=3pi/2)
+                push!(kk,(kx,ky))
+            end
+        end
+    end
+    return kk
 end

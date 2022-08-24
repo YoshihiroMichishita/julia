@@ -195,13 +195,13 @@ function Green_DC(p::Parm, H::Hamiltonian)
 
 
     mi = minimum([p.W_MAX,10p.T])
-    dw1::Float64 = 2mi/p.W_SIZE
-    for w in collect(-mi:dw1:mi)
+    dw::Float64 = 2mi/p.W_SIZE
+    for w in collect(-mi:dw:mi)
         G = DC_Green(set_DC_Gk(w,p,H)...)
         sym += real(tr(H.Va*G.GR*H.Vb*G.GRmA))*df(w,p.T)
         asym += -real(tr(H.Va*G.dGR*H.Vb*G.GRmA))*f(w,p.T)
     end
-    for w in collect(-p.W_MAX:dw1:-mi)
+    for w in collect(-p.W_MAX:dw:-mi)
         G = DC_Green(set_DC_Gk(w,p,H)...)
         asym += -real(tr(H.Va*G.dGR*H.Vb*G.GRmA))*f(w,p.T)
     end
