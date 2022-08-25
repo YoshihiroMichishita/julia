@@ -99,10 +99,11 @@ sigma = [[1.0 0.0; 0.0 1.0], [0.0 1.0; 1.0 0.0], [0.0 -1.0im; 1.0im 0.0], [1.0 0
 
 #functions to set Hamiltonian and Velocity operators
 function set_H(k::Vector{Float64},p::Parm)
-    e0 = p.t2*cos(k[1]+k[2]) + p.delta*cos(k[1]-k[2]) + p.mu
-    ex = p.t1*(cos(p.kw)-cos(k[2])) + p.delta*(1.0-cos(k[3]))
-    ey = p.t1*sin(k[3])
-    ez = p.t1*(cos(p.kw)-cos(k[1])) + p.delta*(1.0-cos(k[3]))
+    e0 = p.mu
+    ex = p.delta
+    #p.t1*(cos(p.kw)-cos(k[2])) + p.delta*(1.0-cos(k[3]))
+    ey = p.t2*sin(k[3])
+    ez = p.t1*(2.0+cos(p.kw)-cos(k[1])-cos(k[2])-cos(k[3]))
     ee = [e0, ex, ey, ez]
     H::Array{ComplexF64,2} = ee' * sigma
     return H
@@ -404,6 +405,332 @@ function HandV(k::Vector{Float64},p::Parm)
 
     return H, Va, Vb, Vc, Vab, Vbc, Vca, Vabc, E 
 end
+
+
+using ForwardDiff
+
+function set_H_v(k,p::Parm)
+    e0 = p.mu
+    ex = p.delta
+    #p.t1*(cos(p.kw)-cos(k[2])) + p.delta*(1.0-cos(k[3]))
+    ey = p.t2*sin(k[3])
+    ez = p.t1*(2.0+cos(p.kw)-cos(k[1])-cos(k[2])-cos(k[3]))
+    H = [e0, ex, ey, ez]
+    return H
+end
+
+function set_vx_fd(k,p::Parm)
+    m(k) = set_H_v(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,1]
+    return gg
+end
+
+function set_vy_fd(k,p::Parm)
+    m(k) = set_H_v(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,2]
+    return gg
+end
+
+function set_vz_fd(k,p::Parm)
+    m(k) = set_H_v(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,3]
+    return gg
+end
+
+function set_vxx_fd(k,p::Parm)
+    m(k) = set_vx_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,1]
+    return gg
+end
+
+function set_vxy_fd(k,p::Parm)
+    m(k) = set_vx_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,2]
+    return gg
+end
+
+function set_vzx_fd(k,p::Parm)
+    m(k) = set_vx_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,3]
+    return gg
+end
+
+function set_vyy_fd(k,p::Parm)
+    m(k) = set_vy_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,2]
+    return gg
+end
+
+function set_vyz_fd(k,p::Parm)
+    m(k) = set_vy_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,3]
+    return gg
+end
+
+function set_vzz_fd(k,p::Parm)
+    m(k) = set_vz_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,3]
+    return gg
+end
+
+function set_vxxx_fd(k,p::Parm)
+    m(k) = set_vxx_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,1]
+    return gg
+end
+
+function set_vxxy_fd(k,p::Parm)
+    m(k) = set_vxx_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,2]
+    return gg
+end
+
+function set_vxxz_fd(k,p::Parm)
+    m(k) = set_vxx_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,3]
+    return gg
+end
+
+function set_vxyy_fd(k,p::Parm)
+    m(k) = set_vxy_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,2]
+    return gg
+end
+
+function set_vxyz_fd(k,p::Parm)
+    m(k) = set_vxy_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,3]
+    return gg
+end
+
+function set_vxzz_fd(k,p::Parm)
+    m(k) = set_vzx_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,3]
+    return gg
+end
+
+function set_vyyy_fd(k,p::Parm)
+    m(k) = set_vyy_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,2]
+    return gg
+end
+
+function set_vyyz_fd(k,p::Parm)
+    m(k) = set_vyy_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,3]
+    return gg
+end
+
+function set_vyzz_fd(k,p::Parm)
+    m(k) = set_vyz_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,3]
+    return gg
+end
+
+function set_vzzz_fd(k,p::Parm)
+    m(k) = set_vzz_fd(k,p)
+    gg = (ForwardDiff.jacobian(m, k))[:,3]
+    return gg
+end
+
+function VtoM(v::Vector{Float64})
+    M::Array{ComplexF64,2} = v' * sigma 
+    return M
+end
+
+function HandV_fd(k::Vector{Float64},p::Parm)
+    #NTuple{3, Float64},p::Parm)
+    #k = [k0[1], k0[2], k0[3]]
+
+    H = set_H(k,p)
+
+    if(p.α == 'X')
+        Va = VtoM(set_vx_fd(k,p))
+        if(p.β == 'X')
+            Vb = VtoM(set_vx_fd(k,p))
+            Vab = VtoM(set_vxx_fd(k,p))
+            if(p.γ == 'X')
+                Vc = VtoM(set_vx_fd(k,p))
+                Vbc = VtoM(set_vxx_fd(k,p))
+                Vca = VtoM(set_vxx_fd(k,p))
+                Vabc = VtoM(set_vxxx_fd(k,p))
+            elseif(p.γ == 'Y')
+                Vc = VtoM(set_vy_fd(k,p))
+                Vbc = VtoM(set_vxy_fd(k,p))
+                Vca = VtoM(set_vxy_fd(k,p))
+                Vabc = VtoM(set_vxxy_fd(k,p))
+            else
+                Vc = VtoM(set_vz_fd(k,p))
+                Vbc = VtoM(set_vzx_fd(k,p))
+                Vca = VtoM(set_vzx_fd(k,p))
+                Vabc = VtoM(set_vxxz_fd(k,p))
+            end
+        elseif(p.β == 'Y')
+            Vb = VtoM(set_vy_fd(k,p))
+            Vab = VtoM(set_vxy_fd(k,p))
+            if(p.γ == 'X')
+                Vc = VtoM(set_vx_fd(k,p))
+                Vbc = VtoM(set_vxy_fd(k,p))
+                Vca = VtoM(set_vxx_fd(k,p))
+                Vabc = VtoM(set_vxxy_fd(k,p))
+            elseif(p.γ == 'Y')
+                Vc = VtoM(set_vy_fd(k,p))
+                Vbc = VtoM(set_vyy_fd(k,p))
+                Vca = VtoM(set_vxy_fd(k,p))
+                Vabc = VtoM(set_vxyy_fd(k,p))
+            else
+                Vc = VtoM(set_vz_fd(k,p))
+                Vbc = VtoM(set_vyz_fd(k,p))
+                Vca = VtoM(set_vzx_fd(k,p))
+                Vabc = VtoM(set_vxyz_fd(k,p))
+            end
+        else
+            Vb = VtoM(set_vz_fd(k,p))
+            Vab = VtoM(set_vzx_fd(k,p))
+            if(p.γ == 'X')
+                Vc = VtoM(set_vx_fd(k,p))
+                Vbc = VtoM(set_vzx_fd(k,p))
+                Vca = VtoM(set_vxx_fd(k,p))
+                Vabc = VtoM(set_vxxz_fd(k,p))
+            elseif(p.γ == 'Y')
+                Vc = VtoM(set_vy_fd(k,p))
+                Vbc = VtoM(set_vyz_fd(k,p))
+                Vca = VtoM(set_vxy_fd(k,p))
+                Vabc = VtoM(set_vxyz_fd(k,p))
+            else
+                Vc = VtoM(set_vz_fd(k,p))
+                Vbc = VtoM(set_vzz_fd(k,p))
+                Vca = VtoM(set_vzx_fd(k,p))
+                Vabc = VtoM(set_vxzz_fd(k,p))
+            end
+        end
+    elseif(p.α == 'Y')
+        Va = VtoM(set_vy_fd(k,p))
+        if(p.β == 'X')
+            Vb = VtoM(set_vx_fd(k,p))
+            Vab = VtoM(set_vxy_fd(k,p))
+            if(p.γ == 'X')
+                Vc = VtoM(set_vx_fd(k,p))
+                Vbc = VtoM(set_vxx_fd(k,p))
+                Vca = VtoM(set_vxy_fd(k,p))
+                Vabc = VtoM(set_vxxy_fd(k,p))
+            elseif(p.γ == 'Y')
+                Vc = VtoM(set_vy_fd(k,p))
+                Vbc = VtoM(set_vxy_fd(k,p))
+                Vca = VtoM(set_vyy_fd(k,p))
+                Vabc = VtoM(set_vxyy_fd(k,p))
+            else
+                Vc = VtoM(set_vz_fd(k,p))
+                Vbc = VtoM(set_vzx_fd(k,p))
+                Vca = VtoM(set_vyz_fd(k,p))
+                Vabc = VtoM(set_vxyz_fd(k,p))
+            end
+        elseif(p.β == 'Y')
+            Vb = VtoM(set_vy_fd(k,p))
+            Vab = VtoM(set_vyy_fd(k,p))
+            if(p.γ == 'X')
+                Vc = VtoM(set_vx_fd(k,p))
+                Vbc = VtoM(set_vxy_fd(k,p))
+                Vca = VtoM(set_vxy_fd(k,p))
+                Vabc = VtoM(set_vxyy_fd(k,p))
+            elseif(p.γ == 'Y')
+                Vc = VtoM(set_vy_fd(k,p))
+                Vbc = VtoM(set_vyy_fd(k,p))
+                Vca = VtoM(set_vyy_fd(k,p))
+                Vabc = VtoM(set_vyyy_fd(k,p))
+            else
+                Vc = VtoM(set_vz_fd(k,p))
+                Vbc = VtoM(set_vyz_fd(k,p))
+                Vca = VtoM(set_vyz_fd(k,p))
+                Vabc = VtoM(set_vyyz_fd(k,p))
+            end
+        else
+            Vb = VtoM(set_vz_fd(k,p))
+            Vab = VtoM(set_vyz_fd(k,p))
+            if(p.γ == 'X')
+                Vc = VtoM(set_vx_fd(k,p))
+                Vbc = VtoM(set_vzx_fd(k,p))
+                Vca = VtoM(set_vxy_fd(k,p))
+                Vabc = VtoM(set_vxyz_fd(k,p))
+            elseif(p.γ == 'Y')
+                Vc = VtoM(set_vy_fd(k,p))
+                Vbc = VtoM(set_vyz_fd(k,p))
+                Vca = VtoM(set_vyy_fd(k,p))
+                Vabc = VtoM(set_vyyz_fd(k,p))
+            else
+                Vc = VtoM(set_vz_fd(k,p))
+                Vbc = VtoM(set_vzz_fd(k,p))
+                Vca = VtoM(set_vyz_fd(k,p))
+                Vabc = VtoM(set_vyzz_fd(k,p))
+            end
+        end
+    else
+        Va = VtoM(set_vz_fd(k,p))
+        if(p.β == 'X')
+            Vb = VtoM(set_vx_fd(k,p))
+            Vab = VtoM(set_vzx_fd(k,p))
+            if(p.γ == 'X')
+                Vc = VtoM(set_vx_fd(k,p))
+                Vbc = VtoM(set_vxx_fd(k,p))
+                Vca = VtoM(set_vzx_fd(k,p))
+                Vabc = VtoM(set_vxxz_fd(k,p))
+            elseif(p.γ == 'Y')
+                Vc = VtoM(set_vy_fd(k,p))
+                Vbc = VtoM(set_vxy_fd(k,p))
+                Vca = VtoM(set_vyz_fd(k,p))
+                Vabc = VtoM(set_vxyz_fd(k,p))
+            else
+                Vc = VtoM(set_vz_fd(k,p))
+                Vbc = VtoM(set_vzx_fd(k,p))
+                Vca = VtoM(set_vzz_fd(k,p))
+                Vabc = VtoM(set_vxzz_fd(k,p))
+            end
+        elseif(p.β == 'Y')
+            Vb = VtoM(set_vy_fd(k,p))
+            Vab = VtoM(set_vyz_fd(k,p))
+            if(p.γ == 'X')
+                Vc = VtoM(set_vx_fd(k,p))
+                Vbc = VtoM(set_vxy_fd(k,p))
+                Vca = VtoM(set_vzx_fd(k,p))
+                Vabc = VtoM(set_vxyz_fd(k,p))
+            elseif(p.γ == 'Y')
+                Vc = VtoM(set_vy_fd(k,p))
+                Vbc = VtoM(set_vyy_fd(k,p))
+                Vca = VtoM(set_vzy_fd(k,p))
+                Vabc = VtoM(set_vyyz_fd(k,p))
+            else
+                Vc = VtoM(set_vz_fd(k,p))
+                Vbc = VtoM(set_vyz_fd(k,p))
+                Vca = VtoM(set_vzz_fd(k,p))
+                Vabc = VtoM(set_vyzz_fd(k,p))
+            end
+        else
+            Vb = VtoM(set_vz_fd(k,p))
+            Vab = VtoM(set_vzz_fd(k,p))
+            if(p.γ == 'X')
+                Vc = VtoM(set_vx_fd(k,p))
+                Vbc = VtoM(set_vzx_fd(k,p))
+                Vca = VtoM(set_vzx_fd(k,p))
+                Vabc = VtoM(set_vxzz_fd(k,p))
+            elseif(p.γ == 'Y')
+                Vc = VtoM(set_vy_fd(k,p))
+                Vbc = VtoM(set_vyz_fd(k,p))
+                Vca = VtoM(set_vyz_fd(k,p))
+                Vabc = VtoM(set_vyzz_fd(k,p))
+            else
+                Vc = VtoM(set_vz_fd(k,p))
+                Vbc = VtoM(set_vzz_fd(k,p))
+                Vca = VtoM(set_vzz_fd(k,p))
+                Vabc = VtoM(set_vzzz_fd(k,p))
+            end
+        end
+    end
+    
+    E::Array{ComplexF64,1} = zeros(2)
+
+    return H, Va, Vb, Vc, Vab, Vbc, Vca, Vabc, E 
+end
+
 
 function get_kk(kz::Float64, K_SIZE::Int)
     kk = Vector{NTuple{2, Float64}}(undef,0)

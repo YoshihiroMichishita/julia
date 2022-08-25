@@ -38,7 +38,7 @@ function main(arg::Array{String,1})
             Dr0, app_Dr0, BC0, dQM0, app_QM0, Green0= @distributed (+) for i in 1:length(kk)
 
                 k = [kk[i][1], kk[i][2], kz]
-                Hamk = Hamiltonian(HandV(k,p)...)
+                Hamk = Hamiltonian(HandV_fd(k,p)...)
                 Dr, app_Dr, BC, dQM, app_QM = Green_DC_BI_linear_full(p, Hamk)
                 Green_Dr = 0
                 #, ass = Green_DC(p, Hamk)
