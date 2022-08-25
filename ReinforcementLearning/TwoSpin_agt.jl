@@ -366,7 +366,11 @@ function main(arg::Array{String,1})
     p1 = plot!(E[:,4], width=3.0)
     savefig(p1,"./HF_t.png")
     println("Drawing Finish!")
+<<<<<<< HEAD
     #println(E[:,4])
+=======
+    #println(E[:,4])
+>>>>>>> dd121420d08161ba0f5f2add4439577cc6414c67
     
     
 end
