@@ -46,8 +46,8 @@ function generate_M(H_size::Int)
                 B[j,i] = 0.5
                 B = Hermitian(B)
                 B2 = zeros(ComplexF64,H_size,H_size)
-                B2[i,j] = 0.5im
-                B2[j,i] = -0.5im
+                B2[i,j] = -0.5im
+                B2[j,i] = 0.5im
                 B2 = Hermitian(B2)
                 #A[l,:,:] = B[:,:]
                 #A[l+1,:,:] = B2[:,:]

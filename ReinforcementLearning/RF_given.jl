@@ -1,85 +1,74 @@
-using LinearAlgebra
+include("TwoSpin_env.jl")
 
-struct TS_env
-    t_size::Int
-    H_size::Int
-    Ω::Float64
-    σ_vec::σ_vec::Vector{Hermitian{ComplexF64, Matrix{ComplexF64}}}
-end
+function check_HF(en::TS_env, Kt::Matrix{Float64})
+    t_size = size(Kt)[1]
+    dt = 2pi/en.Ω/t_size
+    HF = zeros(Float64, t_size, en.HS_size^2)
 
-function generate_M(H_size::Int)
-    A::Vector{Hermitian{ComplexF64, Matrix{ComplexF64}}} =[]
-    for i in 1:H_size
-        for j in i:H_size
-            if(i==j)
-                #l = 2(d+1-i)*(i-1) + (i-1)^2 + 1
-                B = zeros(ComplexF64,H_size,H_size)
-                B[i,j] = 1.0
-                B = Hermitian(B)
-                push!(A,B)
-                #A[l,:,:] = B[:,:]
-            else
-                #l = 2(d+1-i)*(i-1) + (i-1)^2 + 2*(j-i)
-                B = zeros(ComplexF64,H_size,H_size)
-                B[i,j] = 0.5
-                B[j,i] = 0.5
-                B = Hermitian(B)
-                B2 = zeros(ComplexF64,H_size,H_size)
-                B2[i,j] = 0.5im
-                B2[j,i] = -0.5im
-                B2 = Hermitian(B2)
-                #A[l,:,:] = B[:,:]
-                #A[l+1,:,:] = B2[:,:]
-                push!(A,B)
-                push!(A,B2)
-            end
-        end
-    end
-    return A
-end
-
-function init_env(t::Int, Hs::Int, Ω::Float64)
-    σ = generate_M(Hs)
-    return t, Hs, Ω, σ
-end
-
-function VtoM(V::Vector{Float64},en::TS_env)
-    M = V' * en.σ_vec
-    return M
-end
-
-function MtoV(M::Hermitian{ComplexF64, Matrix{ComplexF64}}, en::TS_env)
-    V = real.(tr.(en.σ_vec .* (M,)))
-    return V
-end
-
-function KtoKp(en::TS_env, K::Array{Float64,2}, Ht::Array{Float64,2})
-    dt = 2pi/en.Ω/en.t_size
-    Kp = zeros(Float64, size(K)[1], size(K)[2])
-    HF = zeros(Float64, size(K)[1], size(K)[2])
-    for t in 1:size(K)[1]
+    Kpt = zeros(Float64, t_size, en.HS_size^2)
+    for t in 1:t_size
         if(t>1)
-            tt=t-1
+            tt = t-1
         else
-            tt=size(K)[1]
+            tt = t_size
         end
-        Kp[t,:] = (K[t,:]-K[tt,:])/dt
-        KM = VtoM(K[t,:],en)
-        HfM = exp(-1.0im*KM)(VtoM(Ht[t,:],en)-1.0im*VtoM(Kp[t,:],en))exp(1.0im*KM)
+        Kpt[t,:] = (Kt[t,:] - Kt[tt,:])/dt
+        KtM = VtoM(Kt[t,:],en)
+        KptM = VtoM(Kpt[t,:],en)
+        HfM = exp(-1.0im*KtM)*(en.H_0 + en.V_t - 1.0im*KptM)*exp(-1.0im*KtM)
         HF[t,:] = MtoV(HfM, en)
     end
-    return Kp, HF
+    return HF
 end
 
-function main(arg::vector{String})
-    en = TS_env(init_env(parse(Int,arg[1]),parse(Int,arg[2]),parse(Float64,arg[3]))...)
+function set_Kt_res(en::TS_env, mp::vector{Float64})
+    Kt = zeros(Float64, en.t_size, en.HS_size^2)
 
-    Ht = zeros(Float64, en.t_size, en.H_size^2)
-    Kt = zeros(Float64, en.t_size, en.H_size^2)
-    Kpt = zeros(Float64, en.t_size, en.H_size^2)
-    HFt = zeros(Float64, en.t_size, en.H_size^2)
+    M1 = [0.0 1.0im 1.0im 0.0; -1.0im 0.0 0.0 0.0; -1.0im 0.0 0.0 0.0; 0.0 0.0 0.0 0.0]
+    M1v = MtoV(Hermitian(M1),en)
+
+    M2 = [0.0 1.0 1.0 0.0; 1.0 0.0 0.0 0.0; 1.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0]
+    M2v = MtoV(Hermitian(M2),en)
+
+    M3 = [0.0 0.0 0.0 0.0; 0.0 0.0 0.0 -1.0; 0.0 0.0 0.0 -1.0; 0.0 -1.0 -1.0 0.0]
+    M3v = MtoV(Hermitian(M3),en)
+
     for t in 1:en.t_size
-        
-        
+        Kt[t,:] = mp[1]*sin(2pi*t/en.t_size)*M1v + (1.0+cos(2pi*t/en.t_size))*(mp[2]*M2v + mp3*M3v)
     end
+    return Ktghj
 end
+
+
+using DataFrames
+using CSV
+using Plots
+ENV["GKSwstype"]="nul"
+
+function main(arg::Array{String,1})
+
+    en = TS_env(init_env(parse(Int,arg[1]), parse(Float64,arg[2]), parse(Float64,arg[3]), parse(Float64,arg[4]), parse(Float64,arg[5]), parse(Float64,arg[6]))...)
+    mp = [parse(Float64,arg[7]), parse(Float64,arg[8]), parse(Float64,arg[9])]
+
+    Kt = set_Kt_res(en, mp)
+
+    HFt = check_HF(en, Kt)
+
+    E = zeros(Float64, en.t_size, en.HS_size)
+    for t_step in 1:en.t_size
+        E[t_step,:], v = eigen(VtoM(HFt[t_step,:],en))
+    end
+
+    p1 = plot(E[:,1].-E[1,1], xlabel="t_step", ylabel="E of HF_t", width=3.0)
+    p1 = plot!(E[:,2].-E[1,2], width=3.0)
+    p1 = plot!(E[:,3].-E[1,3], width=3.0)
+    p1 = plot!(E[:,4].-E[1,4], width=3.0)
+
+    savefig(p1,"./HF_t_given.png")
+
+    save_data1 = DataFrame(HFt, :auto)
+    CSV.write("./HF_t_given.csv", save_data1)
+
+end
+
+@time main(ARGS)
