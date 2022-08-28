@@ -179,7 +179,8 @@ function loss_calc_hyb(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
             tt=t-1
         end
         p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
-        x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+        #x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+        x = vcat([p, ag.K_TL[tt,:]]...)
         Kp = model0(x)
         kp_sum += Kp
         #ag.K_TL[t,:] += Kp
@@ -206,7 +207,8 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
             tt=t-1
         end
         p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
-        x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+        #x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+        x = vcat([p, ag.K_TL[tt,:]]...)
         #Kp = model0(x)
         ag.Kp_TL[t,:] = model0(x)
         kp_sum += ag.Kp_TL[t,:]
@@ -307,7 +309,8 @@ function main(arg::Array{String,1})
                     tt=t_step-1
                 end
                 p = [en.Ω, en.ξ*sin(2pi*t_step/en.t_size), en.Jz, en.Jx, en.hz]
-                x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+                #x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+                x = vcat([p, ag.K_TL[tt,:]]...)
                 ag.Kp_TL[t_step,:] = model(x)
                 ag.K_TL[t_step,:], ag.HF_TL[t_step,:] = micro_motion(ag.Kp_TL[t_step,:], ag.K_TL[tt,:],en,t_step)
                 #ag.K_TL[t,:] += Kp
