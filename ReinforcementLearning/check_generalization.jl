@@ -3,6 +3,16 @@ include("TwoSpin_env.jl")
 using Flux
 using BSON: @load
 
+
+function diff_norm(V::Vector{Float64}, en::TS_env)
+    M = VtoM(V,en)
+    e, v = eigen(M)
+    #n::Float64 = V' * V
+    n::Float64 = e' * e
+    #n = sum(e[n]^2 for n in 1:size(e))
+    return n
+end
+
 function micro_motion(Kp_t::Vector{Float64}, K_t::Vector{Float64}, en::TS_env, t::Int)
     Kp = VtoM(Kp_t,en)
     K_t_new = K_t + (2pi/en.t_size/en.Ω) * Kp_t 
@@ -29,6 +39,10 @@ function loss_fn_hybrid(en::TS_env, HF_t::Array{Float64,2}, HF_calc::Vector{Floa
     #l += diff_norm(HF_given - HF_calc,en)/en.t_size
     return l
 end
+using DataFrames
+using CSV
+using Plots
+ENV["GKSwstype"]="nul"
 
 function main(arg::Array{String,1})
     en = TS_env(init_env(parse(Int,arg[1]), parse(Float64,arg[2]), parse(Float64,arg[3]), parse(Float64,arg[4]), parse(Float64,arg[5]), parse(Float64,arg[6]))...)
@@ -50,14 +64,14 @@ function main(arg::Array{String,1})
         end
         p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
         x = vcat([p, K_t[tt,:]]...)
-        Kp_t[t,:] = model0(x)
+        Kp_t[t,:] = model(x)
         K_t[t,:], HF_t[t,:] = micro_motion(Kp_t[t,:], K_t[tt,:], en, t)
     end
 
     for t in 1:en.t_size
         l += loss_fn_hybrid(en, HF_t, HF_t[t,:],t)
-        if(t==t_size)
-            l += diff_norm(HF_t[t,:]-ag.HF_TL[1,:],en)
+        if(t==en.t_size)
+            l += diff_norm(HF_t[t,:]-HF_t[1,:],en)
         end
     end
 
@@ -70,7 +84,7 @@ function main(arg::Array{String,1})
     p1 = plot!(E[:,2].-E[1,2], width=3.0)
     p1 = plot!(E[:,3].-E[1,3], width=3.0)
     p1 = plot!(E[:,4].-E[1,4], width=3.0)
-    savefig(p1,"./HF_t.png")
+    savefig(p1,"./HF_t_check.png")
     println("Drawing Finish!")
     #println(E[:,4])
     p2 = plot(K_t[:,1], xlabel="t_step", ylabel="E of K_t", width=2.0)
@@ -78,8 +92,8 @@ function main(arg::Array{String,1})
         p2 = plot!(K_t[:,i], width=2.0)
     end
     save_data1 = DataFrame(K_t, :auto)
-    CSV.write("./K_TL.csv", save_data1)
-    savefig(p2,"./K_t.png")
+    CSV.write("./K_TL_check.csv", save_data1)
+    savefig(p2,"./K_t_check.png")
 end
 
 @time main(ARGS)
