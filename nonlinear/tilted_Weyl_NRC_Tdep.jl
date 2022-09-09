@@ -279,7 +279,7 @@ end
         dQMD += -2.0*real(H.Vx[i,3-i]*H.Vx[3-i,i]/((H.E[i]-H.E[3-i]+2.0im*p.eta)^2))imag(H.Vx[i,i]*df(H.E[i]+1.0im*p.eta, p.T))/p.eta
         Inter += -2.0*real(H.Vx[i,3-i]*H.Vx[3-i,3-i]*H.Vx[3-i,i]/((H.E[i]-H.E[3-i]+2.0im*p.eta)^3))*real(df(H.E[i]+1.0im*p.eta, p.T))
         dInter += 2.0*imag(H.Vx[i,3-i]*H.Vx[3-i,3-i]*H.Vx[3-i,i]/((H.E[i]-H.E[3-i]+2.0im*p.eta)^3))*imag(df(H.E[i]+1.0im*p.eta, p.T))
-    end
+    endd
 
     return Drude, BCD, sQMD, dQMD, Inter, dInter
 end

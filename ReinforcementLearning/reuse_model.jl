@@ -15,7 +15,7 @@ end
 
 function init_nQ(en::TS_env, n::Int=32, γ0::Float64=0.9, ϵ0::Float64=1.0)
     #H_0,V_tのパラメータの数＋K_tの行列＋H_F^a(t)の行列
-    in_size::Int = en.num_parm + 2*en.HS_size^2 
+    in_size::Int = en.num_parm + en.HS_size^2 
 
     #K'(t)の行列を出力
     out_size::Int = en.HS_size^2
@@ -179,7 +179,8 @@ function loss_calc_hyb(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
             tt=t-1
         end
         p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
-        x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+        #x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+        x = vcat([p, ag.K_TL[tt,:]]...)
         Kp = model0(x)
         kp_sum += Kp
         #ag.K_TL[t,:] += Kp
@@ -188,7 +189,7 @@ function loss_calc_hyb(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
         #l += ag.ϵ^2*diff_norm(kp_sum,en)/en.t_size
         #l += diff_norm(kp_sum,en)/en.t_size
         #l += ag.γ^(5*(en.t_size/2 - abs(en.t_size/2-t))) * diff_norm(ag.K_TL[t,:],en)
-        if(t==t_size)
+        if(t==en.t_size)
             l += diff_norm(HF_calc-ag.HF_TL[1,:],en)
         end
     end
@@ -206,7 +207,8 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
             tt=t-1
         end
         p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
-        x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+        #x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+        x = vcat([p, ag.K_TL[tt,:]]...)
         #Kp = model0(x)
         ag.Kp_TL[t,:] = model0(x)
         kp_sum += ag.Kp_TL[t,:]
@@ -216,7 +218,7 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
         #l += diff_norm(kp_sum,en)/en.t_size
         #l += ag.γ^(5*(en.t_size/2 - abs(en.t_size/2-t))) * diff_norm(ag.K_TL[t,:],en)
         #l += ag.γ^(5*(en.t_size - t)) * diff_norm(ag.K_TL[t,:],en)
-        if(t==t_size)
+        if(t==en.t_size)
             l += diff_norm(ag.HF_TL[t,:]-ag.HF_TL[1,:],en)
         end
     end
@@ -240,7 +242,7 @@ function loss_calc!(model0, en::TS_env, ag::agtQ, t::Int, HF_given::Vector{Float
         tt=t-1
     end
     p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
-    x = vcat([p, ag.K_TL[tt,:], ag.HF_TL[tt,:]]...)
+    x = vcat([p, ag.K_TL[tt,:]]...)
     Kp = model0(x)
     
     #ag.K_TL[t,:] += Kp
@@ -270,6 +272,7 @@ end
 
 using DataFrames
 using CSV
+using BSON: @load
 using BSON: @save
 using Plots
 ENV["GKSwstype"]="nul"
@@ -282,11 +285,13 @@ function main(arg::Array{String,1})
 
     #二次の高周波展開で初期値を代入
     ag.HF_TL[en.t_size,:] = init_HF(en)
-    ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
+    ag.K_TL = Matrix(CSV.read(arg[12], DataFrame))
+    #zeros(Float64, en.HS_size^2)
     #-MtoV(en.V_t, en)/en.Ω
 
     #model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
-    model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
+    @load arg[11] model
+    #model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
     #model = Chain(Dense(zeros(Float64, ag.n_dense, ag.in_size), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.n_dense, ag.n_dense), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.out_size, ag.n_dense), zeros(Float64, ag.out_size)))
     opt = ADAM()
 
@@ -307,7 +312,8 @@ function main(arg::Array{String,1})
                     tt=t_step-1
                 end
                 p = [en.Ω, en.ξ*sin(2pi*t_step/en.t_size), en.Jz, en.Jx, en.hz]
-                x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+                #x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+                x = vcat([p, ag.K_TL[tt,:]]...)
                 ag.Kp_TL[t_step,:] = model(x)
                 ag.K_TL[t_step,:], ag.HF_TL[t_step,:] = micro_motion(ag.Kp_TL[t_step,:], ag.K_TL[tt,:],en,t_step)
                 #ag.K_TL[t,:] += Kp
@@ -332,13 +338,14 @@ function main(arg::Array{String,1})
         ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
         ll_it[it], Kp_av = loss_calc_hyb!(model,en, ag, HF_it)
         
+        #=
         if(it%10 == 0)
             if(it!=it_MAX)
                 updata_KpK!(en, ag, Kp_av)
             end
             println("it:"*string(it))
             println(ll_it[it])
-        end
+        end=#
         #if(ll_it[it]>100.0)
         #    break
         #end
@@ -417,5 +424,4 @@ function main(arg::Array{String,1})
     
 end
 
-main(ARGS)
-#@time main(ARGS)
+@time main(ARGS)
