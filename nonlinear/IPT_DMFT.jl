@@ -1,8 +1,8 @@
 include("model_2D.jl")
 
 using SparseIR, Plots
-using OMEinsum
-using FastGaussQuadrature
+#using OMEinsum
+#using FastGaussQuadrature
 import SparseIR: valueim, value
 import SparseIR: fit
 #using LinearAlgebra
@@ -115,7 +115,7 @@ function F_rho(ir::IR_params, g::Green_Sigma, rho_ls, λ)
 end
 
 function fit_rho0w(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, w_mesh::Vector{Float64})
-    sn = range(-12.0, 0.0, l_num)
+    sn = range(-6.0, 1.0, length=l_num)
     lam_test = 10 .^ (sn)
     opt = ADAM()
     s_rho_l = rand(Float64, l_num, ir.n_matsu-1)
@@ -144,12 +144,13 @@ function fit_rho0w(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, w_
     savefig(p1,"./lambda_opt_G0.png")
 
     it = findmax(ev)[2]
+    println(it)
     rho_omega = -transpose(ir.basis.v(w_mesh)) * s_rho_l[it,:]
     return rho_omega
 end
 
 function fit_rhow(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, w_mesh::Vector{Float64})
-    sn = range(-12.0, 0.0, l_num)
+    sn = range(-6.0, 1.0, length=l_num)
     lam_test = 10 .^ (sn)
     opt = ADAM()
     s_rho_l = rand(Float64, l_num, ir.n_matsu-1)
@@ -234,12 +235,13 @@ function main(arg::Vector{String})
     kk = get_kk(p.K_SIZE)
     Disp_HSL(p)
 
-    for it in 0:10
+    for it in 0:50
         s_old = g.sigma_ir
         update_g!(p,kk,it,ir,g)
         diff = g.sigma_ir .- s_old
         L1 = sum(abs.(diff))
-        if(L1<1e-4)
+        if(L1<1e-6)
+            println(it)
             break
         end
     end
@@ -249,6 +251,17 @@ function main(arg::Vector{String})
     sigma_w = 1.0 ./ g0 .- 1.0 ./ g
     save_data_g = DataFrame(w=w_mesh,img=imag.(g),reg=real.(g))
     save_data_s = DataFrame(w=w_mesh,ims=imag.(sigma_w),res=real.(sigma_w))
+
+    pg0 = plot(w_mesh, imag.(g0), linewidth=3.0, xlabel="ω", ylabel="A(ω)", title="local DOS")
+    pg0 = plot!(w_mesh, real.(g0), linewidth=3.0)
+    savefig(pg0,"./LDOS_free.png")
+
+    pg = plot(w_mesh, imag.(g), linewidth=3.0, xlabel="ω", ylabel="A(ω)", title="local DOS")
+    savefig(pg,"./LDOS.png")
+
+    ps = plot(w_mesh, imag.(sigma_w), linewidth=3.0, xlabel="ω", ylabel="Σ(ω)", title="self-energy")
+    ps = plot!(w_mesh, real.(sigma_w), linewidth=3.0)
+    savefig(ps,"./self-energy.png")
     #「./」で現在の(tutorial.ipynbがある)ディレクトリにファイルを作成の意味、指定すれば別のディレクトリにファイルを作ることも出来る。
     CSV.write("./GF_U$(ir.U)_b$(ir.beta).csv", save_data_g)
     CSV.write("./Sigma_U$(ir.U)_b$(ir.beta).csv", save_data_s)
