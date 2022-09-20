@@ -1,4 +1,4 @@
-include("model_3D_test.jl")
+include("model_2D.jl")
 
 using SparseIR, Plots
 #using OMEinsum
@@ -103,36 +103,6 @@ function get_G0mlocal(p::Parm, k_BZ::Vector{Vector{Float64}}, w::ComplexF64, sw:
     return gw_l, gl
 end
 
-function get_G0mlocal_3D(p::Parm, w::ComplexF64, sw::Int, sigma::ComplexF64)
-    gw_l = 0.0
-    gl = 0.0
-    dk = 2pi/p.K_SIZE
-    if(sw == 1)
-        for kz in collect(-pi+dk:dk:pi)
-            kk = get_kk(p.K_SIZE, kz)
-            for i in 1:length(kk)
-                k_BZ = [(kk[i])[1], (kk[i])[2], kz]
-                e = set_H(k_BZ,p) - p.mu
-                #gk = 1.0/(w - e + p.eta*1.0im*sign(imag(w)))
-                gk = 1.0/(w - e)
-                gw_l += p.dk2 * gk
-            end
-        end
-    else
-        for kz in collect(-pi+dk:dk:pi)
-            kk = get_kk(p.K_SIZE, kz)
-            for i in 1:length(kk)
-                k_BZ = [(kk[i])[1], (kk[i])[2], kz]
-                e = set_H(k_BZ,p) - p.mu
-                #gk = 1.0/(w - e -sigma + p.eta*1.0im*sign(imag(w)))
-                gk = 1.0/(w - e -sigma)
-                gl += p.dk2 * gk
-            end
-            gw_l = 1.0/(1.0/gl + sigma)
-        end
-    end
-    return gw_l, gl
-end
 
 function MatsuToTau!(ir::IR_params, g::Green_Sigma)
     g.g0_ir = fit(ir.smpl_matsu, g.g0_matsu, dim=1)
@@ -161,17 +131,6 @@ function update_g!(p::Parm, k_BZ::Vector{Vector{Float64}},sw::Int, ir::IR_params
     return diff
 end
 
-function update_g_3D!(p::Parm,sw::Int, ir::IR_params, g::Green_Sigma, γ::Float64)
-    for w in 1:ir.n_matsu
-        #g.g0_matsu[w], g.g_matsu[w] = get_G0mlocal(p, k_BZ, valueim(ir.smpl_matsu.sampling_points[w], ir.beta), sw, g.sigma_matsu[w])
-        g.g0_matsu[w], g.g_matsu[w] = get_G0mlocal_3D(p, ir.smpl_wn[w], sw, g.sigma_matsu[w])
-    end
-    MatsuToTau!(ir, g)
-    g.sigma_tau = ir.U^2 .* (g.g0_tau).^2 .* g.g0_tau[end:-1:1]
-    # .+ ir.U .* g.g0_tau
-    diff = TauToMatsu!(ir, g, γ)
-    return diff
-end
 
 using Flux
 
@@ -278,7 +237,7 @@ Plots.scalefontsizes(1.4)
 
 using DataFrames
 using CSV
-#=
+
 function main(arg::Vector{String})
     p = Parm(set_parm(arg)...)
     println(p)
@@ -324,52 +283,6 @@ function main(arg::Vector{String})
     Spectral_HSL(p, w_mesh, sigma_w)
 
 end
-=#
 
-function main_3D(arg::Vector{String})
-    p = Parm(set_parm(arg)...)
-    println(p)
-    ir = IR_params(set_IR(parse(Float64,arg[6]),parse(Float64,arg[7]),parse(Float64,arg[8]))...)
-    lamda_num = parse(Int,arg[9])
-    batch_num = parse(Int,arg[10])
-    w_num = parse(Int,arg[11])
-    g = Green_Sigma(init_zero_g(ir)...)
-    w_mesh = collect(-ir.bw:2ir.bw/(w_num-1):ir.bw)
-
-    #kk = get_kk(p.K_SIZE)
-    #Disp_HSL(p)
-
-    for it in 1:600
-        L1 = update_g_3D!(p,it,ir,g,0.2)
-        if(L1<1e-8)
-            println(it)
-            break
-        end
-    end
-
-    g0 = -1.0im .* fit_rho0w(ir, g, lamda_num, batch_num, w_mesh)
-    g = -1.0im .* fit_rhow(ir, g, lamda_num, batch_num, w_mesh)
-    sigma_w = 1.0 ./ g0 .- 1.0 ./ g .- p.mu
-    save_data_g = DataFrame(w=w_mesh,img=imag.(g),reg=real.(g))
-    save_data_s = DataFrame(w=w_mesh,ims=imag.(sigma_w),res=real.(sigma_w))
-
-    pg0 = plot(w_mesh, imag.(g0), linewidth=3.0, xlabel="ω", ylabel="A(ω)", title="local DOS")
-    pg0 = plot!(w_mesh, real.(g0), linewidth=3.0)
-    savefig(pg0,"./LDOS_free.png")
-
-    pg = plot(w_mesh, imag.(g), linewidth=3.0, xlabel="ω", ylabel="A(ω)", title="local DOS")
-    pg = plot!(w_mesh, real.(g), linewidth=3.0)
-    savefig(pg,"./LDOS.png")
-
-    ps = plot(w_mesh, imag.(sigma_w), linewidth=3.0, xlabel="ω", ylabel="Σ(ω)", title="self-energy")
-    ps = plot!(w_mesh, real.(sigma_w), linewidth=3.0)
-    savefig(ps,"./self-energy.png")
-    #「./」で現在の(tutorial.ipynbがある)ディレクトリにファイルを作成の意味、指定すれば別のディレクトリにファイルを作ることも出来る。
-    CSV.write("./GF_U$(ir.U)_b$(ir.beta).csv", save_data_g)
-    CSV.write("./Sigma_U$(ir.U)_b$(ir.beta).csv", save_data_s)
-
-    #Spectral_HSL(p, w_mesh, sigma_w)
-
-end
 
 @time main_3D(ARGS)
