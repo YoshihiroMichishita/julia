@@ -190,7 +190,7 @@ function loss_calc_hyb(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
         #l += diff_norm(kp_sum,en)/en.t_size
         #l += ag.γ^(5*(en.t_size/2 - abs(en.t_size/2-t))) * diff_norm(ag.K_TL[t,:],en)
         if(t==en.t_size)
-            l += 10.0*diff_norm(HF_calc-ag.HF_TL[1,:],en)
+            l += diff_norm(HF_calc-ag.HF_TL[1,:],en)
         end
     end
     l += diff_norm(kp_sum,en)/en.t_size
@@ -219,7 +219,7 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
         #l += ag.γ^(5*(en.t_size/2 - abs(en.t_size/2-t))) * diff_norm(ag.K_TL[t,:],en)
         #l += ag.γ^(5*(en.t_size - t)) * diff_norm(ag.K_TL[t,:],en)
         if(t==en.t_size)
-            l += 10.0*diff_norm(ag.HF_TL[t,:]-ag.HF_TL[1,:],en)
+            l += diff_norm(ag.HF_TL[t,:]-ag.HF_TL[1,:],en)
         end
     end
     l += diff_norm(kp_sum,en)
@@ -364,7 +364,7 @@ function main(arg::Array{String,1})
             CSV.write("./HFt_it="*"$it" *".csv", save_data1)
 
         end=#
-        if(it%1000 == 0 && it!=0)
+        if(it%500 == 0 && it!=0)
             E = zeros(Float64, en.t_size, en.HS_size)
             for t_step in 1:en.t_size
                 E[t_step,:], v = eigen(VtoM(ag.HF_TL[t_step,:],en))
