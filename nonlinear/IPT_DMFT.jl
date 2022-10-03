@@ -1,4 +1,4 @@
-include("model_3D_test.jl")
+include("model_2D_test.jl")
 
 using SparseIR, Plots
 #using OMEinsum
@@ -25,7 +25,7 @@ struct IR_params
 end
 
 function set_IR(U::Float64, beta::Float64, bw::Float64)
-    basis = FiniteTempBasis(Fermionic(), beta, bw, 1e-10)
+    basis = FiniteTempBasis(Fermionic(), beta, bw, 1e-8)
 
     smpl_matsu = MatsubaraSampling(basis)
     n_matsu = size(smpl_matsu.sampling_points)[1]
@@ -264,11 +264,130 @@ function fit_rhow(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, w_m
     p1 = plot(lam_test, ev, xaxis=:log, yaxis=:log, marker=:circle)
     savefig(p1,"./lambda_opt_G.png")
 
-    it = findmax(ev)[2]+1
+    it = findmax(ev)[2] + 1
     max1 = s_F_rho[it]
     println("it:$it,  s_F:$max1")
     rho_omega = -transpose(ir.basis.v(w_mesh)) * s_rho_l[it,:]
-    return rho_omega
+
+    s_rho_l0 = rand(Float64, l_num, g.n_ir)
+    s_F_rho0 = 1000.0 * ones(Float64, l_num)
+    for ll in 1:l_num
+        lam = lam_test[ll]
+        for b in 1:batch_num
+            rho_ll = rand(Float64, g.n_ir)
+            F_old = 1000.0
+            F_new = 1000.0
+            for i in 1:10000
+                grads = Flux.gradient(Flux.params(rho_ll)) do
+                    F_rho0(ir, g, rho_ll, lam)
+                end
+                Flux.Optimise.update!(opt, Flux.params(rho_ll), grads)
+                F_old = F_new
+                F_new = F_rho0(ir, g, rho_ll, lam)
+                if(abs(F_old-F_new)/abs(F_old)<1e-6)
+                    break
+                end
+            end
+            if(s_F_rho0[ll] > F_rho0(ir, g, rho_ll, lam))
+                s_rho_l0[ll,:] = rho_ll
+                s_F_rho0[ll] = F_rho0(ir, g, rho_ll, lam)
+            end
+        end
+    end
+    b0 = (log(s_F_rho0[end])-log(s_F_rho0[1]))/(log(lam_test[end])-log(lam_test[1]))
+    a0 = s_F_rho0[1]*lam_test[1]^(-b)
+    ev0 = a0 .* lam_test .^ b0 ./ s_F_rho0
+
+    p1 = plot(lam_test, ev0, xaxis=:log, yaxis=:log, marker=:circle)
+    savefig(p1,"./lambda_opt_G0.png")
+
+    it0 = findmax(ev0)[2] + 1
+    max0 = s_F_rho0[it0]
+    println("it:$it0,  s_F:$max0")
+    rho_omega0 = -transpose(ir.basis.v(w_mesh)) * s_rho_l0[it0,:]
+
+    #=
+    s_rho00 = zeros(Float64, g.n_ir)
+    s_F_rho0 = 1000.0
+    lam = lam_test[it]
+    for b in 1:batch_num
+        rho_ll = rand(Float64, g.n_ir)
+        F_old = 1000.0
+        F_new = 1000.0
+        for i in 1:10000
+            grads = Flux.gradient(Flux.params(rho_ll)) do
+                F_rho0(ir, g, rho_ll, lam)
+            end
+            Flux.Optimise.update!(opt, Flux.params(rho_ll), grads)
+            F_old = F_new
+            F_new = F_rho0(ir, g, rho_ll, lam)
+            if(abs(F_old-F_new)/abs(F_old)<1e-6)
+                break
+            end
+        end
+        if(s_F_rho0 > F_rho0(ir, g, rho_ll, lam))
+            s_rho00 = rho_ll
+            s_F_rho0 = F_rho0(ir, g, rho_ll, lam)
+        end
+    end
+    rho_omega0 = -transpose(ir.basis.v(w_mesh)) * s_rho00
+    =#
+
+    return rho_omega, rho_omega0
+end
+
+function reshape(rho::Vector{Float64}, cutoff::Float64)
+    v_it::Vector{Int} = []
+    rho_rep = rho
+    sw = false
+    for w in 1:length(rho_rep)
+        if(rho_rep[w]<0)
+            if(sw)
+                for it in v_it
+                    rho_rep[it] = 0.005                
+                end
+                empty!(v_it)
+                sw = false
+            elseif(w<length(rho_rep) && rho_rep[w+1]>rho_rep[w])
+                sw = true
+            end
+            rho_rep[w] = 0.005
+        elseif(rho_rep[w]<cutoff && sw)
+            push!(v_it,w)
+        elseif(rho_rep[w]>=cutoff && sw && w<length(rho_rep) && rho_rep[w+1]<rho_rep[w])
+            empty!(v_it)
+            sw = false
+        end
+    end
+    return rho_rep
+end
+
+
+function KK_GR(w::Vector{Float64}, rho::Vector{Float64})
+    GR_ = zeros(ComplexF64, length(w))
+    dw = w[2]-w[1]
+    for w_re in 1:length(w)
+        re::Float64 = 0.0
+        for w_im in 1:length(w)
+            if(w_im != w_re)
+                re += dw * rho[w_im] / (w[w_re] - w[w_im])
+            end 
+        end
+        GR_[w_re] = re - 1.0im * rho[w_re] * pi
+    end
+    return GR_
+end
+
+f(beta::Float64, w::Float64) = 1.0/(1.0+exp(beta*w))
+
+function renorm_rho(beta::Float64, w::Vector{Float64}, rho::Vector{Float64})
+    n = 0.0
+    dw = w[2]-w[1]
+    for i in 1:length(w)
+        n += dw * rho[i] * f(beta, w[i])
+    end
+    rho1 = (0.5/n) * rho
+    return rho1
 end
 
 ENV["GKSwstype"]="nul"
@@ -278,7 +397,7 @@ Plots.scalefontsizes(1.4)
 
 using DataFrames
 using CSV
-#=
+
 function main(arg::Vector{String})
     p = Parm(set_parm(arg)...)
     println(p)
@@ -292,7 +411,7 @@ function main(arg::Vector{String})
     kk = get_kk(p.K_SIZE)
     Disp_HSL(p)
 
-    for it in 1:1000
+    for it in 1:8000
         L1 = update_g!(p,kk,it,ir,g, 0.2)
         if(L1<1e-8)
             println(it)
@@ -300,18 +419,36 @@ function main(arg::Vector{String})
         end
     end
 
-    g0 = -1.0im .* fit_rho0w(ir, g, lamda_num, batch_num, w_mesh)
-    g = -1.0im .* fit_rhow(ir, g, lamda_num, batch_num, w_mesh)
-    sigma_w = 1.0 ./ g0 .- 1.0 ./ g .- p.mu
-    save_data_g = DataFrame(w=w_mesh,img=imag.(g),reg=real.(g))
+    #g0 = -1.0im .* fit_rho0w(ir, g, lamda_num, batch_num, w_mesh)
+    gi, g0 = fit_rhow(ir, g, lamda_num, batch_num, w_mesh)
+    #rint_res = reshape(gi, pi/ir.beta)
+    #r0_res = reshape(g0, pi/ir.beta)
+    rint_res = reshape(gi, 0.2)
+    r0_res = reshape(g0, 0.2)
+
+    rint_res = renorm_rho(ir.beta, w_mesh, rint_res)
+    r0_res = renorm_rho(ir.beta, w_mesh, r0_res)
+
+    GR_int = KK_GR(w_mesh, rint_res)
+    GR_0 = KK_GR(w_mesh, r0_res)
+
+    sigma_w = zeros(ComplexF64, w_num)
+    for ww in 1:w_num
+        sigma_w[ww] = 1.0/GR_0[ww] - 1.0/GR_int[ww] - p.mu
+        if(imag(sigma_w[ww])>0)
+            sigma_w[ww] = real(sigma_w[ww]) - 0.01im
+        end
+    end
+    
+    save_data_g = DataFrame(w=w_mesh,img=imag.(GR_int),reg=real.(GR_int))
     save_data_s = DataFrame(w=w_mesh,ims=imag.(sigma_w),res=real.(sigma_w))
 
-    pg0 = plot(w_mesh, imag.(g0), linewidth=3.0, xlabel="ω", ylabel="A(ω)", title="local DOS")
-    pg0 = plot!(w_mesh, real.(g0), linewidth=3.0)
+    pg0 = plot(w_mesh, imag.(GR_0), linewidth=3.0, xlabel="ω", ylabel="A(ω)", title="local DOS")
+    pg0 = plot!(w_mesh, real.(GR_0), linewidth=3.0)
     savefig(pg0,"./LDOS_free.png")
 
-    pg = plot(w_mesh, imag.(g), linewidth=3.0, xlabel="ω", ylabel="A(ω)", title="local DOS")
-    pg = plot!(w_mesh, real.(g), linewidth=3.0)
+    pg = plot(w_mesh, imag.(GR_int), linewidth=3.0, xlabel="ω", ylabel="A(ω)", title="local DOS")
+    pg = plot!(w_mesh, real.(GR_int), linewidth=3.0)
     savefig(pg,"./LDOS.png")
 
     ps = plot(w_mesh, imag.(sigma_w), linewidth=3.0, xlabel="ω", ylabel="Σ(ω)", title="self-energy")
@@ -321,11 +458,22 @@ function main(arg::Vector{String})
     CSV.write("./GF_U$(ir.U)_b$(ir.beta).csv", save_data_g)
     CSV.write("./Sigma_U$(ir.U)_b$(ir.beta).csv", save_data_s)
 
+    g_check = zeros(Float64, w_num)
+    for w in 1:w_num
+        for i in 1:length(kk)
+            e = set_H(kk[i],p)
+            gk = 1.0/(w_mesh[w] - e -sigma_w[w] + 1.0im*p.eta)
+            g_check[w] += -p.dk2 * imag(gk)/pi
+        end        
+    end
+    pc = plot(w_mesh, g_check, linewidth=3.0, xlabel="ω", ylabel="A(ω)", title="local DOS")
+    savefig(pc,"./LDOS_check.png")
+
+
     Spectral_HSL(p, w_mesh, sigma_w)
 
 end
-=#
-
+#=
 function main_3D(arg::Vector{String})
     p = Parm(set_parm(arg)...)
     println(p)
@@ -371,5 +519,6 @@ function main_3D(arg::Vector{String})
     #Spectral_HSL(p, w_mesh, sigma_w)
 
 end
+=#
 
-@time main_3D(ARGS)
+@time main(ARGS)

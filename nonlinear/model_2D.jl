@@ -24,6 +24,9 @@ a1 = [1.0, 0.0]
 a2 = [-0.5, sqrt(3.0)/2]
 a3 = [0.5, sqrt(3.0)/2]
 
+
+sigma = [[1.0 0.0; 0.0 1.0], [0.0 1.0; 1.0 0.0], [0.0 -1.0im; 1.0im 0.0], [1.0 0.0; 0.0 -1.0]]
+
 function get_kk(K_SIZE::Int)
     kk::Vector{Vector{Float64}} = []
     dk = 4pi/(3K_SIZE)

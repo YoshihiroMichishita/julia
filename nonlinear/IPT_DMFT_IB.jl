@@ -1,4 +1,4 @@
-include("model_2D.jl")
+include("model_2D_test.jl")
 
 using SparseIR, Plots
 #using OMEinsum
@@ -42,16 +42,16 @@ function set_IR(U::Float64, beta::Float64, bw::Float64)
 end
 
 mutable struct Green_Sigma
-    g0_ir::Vector{ComplexF64}
-    g0_tau::Vector{ComplexF64}
-    g0_matsu::Vector{ComplexF64}
+    g0_ir::Vector{Matrix{ComplexF64}}
+    g0_tau::Vector{Matrix{ComplexF64}}
+    g0_matsu::Vector{Matrix{ComplexF64}}
 
-    g_ir::Vector{ComplexF64}
-    g_matsu::Vector{ComplexF64}
+    g_ir::Vector{Matrix{ComplexF64}}
+    g_matsu::Vector{Matrix{ComplexF64}}
 
-    sigma_ir::Vector{ComplexF64}
-    sigma_tau::Vector{ComplexF64}
-    sigma_matsu::Vector{ComplexF64}
+    sigma_ir::Vector{Matrix{ComplexF64}}
+    sigma_tau::Vector{Matrix{ComplexF64}}
+    sigma_matsu::Vector{Matrix{ComplexF64}}
 
     n_ir::Int
 end
@@ -103,21 +103,6 @@ function get_G0mlocal(p::Parm, k_BZ::Vector{Vector{Float64}}, w::ComplexF64, sw:
     return gw_l, gl
 end
 
-function get_LDOS0(p::Parm, k_BZ::Vector{Vector{Float64}}, w::Float64)
-    gl = 0.0
-    for i in 1:length(k_BZ)
-        g0i = -set_H(k_BZ[i],p) + w + p.mu + 1.0im*p.eta
-        gl += -p.dk2 * imag(1.0/g0i)/pi
-        #=
-        g0i = set_H(k_BZ[i],p) + (w+p.mu) * Matrix{Complex{Float64}}(I,2,2) + 1.0im*p.eta*Matrix{Complex{Float64}}(I,2,2)
-        gk = inv(g0i)
-        gl += -p.dk2 * imag(tr(gk))/pi
-        =#
-    end
-    return gl
-end
-
-
 function MatsuToTau!(ir::IR_params, g::Green_Sigma)
     g.g0_ir = fit(ir.smpl_matsu, g.g0_matsu, dim=1)
     g.g_ir = fit(ir.smpl_matsu, g.g_matsu, dim=1)
@@ -144,7 +129,6 @@ function update_g!(p::Parm, k_BZ::Vector{Vector{Float64}},sw::Int, ir::IR_params
     diff = TauToMatsu!(ir, g, γ)
     return diff
 end
-
 
 using Flux
 
@@ -263,17 +247,63 @@ function main(arg::Vector{String})
     w_mesh = collect(-ir.bw:2ir.bw/(w_num-1):ir.bw)
 
     kk = get_kk(p.K_SIZE)
-    ldos = zeros(Float64, w_num)
-    for w in 1:w_num
-        ldos[w] = get_LDOS0(p,kk,w_mesh[w])
-    end
-    pg0 = plot(w_mesh, ldos, linewidth=3.0, xlabel="ω", ylabel="A(ω)", title="local DOS")
-    savefig(pg0,"./TMD_LDOS_free.png")
-    #=
     Disp_HSL(p)
 
     for it in 1:1000
         L1 = update_g!(p,kk,it,ir,g, 0.2)
+        if(L1<1e-8)
+            println(it)
+            break
+        end
+    end
+
+    g0 = -1.0im .* fit_rho0w(ir, g, lamda_num, batch_num, w_mesh)
+    gi = -1.0im .* fit_rhow(ir, g, lamda_num, batch_num, w_mesh)
+    #sigma_w = 1.0 ./ g0 .- 1.0 ./ g .- p.mu
+    sigma_w = zeros(ComplexF64, w_num)
+    for ww in 1:w_num
+        if(abs(g0)<1e-4 || abs(gi)<1e-4)
+        else
+            sigma_w[ww] = 1.0/g0[ww] - 1.0/gi[ww] - p.mu
+        end
+    end
+    save_data_g = DataFrame(w=w_mesh,img=imag.(gi),reg=real.(gi))
+    save_data_s = DataFrame(w=w_mesh,ims=imag.(sigma_w),res=real.(sigma_w))
+
+    pg0 = plot(w_mesh, imag.(g0), linewidth=3.0, xlabel="ω", ylabel="A(ω)", title="local DOS")
+    pg0 = plot!(w_mesh, real.(g0), linewidth=3.0)
+    savefig(pg0,"./LDOS_free.png")
+
+    pg = plot(w_mesh, imag.(gi), linewidth=3.0, xlabel="ω", ylabel="A(ω)", title="local DOS")
+    pg = plot!(w_mesh, real.(gi), linewidth=3.0)
+    savefig(pg,"./LDOS.png")
+
+    ps = plot(w_mesh, imag.(sigma_w), linewidth=3.0, xlabel="ω", ylabel="Σ(ω)", title="self-energy")
+    ps = plot!(w_mesh, real.(sigma_w), linewidth=3.0)
+    savefig(ps,"./self-energy.png")
+    #「./」で現在の(tutorial.ipynbがある)ディレクトリにファイルを作成の意味、指定すれば別のディレクトリにファイルを作ることも出来る。
+    CSV.write("./GF_U$(ir.U)_b$(ir.beta).csv", save_data_g)
+    CSV.write("./Sigma_U$(ir.U)_b$(ir.beta).csv", save_data_s)
+
+    Spectral_HSL(p, w_mesh, sigma_w)
+
+end
+#=
+function main_3D(arg::Vector{String})
+    p = Parm(set_parm(arg)...)
+    println(p)
+    ir = IR_params(set_IR(parse(Float64,arg[6]),parse(Float64,arg[7]),parse(Float64,arg[8]))...)
+    lamda_num = parse(Int,arg[9])
+    batch_num = parse(Int,arg[10])
+    w_num = parse(Int,arg[11])
+    g = Green_Sigma(init_zero_g(ir)...)
+    w_mesh = collect(-ir.bw:2ir.bw/(w_num-1):ir.bw)
+
+    #kk = get_kk(p.K_SIZE)
+    #Disp_HSL(p)
+
+    for it in 1:600
+        L1 = update_g_3D!(p,it,ir,g,0.2)
         if(L1<1e-8)
             println(it)
             break
@@ -301,10 +331,9 @@ function main(arg::Vector{String})
     CSV.write("./GF_U$(ir.U)_b$(ir.beta).csv", save_data_g)
     CSV.write("./Sigma_U$(ir.U)_b$(ir.beta).csv", save_data_s)
 
-    Spectral_HSL(p, w_mesh, sigma_w)
-    =#
+    #Spectral_HSL(p, w_mesh, sigma_w)
 
 end
-
+=#
 
 @time main(ARGS)
