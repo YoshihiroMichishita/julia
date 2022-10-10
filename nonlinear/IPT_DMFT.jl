@@ -175,9 +175,11 @@ end
 
 using Flux
 
-function F_rho0(ir::IR_params, g::Green_Sigma, rho_ls, λ)
+function F_rho0(ir::IR_params, g::Green_Sigma, rho_ls, λ, w_mesh::Vector{Float64})
     vec = g.g0_ir - ir.basis.s .* rho_ls
-    return f = 0.5*real(vec'*vec) + λ*sum(abs.(rho_ls))
+    rho_w = -transpose(ir.basis.v(w_mesh)) * rho_ls
+    minus = sum(abs.(rho_w) .- rho_w) 
+    return f = 0.5*real(vec'*vec) + λ*sum(abs.(rho_ls)) + 1000.0minus
 end
 
 function fit_rho0w(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, w_mesh::Vector{Float64})
@@ -194,18 +196,18 @@ function fit_rho0w(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, w_
             F_new = 1000.0
             for i in 1:10000
                 grads = Flux.gradient(Flux.params(rho_ll)) do
-                    F_rho0(ir, g, rho_ll, lam)
+                    F_rho0(ir, g, rho_ll, lam, w_mesh)
                 end
                 Flux.Optimise.update!(opt, Flux.params(rho_ll), grads)
                 F_old = F_new
-                F_new = F_rho(ir, g, rho_ll, lam)
+                F_new = F_rho0(ir, g, rho_ll, lam, w_mesh)
                 if(abs(F_old-F_new)/abs(F_old)<1e-6)
                     break
                 end
             end
-            if(s_F_rho[ll] > F_rho0(ir, g, rho_ll, lam))
+            if(s_F_rho[ll] > F_new)
                 s_rho_l[ll,:] = rho_ll
-                s_F_rho[ll] = F_rho0(ir, g, rho_ll, lam)
+                s_F_rho[ll] = F_new
             end
         end
     end
@@ -223,9 +225,11 @@ function fit_rho0w(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, w_
     return rho_omega
 end
 
-function F_rho(ir::IR_params, g::Green_Sigma, rho_ls, λ)
+function F_rho(ir::IR_params, g::Green_Sigma, rho_ls, λ, w_mesh::Vector{Float64})
     vec = g.g_ir - ir.basis.s .* rho_ls
-    return f = 0.5*real(vec'*vec) + λ*sum(abs.(rho_ls))
+    rho_w = -transpose(ir.basis.v(w_mesh)) * rho_ls
+    minus = sum(abs.(rho_w) .- rho_w) 
+    return f = 0.5*real(vec'*vec) + λ*sum(abs.(rho_ls)) + 1000.0minus
 end
 
 function fit_rhow(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, w_mesh::Vector{Float64})
@@ -242,18 +246,18 @@ function fit_rhow(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, w_m
             F_new = 1000.0
             for i in 1:10000
                 grads = Flux.gradient(Flux.params(rho_ll)) do
-                    F_rho(ir, g, rho_ll, lam)
+                    F_rho(ir, g, rho_ll, lam, w_mesh)
                 end
                 Flux.Optimise.update!(opt, Flux.params(rho_ll), grads)
                 F_old = F_new
-                F_new = F_rho(ir, g, rho_ll, lam)
+                F_new = F_rho(ir, g, rho_ll, lam, w_mesh)
                 if(abs(F_old-F_new)/abs(F_old)<1e-6)
                     break
                 end
             end
-            if(s_F_rho[ll] > F_rho(ir, g, rho_ll, lam))
+            if(s_F_rho[ll] > F_new)
                 s_rho_l[ll,:] = rho_ll
-                s_F_rho[ll] = F_rho(ir, g, rho_ll, lam)
+                s_F_rho[ll] = F_new
             end
         end
     end
@@ -352,9 +356,15 @@ function reshape(rho::Vector{Float64}, cutoff::Float64)
                 sw = true
             end
             rho_rep[w] = 0.005
-        elseif(rho_rep[w]<cutoff && sw)
-            push!(v_it,w)
-        elseif(rho_rep[w]>=cutoff && sw && w<length(rho_rep) && rho_rep[w+1]<rho_rep[w])
+
+        elseif(rho_rep[w]<cutoff)
+            if(sw)
+                push!(v_it,w)
+            elseif(w<length(rho_rep) && rho_rep[w+1]>rho_rep[w])
+                sw = true
+                push!(v_it,w)
+            end
+        elseif(rho_rep[w]>=cutoff && sw && w<length(rho_rep))
             empty!(v_it)
             sw = false
         end
@@ -423,8 +433,8 @@ function main(arg::Vector{String})
     gi, g0 = fit_rhow(ir, g, lamda_num, batch_num, w_mesh)
     #rint_res = reshape(gi, pi/ir.beta)
     #r0_res = reshape(g0, pi/ir.beta)
-    rint_res = reshape(gi, 0.2)
-    r0_res = reshape(g0, 0.2)
+    rint_res = reshape(gi, 0.3)
+    r0_res = reshape(g0, 0.5)
 
     rint_res = renorm_rho(ir.beta, w_mesh, rint_res)
     r0_res = renorm_rho(ir.beta, w_mesh, r0_res)

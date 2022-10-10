@@ -1,4 +1,4 @@
-include("model_2D_test.jl")
+include("model_2D_IB.jl")
 
 using SparseIR, Plots
 #using OMEinsum
@@ -58,60 +58,98 @@ end
 
 function init_zero_g(ir::IR_params)
     
-    g0_tau = zeros(ComplexF64, ir.n_tau)
-    g0_matsu = zeros(ComplexF64, ir.n_matsu)
-    g0_ir = fit(ir.smpl_matsu, g0_matsu, dim=1)
+    g0_ir::Vector{Matrix{ComplexF64}} = []
+    g0_tau::Vector{Matrix{ComplexF64}} = []
+    g0_matsu::Vector{Matrix{ComplexF64}} = []
 
-    n_ir = size(g0_ir)[1]
+    g_ir::Vector{Matrix{ComplexF64}} = []
+    g_matsu::Vector{Matrix{ComplexF64}} = []
 
-    g_ir = zeros(ComplexF64, n_ir)
-    g_matsu = zeros(ComplexF64, ir.n_matsu)
+    sigma_ir::Vector{Matrix{ComplexF64}} = []
+    sigma_tau::Vector{Matrix{ComplexF64}} = []
+    sigma_matsu::Vector{Matrix{ComplexF64}} = []
 
-    sigma_ir = zeros(ComplexF64, n_ir)
-    sigma_tau = zeros(ComplexF64, ir.n_tau)
-    sigma_matsu = zeros(ComplexF64, ir.n_matsu)
+    n_ir::Int = 0
 
     return g0_ir, g0_tau, g0_matsu, g_ir, g_matsu, sigma_ir, sigma_tau, sigma_matsu, n_ir
 end
 
 
-function gk_m(p::Parm, k::Vector{Float64}, w::ComplexF64, g::Green_Sigma)
-    e = set_H(k,p)
-    gk = 1.0/(w - e - g.sig)
-    return gk
-end
-
-function get_G0mlocal(p::Parm, k_BZ::Vector{Vector{Float64}}, w::ComplexF64, sw::Int, sigma::ComplexF64)
-    gw_l = 0.0
-    gl = 0.0
+function get_G0mlocal!(p::Parm, k_BZ::Vector{Vector{Float64}}, sw::Int,ir::IR_params, g::Green_Sigma)
     if(sw == 1)
-        for i in 1:length(k_BZ)
-            e = set_H(k_BZ[i],p) - p.mu
-            #gk = 1.0/(w - e + p.eta*1.0im*sign(imag(w)))
-            gk = 1.0/(w - e)
-            gw_l += p.dk2 * gk
+        for wn in 1:ir.n_matsu
+            gw_l = zeros(ComplexF64, 2, 2)
+            gl = zeros(ComplexF64, 2, 2)
+            for i in 1:length(k_BZ)
+                e = set_H(k_BZ[i],p) - p.mu*Matrix{Complex{Float64}}(I,2,2)
+                #gk = 1.0/(w - e + p.eta*1.0im*sign(imag(w)))
+                gk = inv(ir.smpl_wn[wn]*Matrix{Complex{Float64}}(I,2,2) - e)
+                gw_l += p.dk2 * gk
+            end
+            push!(g.g0_matsu, gw_l)
+            push!(g.g_matsu, gl)
         end
     else
-        for i in 1:length(k_BZ)
-            e = set_H(k_BZ[i],p) - p.mu
-            #gk = 1.0/(w - e -sigma + p.eta*1.0im*sign(imag(w)))
-            gk = 1.0/(w - e -sigma)
-            gl += p.dk2 * gk
+        for wn in 1:ir.n_matsu
+            gw_l = zeros(ComplexF64, 2, 2)
+            gl = zeros(ComplexF64, 2, 2)
+            for i in 1:length(k_BZ)
+                e = set_H(k_BZ[i],p) - p.mu*Matrix{Complex{Float64}}(I,2,2)
+                #gk = 1.0/(w - e + p.eta*1.0im*sign(imag(w)))
+                gk = inv(ir.smpl_wn[wn]*Matrix{Complex{Float64}}(I,2,2) - e - g.sigma_matsu[wn])
+                gl += p.dk2 * gk
+            end
+            gw_l = inv(inv(gl) + g.sigma_matsu[wn])
+            g.g0_matsu[wn] = gw_l
+            g.g_matsu[wn] = gl
         end
-        gw_l = 1.0/(1.0/gl + sigma)
     end
-    return gw_l, gl
+    return nothing
 end
 
 function MatsuToTau!(ir::IR_params, g::Green_Sigma)
     g.g0_ir = fit(ir.smpl_matsu, g.g0_matsu, dim=1)
     g.g_ir = fit(ir.smpl_matsu, g.g_matsu, dim=1)
+    g.n_ir = size(g.g0_ir)[1]
     g.g0_tau = evaluate(ir.smpl_tau, g.g0_ir, dim=1)
 end
 
-function TauToMatsu!(ir::IR_params, g::Green_Sigma, γ::Float64)
+function calc_sigma!(sw::Int, ir::IR_params, g::Green_Sigma)
+    for tau in 1:ir.n_tau
+        if(sw == 1)
+            test = zeros(ComplexF64, 2, 2)
+            for i in 1:2, j in 1:2 
+                test[i,j] = ir.U^2 * (g.g0_tau[tau])[i,j] * (g.g0_tau[tau])[3-i,3-j] * (g.g0_tau[end+1-tau])[3-i,3-j]
+                #test[i,j] = ir.U^2 * (g.g0_tau[tau])[i,j] * (g.g0_tau[tau])[i,j] * (g.g0_tau[end+1-tau])[i,j]
+            end
+            push!(g.sigma_tau, test)
+        else
+            for i in 1:2, j in 1:2 
+                (g.sigma_tau[tau])[i,j] = ir.U^2 * (g.g0_tau[tau])[i,j] * (g.g0_tau[tau])[3-i,3-j] * (g.g0_tau[end+1-tau])[3-i,3-j]
+                #(g.sigma_tau[tau])[i,j] = ir.U^2 * (g.g0_tau[tau])[i,j] * (g.g0_tau[tau])[i,j] * (g.g0_tau[end+1-tau])[i,j]
+            end
+        end
+    end
+    return nothing
+end
+
+function TauToMatsu!(sw::Int, ir::IR_params, g::Green_Sigma, γ::Float64)
     ir_new = fit(ir.smpl_tau, g.sigma_tau)
-    diff = sum(abs.(ir_new .- g.sigma_ir))/sum(abs.(g.sigma_ir))
+    diff0 =0.0
+    sum0 = 0.0
+    if(sw == 1)
+        for i in 1:g.n_ir
+            diff0 += sum(abs.(ir_new[i]))
+            push!(g.sigma_ir, zeros(ComplexF64, 2, 2))
+        end
+        sum0 = 1.0
+    else
+        for i in 1:g.n_ir
+            diff0 += sum(abs.(ir_new[i] .- g.sigma_ir[i]))
+            sum0 += sum(abs.(g.sigma_ir[i]))
+        end
+    end
+    diff = diff0/sum0
     g.sigma_ir = (1.0-γ) .* g.sigma_ir .+ γ .* ir_new
     g.sigma_matsu = evaluate(ir.smpl_matsu, g.sigma_ir, dim=1)
 
@@ -119,22 +157,28 @@ function TauToMatsu!(ir::IR_params, g::Green_Sigma, γ::Float64)
 end
 
 function update_g!(p::Parm, k_BZ::Vector{Vector{Float64}},sw::Int, ir::IR_params, g::Green_Sigma, γ::Float64)
-    for w in 1:ir.n_matsu
-        #g.g0_matsu[w], g.g_matsu[w] = get_G0mlocal(p, k_BZ, valueim(ir.smpl_matsu.sampling_points[w], ir.beta), sw, g.sigma_matsu[w])
-        g.g0_matsu[w], g.g_matsu[w] = get_G0mlocal(p, k_BZ, ir.smpl_wn[w], sw, g.sigma_matsu[w])
-    end
+    get_G0mlocal!(p, k_BZ, sw, ir, g)
     MatsuToTau!(ir, g)
-    g.sigma_tau = ir.U^2 .* (g.g0_tau).^2 .* g.g0_tau[end:-1:1]
+    calc_sigma!(sw, ir, g)
     # .+ ir.U .* g.g0_tau
-    diff = TauToMatsu!(ir, g, γ)
+    diff = TauToMatsu!(sw, ir, g, γ)
     return diff
 end
 
 using Flux
 
 function F_rho0(ir::IR_params, g::Green_Sigma, rho_ls, λ)
-    vec = g.g0_ir - ir.basis.s .* rho_ls
-    return f = 0.5*real(vec'*vec) + λ*sum(abs.(rho_ls))
+    vec::Vector{Matrix{ComplexF64}} = []
+    for i in 1:g.n_ir
+        test = g.g0_ir[i] - ir.basis.s .* rho_ls[i]
+        push!(vec, test)
+    end
+    f = 0.0
+    for i in 1:g.n_ir
+        f += 0.5*real(sum(abs.((vec[i])'*vec[i]))) + λ*sum(abs.(rho_ls))
+    end
+    
+    return f
 end
 
 function fit_rho0w(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, w_mesh::Vector{Float64})
@@ -181,8 +225,16 @@ function fit_rho0w(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, w_
 end
 
 function F_rho(ir::IR_params, g::Green_Sigma, rho_ls, λ)
-    vec = g.g_ir - ir.basis.s .* rho_ls
-    return f = 0.5*real(vec'*vec) + λ*sum(abs.(rho_ls))
+    vec::Vector{Matrix{ComplexF64}} = []
+    for i in 1:g.n_ir
+        test = g.g_ir[i] - ir.basis.s .* rho_ls[i]
+        push!(vec, test)
+    end
+    f = 0.0
+    for i in 1:g.n_ir
+        f += 0.5*real(sum(abs.((vec[i])'*vec[i]))) + λ*sum(abs.(rho_ls))
+    end
+    return f
 end
 
 function fit_rhow(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, w_mesh::Vector{Float64})
@@ -228,6 +280,54 @@ function fit_rhow(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, w_m
     return rho_omega
 end
 
+function reshape(rho::Vector{Float64}, cutoff::Float64)
+    v_it::Vector{Int} = []
+    rho_rep = rho
+    sw = false
+    for w in 1:length(rho_rep)
+        if(rho_rep[w]<0)
+            if(sw)
+                for it in v_it
+                    rho_rep[it] = 0.005                
+                end
+                empty!(v_it)
+                sw = false
+            elseif(w<length(rho_rep) && rho_rep[w+1]>rho_rep[w])
+                sw = true
+            end
+            rho_rep[w] = 0.005
+
+        elseif(rho_rep[w]<cutoff)
+            if(sw)
+                push!(v_it,w)
+            elseif(w<length(rho_rep) && rho_rep[w+1]>rho_rep[w])
+                sw = true
+                push!(v_it,w)
+            end
+        elseif(rho_rep[w]>=cutoff && sw && w<length(rho_rep))
+            empty!(v_it)
+            sw = false
+        end
+    end
+    return rho_rep
+end
+
+
+function KK_GR(w::Vector{Float64}, rho::Vector{Float64})
+    GR_ = zeros(ComplexF64, length(w))
+    dw = w[2]-w[1]
+    for w_re in 1:length(w)
+        re::Float64 = 0.0
+        for w_im in 1:length(w)
+            if(w_im != w_re)
+                re += dw * rho[w_im] / (w[w_re] - w[w_im])
+            end 
+        end
+        GR_[w_re] = re - 1.0im * rho[w_re] * pi
+    end
+    return GR_
+end
+
 ENV["GKSwstype"]="nul"
 Plots.scalefontsizes(1.4)
 
@@ -251,7 +351,7 @@ function main(arg::Vector{String})
 
     for it in 1:1000
         L1 = update_g!(p,kk,it,ir,g, 0.2)
-        if(L1<1e-8)
+        if(L1<1e-7)
             println(it)
             break
         end
@@ -259,16 +359,16 @@ function main(arg::Vector{String})
 
     g0 = -1.0im .* fit_rho0w(ir, g, lamda_num, batch_num, w_mesh)
     gi = -1.0im .* fit_rhow(ir, g, lamda_num, batch_num, w_mesh)
-    #sigma_w = 1.0 ./ g0 .- 1.0 ./ g .- p.mu
+    #=
     sigma_w = zeros(ComplexF64, w_num)
     for ww in 1:w_num
         if(abs(g0)<1e-4 || abs(gi)<1e-4)
         else
             sigma_w[ww] = 1.0/g0[ww] - 1.0/gi[ww] - p.mu
         end
-    end
+    end=#
     save_data_g = DataFrame(w=w_mesh,img=imag.(gi),reg=real.(gi))
-    save_data_s = DataFrame(w=w_mesh,ims=imag.(sigma_w),res=real.(sigma_w))
+    #save_data_s = DataFrame(w=w_mesh,ims=imag.(sigma_w),res=real.(sigma_w))
 
     pg0 = plot(w_mesh, imag.(g0), linewidth=3.0, xlabel="ω", ylabel="A(ω)", title="local DOS")
     pg0 = plot!(w_mesh, real.(g0), linewidth=3.0)
@@ -278,14 +378,14 @@ function main(arg::Vector{String})
     pg = plot!(w_mesh, real.(gi), linewidth=3.0)
     savefig(pg,"./LDOS.png")
 
-    ps = plot(w_mesh, imag.(sigma_w), linewidth=3.0, xlabel="ω", ylabel="Σ(ω)", title="self-energy")
-    ps = plot!(w_mesh, real.(sigma_w), linewidth=3.0)
-    savefig(ps,"./self-energy.png")
+    #ps = plot(w_mesh, imag.(sigma_w), linewidth=3.0, xlabel="ω", ylabel="Σ(ω)", title="self-energy")
+    #ps = plot!(w_mesh, real.(sigma_w), linewidth=3.0)
+    #savefig(ps,"./self-energy.png")
     #「./」で現在の(tutorial.ipynbがある)ディレクトリにファイルを作成の意味、指定すれば別のディレクトリにファイルを作ることも出来る。
     CSV.write("./GF_U$(ir.U)_b$(ir.beta).csv", save_data_g)
-    CSV.write("./Sigma_U$(ir.U)_b$(ir.beta).csv", save_data_s)
+    #CSV.write("./Sigma_U$(ir.U)_b$(ir.beta).csv", save_data_s)
 
-    Spectral_HSL(p, w_mesh, sigma_w)
+    #Spectral_HSL(p, w_mesh, sigma_w)
 
 end
 #=
