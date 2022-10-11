@@ -175,14 +175,20 @@ end
 
 using Flux
 
-function F_rho0(ir::IR_params, g::Green_Sigma, rho_ls, λ, w_mesh::Vector{Float64})
-    vec = g.g0_ir - ir.basis.s .* rho_ls
-    rho_w = -transpose(ir.basis.v(w_mesh)) * rho_ls
+function minus_sum(tr_w, rho_l)
+    rho_w = -tr_w * rho_l
     minus = sum(abs.(rho_w) .- rho_w) 
-    return f = 0.5*real(vec'*vec) + λ*sum(abs.(rho_ls)) + 1000.0minus
+    return minus
 end
 
-function fit_rho0w(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, w_mesh::Vector{Float64})
+function F_rho0(ir::IR_params, g::Green_Sigma, rho_ls, λ, tr_w)
+    vec = g.g0_ir - ir.basis.s .* rho_ls
+    #rho_w = -transpose(ir.basis.v(w_mesh)) * rho_ls
+    #minus = sum(abs.(rho_w) .- rho_w) 
+    return f = 0.5*real(vec'*vec) + λ*sum(abs.(rho_ls))# + minus_sum(tr_w, rho_ls)
+end
+
+function fit_rho0w(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, tr_w)
     sn = range(-12.0, 0.0, length=l_num)
     lam_test = 10 .^ (sn)
     opt = ADAM()
@@ -190,19 +196,23 @@ function fit_rho0w(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, w_
     s_F_rho = 1000.0 * ones(Float64, l_num)
     for ll in 1:l_num
         lam = lam_test[ll]
+        count::Int = 0
         for b in 1:batch_num
             rho_ll = rand(Float64, g.n_ir)
             F_old = 1000.0
             F_new = 1000.0
-            for i in 1:10000
+            for i in 1:5000
                 grads = Flux.gradient(Flux.params(rho_ll)) do
-                    F_rho0(ir, g, rho_ll, lam, w_mesh)
+                    F_rho0(ir, g, rho_ll, lam, tr_w)
                 end
                 Flux.Optimise.update!(opt, Flux.params(rho_ll), grads)
                 F_old = F_new
-                F_new = F_rho0(ir, g, rho_ll, lam, w_mesh)
-                if(abs(F_old-F_new)/abs(F_old)<1e-6)
+                F_new = F_rho0(ir, g, rho_ll, lam, tr_w)
+                if(abs(F_old-F_new)/abs(F_old)<1e-4)
                     break
+                end
+                if(i==5000)
+                    count += 1
                 end
             end
             if(s_F_rho[ll] > F_new)
@@ -210,6 +220,7 @@ function fit_rho0w(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, w_
                 s_F_rho[ll] = F_new
             end
         end
+        println(count)
     end
     b = (log(s_F_rho[end])-log(s_F_rho[1]))/(log(lam_test[end])-log(lam_test[1]))
     a = s_F_rho[1]*lam_test[1]^(-b)
@@ -225,34 +236,38 @@ function fit_rho0w(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, w_
     return rho_omega
 end
 
-function F_rho(ir::IR_params, g::Green_Sigma, rho_ls, λ, w_mesh::Vector{Float64})
+function F_rho(ir::IR_params, g::Green_Sigma, rho_ls, λ, tr_w)
     vec = g.g_ir - ir.basis.s .* rho_ls
-    rho_w = -transpose(ir.basis.v(w_mesh)) * rho_ls
-    minus = sum(abs.(rho_w) .- rho_w) 
-    return f = 0.5*real(vec'*vec) + λ*sum(abs.(rho_ls)) + 1000.0minus
+    #rho_w = -transpose(ir.basis.v(w_mesh)) * rho_ls
+    #minus = sum(abs.(rho_w) .- rho_w) 
+    return f = 0.5*real(vec'*vec) + λ*sum(abs.(rho_ls))# + minus_sum(tr_w, rho_ls)
 end
 
-function fit_rhow(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, w_mesh::Vector{Float64})
+function fit_rhow(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, tr_w, it_MAX::Int)
     sn = range(-12.0, 0.0, length=l_num)
     lam_test = 10 .^ (sn)
     opt = ADAM()
     s_rho_l = rand(Float64, l_num, g.n_ir)
-    s_F_rho = 1000.0 * ones(Float64, l_num)
+    s_F_rho = 100000.0 * ones(Float64, l_num)
     for ll in 1:l_num
         lam = lam_test[ll]
+        count::Int = 0
         for b in 1:batch_num
             rho_ll = rand(Float64, g.n_ir)
-            F_old = 1000.0
-            F_new = 1000.0
-            for i in 1:10000
+            F_old = 100000.0
+            F_new = 100000.0
+            for i in 1:it_MAX
                 grads = Flux.gradient(Flux.params(rho_ll)) do
-                    F_rho(ir, g, rho_ll, lam, w_mesh)
+                    F_rho(ir, g, rho_ll, lam, tr_w)
                 end
                 Flux.Optimise.update!(opt, Flux.params(rho_ll), grads)
                 F_old = F_new
-                F_new = F_rho(ir, g, rho_ll, lam, w_mesh)
+                F_new = F_rho(ir, g, rho_ll, lam, tr_w)
                 if(abs(F_old-F_new)/abs(F_old)<1e-6)
                     break
+                end
+                if(i==it_MAX)
+                    count += 1
                 end
             end
             if(s_F_rho[ll] > F_new)
@@ -260,6 +275,7 @@ function fit_rhow(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, w_m
                 s_F_rho[ll] = F_new
             end
         end
+        println(count)
     end
     b = (log(s_F_rho[end])-log(s_F_rho[1]))/(log(lam_test[end])-log(lam_test[1]))
     a = s_F_rho[1]*lam_test[1]^(-b)
@@ -271,30 +287,30 @@ function fit_rhow(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, w_m
     it = findmax(ev)[2] + 1
     max1 = s_F_rho[it]
     println("it:$it,  s_F:$max1")
-    rho_omega = -transpose(ir.basis.v(w_mesh)) * s_rho_l[it,:]
+    rho_omega = -tr_w * s_rho_l[it,:]
 
     s_rho_l0 = rand(Float64, l_num, g.n_ir)
-    s_F_rho0 = 1000.0 * ones(Float64, l_num)
+    s_F_rho0 = 100000.0 * ones(Float64, l_num)
     for ll in 1:l_num
         lam = lam_test[ll]
         for b in 1:batch_num
             rho_ll = rand(Float64, g.n_ir)
-            F_old = 1000.0
-            F_new = 1000.0
-            for i in 1:10000
+            F_old = 100000.0
+            F_new = 100000.0
+            for i in 1:it_MAX
                 grads = Flux.gradient(Flux.params(rho_ll)) do
-                    F_rho0(ir, g, rho_ll, lam)
+                    F_rho0(ir, g, rho_ll, lam,tr_w)
                 end
                 Flux.Optimise.update!(opt, Flux.params(rho_ll), grads)
                 F_old = F_new
-                F_new = F_rho0(ir, g, rho_ll, lam)
+                F_new = F_rho0(ir, g, rho_ll, lam, tr_w)
                 if(abs(F_old-F_new)/abs(F_old)<1e-6)
                     break
                 end
             end
-            if(s_F_rho0[ll] > F_rho0(ir, g, rho_ll, lam))
+            if(s_F_rho0[ll] > F_new)
                 s_rho_l0[ll,:] = rho_ll
-                s_F_rho0[ll] = F_rho0(ir, g, rho_ll, lam)
+                s_F_rho0[ll] = F_new
             end
         end
     end
@@ -308,7 +324,7 @@ function fit_rhow(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, w_m
     it0 = findmax(ev0)[2] + 1
     max0 = s_F_rho0[it0]
     println("it:$it0,  s_F:$max0")
-    rho_omega0 = -transpose(ir.basis.v(w_mesh)) * s_rho_l0[it0,:]
+    rho_omega0 = -tr_w * s_rho_l0[it0,:]
 
     #=
     s_rho00 = zeros(Float64, g.n_ir)
@@ -418,6 +434,8 @@ function main(arg::Vector{String})
     g = Green_Sigma(init_zero_g(ir)...)
     w_mesh = collect(-ir.bw:2ir.bw/(w_num-1):ir.bw)
 
+    tr_w = transpose(ir.basis.v(w_mesh))
+
     kk = get_kk(p.K_SIZE)
     Disp_HSL(p)
 
@@ -430,11 +448,11 @@ function main(arg::Vector{String})
     end
 
     #g0 = -1.0im .* fit_rho0w(ir, g, lamda_num, batch_num, w_mesh)
-    gi, g0 = fit_rhow(ir, g, lamda_num, batch_num, w_mesh)
+    gi, g0 = fit_rhow(ir, g, lamda_num, batch_num, tr_w, 20000)
     #rint_res = reshape(gi, pi/ir.beta)
     #r0_res = reshape(g0, pi/ir.beta)
     rint_res = reshape(gi, 0.3)
-    r0_res = reshape(g0, 0.5)
+    r0_res = reshape(g0, 0.3)
 
     rint_res = renorm_rho(ir.beta, w_mesh, rint_res)
     r0_res = renorm_rho(ir.beta, w_mesh, r0_res)
