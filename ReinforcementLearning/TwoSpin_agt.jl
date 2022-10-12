@@ -354,13 +354,14 @@ function main(arg::Array{String,1})
         ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
         ll_it[it], Kp_av = loss_calc_hyb!(model,en, ag, HF_it)
         
+        #=
         if(it%10 == 0)
             if(it!=it_MAX)
                 updata_KpK!(en, ag, Kp_av)
             end
             println("it:"*string(it))
             println(ll_it[it])
-        end
+        end=#
         #if(ll_it[it]>100.0)
         #    break
         #end
@@ -374,7 +375,7 @@ function main(arg::Array{String,1})
             CSV.write("./HFt_it="*"$it" *".csv", save_data1)
 
         end=#
-        if(it%1000 == 0 && it!=0)
+        if(it%500 == 0 && it!=0)
             E = zeros(Float64, en.t_size, en.HS_size)
             for t_step in 1:en.t_size
                 E[t_step,:], v = eigen(VtoM(ag.HF_TL[t_step,:],en))
@@ -439,5 +440,5 @@ function main(arg::Array{String,1})
     
 end
 
-main(ARGS)
+@time main(ARGS)
 #@time main(ARGS)
