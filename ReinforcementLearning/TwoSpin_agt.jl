@@ -188,7 +188,7 @@ function loss_calc_hyb(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
         #l += ag.ϵ^2*diff_norm(kp_sum,en)/en.t_size
         #l += diff_norm(kp_sum,en)/en.t_size
         #l += ag.γ^(5*(en.t_size/2 - abs(en.t_size/2-t))) * diff_norm(ag.K_TL[t,:],en)
-        if(t==t_size)
+        if(t==en.t_size)
             l += diff_norm(HF_calc-ag.HF_TL[1,:],en)
         end
     end
@@ -216,7 +216,7 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
         #l += diff_norm(kp_sum,en)/en.t_size
         #l += ag.γ^(5*(en.t_size/2 - abs(en.t_size/2-t))) * diff_norm(ag.K_TL[t,:],en)
         #l += ag.γ^(5*(en.t_size - t)) * diff_norm(ag.K_TL[t,:],en)
-        if(t==t_size)
+        if(t==en.t_size)
             l += diff_norm(ag.HF_TL[t,:]-ag.HF_TL[1,:],en)
         end
     end
@@ -283,6 +283,7 @@ end
 using DataFrames
 using CSV
 using BSON: @save
+using BSON: @load
 using Plots
 ENV["GKSwstype"]="nul"
 
