@@ -259,6 +259,18 @@ function updata_KpK!(en::TS_env, ag::agtQ, Kp_av::Vector{Float64})
     end
 end
 
+function KtoKp!(en::TS_env, ag::agtQ)
+    dt = 2pi/en.Ω/en.t_size
+    for t in 1:en.t_size
+        if(t == en.t_size)
+            tt = 1
+        else
+            tt = t+1
+        end
+        ag.Kp_TL[t,:] = (ag.K_TL[tt,:]-ag.K_TL[t,:])/dt
+    end
+end
+
 
 function init_HF(en::TS_env)
     jp = en.Jz + en.hz
@@ -282,11 +294,20 @@ function main(arg::Array{String,1})
 
     #二次の高周波展開で初期値を代入
     ag.HF_TL[en.t_size,:] = init_HF(en)
-    ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
+    #ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
     #-MtoV(en.V_t, en)/en.Ω
 
+    if(arg[11]=="init")
+        model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
+        ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
+    else
+        @load arg[11] model
+        ag.K_TL = Matrix(CSV.read(arg[12], DataFrame))
+        KtoKp!(en, ag)
+    end
+
     #model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
-    model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
+    #model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
     #model = Chain(Dense(zeros(Float64, ag.n_dense, ag.in_size), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.n_dense, ag.n_dense), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.out_size, ag.n_dense), zeros(Float64, ag.out_size)))
     opt = ADAM()
 
