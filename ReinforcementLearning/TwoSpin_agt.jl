@@ -400,6 +400,7 @@ function main(arg::Array{String,1})
                 p4 = plot!(ag.Kp_TL[:,i], width=2.0)
             end
             savefig(p4,"./Kp_t$(it).png")
+            @save "mymodel$(it).bson" model
         end
     end
     println("Learning Finish!")
@@ -435,7 +436,7 @@ function main(arg::Array{String,1})
     savefig(p3,"./loss_iterate.png")
     println("Drawing Finish!")
 
-    @save "mymodel.bson" model
+    #@save "mymodel.bson" model
     
     
 end
