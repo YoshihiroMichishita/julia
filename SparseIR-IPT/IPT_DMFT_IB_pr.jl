@@ -1,16 +1,16 @@
-#using Distributed
-#addprocs()
-include("model_2D_IB.jl")
+using Distributed
+addprocs(12)
+@everywhere include("model_2D_IB.jl")
 
-using SparseIR, Plots
+@everywhere using SparseIR, Plots
 #using OMEinsum
 #using FastGaussQuadrature
-import SparseIR: valueim, value
-import SparseIR: fit
+@everywhere import SparseIR: valueim, value
+@everywhere import SparseIR: fit
 #using LinearAlgebra
 
 
-struct IR_params
+@everywhere struct IR_params
     U::Float64
     beta::Float64
     bw::Float64
@@ -26,7 +26,7 @@ struct IR_params
     smpl_wn::Vector{ComplexF64}
 end
 
-function set_IR(U::Float64, beta::Float64, bw::Float64)
+@everywhere function set_IR(U::Float64, beta::Float64, bw::Float64)
     basis = FiniteTempBasis(Fermionic(), beta, bw, 1e-10)
 
     smpl_matsu = MatsubaraSampling(basis)
@@ -43,7 +43,7 @@ function set_IR(U::Float64, beta::Float64, bw::Float64)
     return U, beta, bw, basis, smpl_matsu, smpl_tau, n_matsu, n_tau, smpl_wn
 end
 
-mutable struct Green_Sigma
+@everywhere mutable struct Green_Sigma
     g0_ir::Vector{Matrix{ComplexF64}}
     g0_ir_vec::Matrix{Float64}
     g0_tau::Vector{Matrix{ComplexF64}}
@@ -60,7 +60,7 @@ mutable struct Green_Sigma
     n_ir::Int
 end
 
-function init_zero_g(ir::IR_params)
+@everywhere function init_zero_g(ir::IR_params)
     
     g0_ir::Vector{Matrix{ComplexF64}} = []
     g0_ir_vec = zeros(Float64, 43, 4)
@@ -194,20 +194,23 @@ end
 
 using Flux
 
-function F_rho0(ir::IR_params, g::Green_Sigma, rho_ls, λ)
+@everywhere function F_rho0(ir::IR_params, g::Green_Sigma, rho_ls, λ)
     vec = g.g0_ir_vec - (ir.basis.s .* rho_ls)
     
     return f = 0.5*sum((vec.^2)) + λ*sum(abs.(rho_ls))
 end
 
 function fit_rho0w(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, tr_w, it_MAX::Int)
-    sn = range(-12.0, 0.0, length=l_num)
-    lam_test = 10 .^ (sn)
-    opt = ADAM()
-    s_rho_l::Vector{Matrix{Float64}} = []
+    @everywhere sn = range(-12.0, 0.0, length=l_num)
+    @everywhere lam_test = 10 .^ (sn)
+    @everywhere opt = ADAM()
+    #s_rho_l::Vector{Matrix{Float64}} = []
+    s_rho_l = SharedArray{Float64, 3}(l_num, g.n_ir, 4)
     #rand(Float64, l_num, g.n_ir)
+    #s_F_rho = 1000.0 * ones(Float64, l_num)
+    s_F_rho = SharedArray{Float64}(l_num)
     s_F_rho = 1000.0 * ones(Float64, l_num)
-    for ll in 1:l_num
+    @distributed for ll in 1:l_num
         lam = lam_test[ll]
         for b in 1:batch_num
             rho_ll = rand(Float64, g.n_ir, 4)
@@ -225,11 +228,7 @@ function fit_rho0w(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, tr
                 end
             end
             if(s_F_rho[ll] > F_new)
-                if(b==1)
-                    push!(s_rho_l, rho_ll)
-                else
-                    s_rho_l[ll] = rho_ll
-                end
+                s_rho_l[ll,:,:] = rho_ll
                 s_F_rho[ll] = F_new
             end 
         end
@@ -241,31 +240,34 @@ function fit_rho0w(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, tr
     p1 = plot(lam_test, ev, xaxis=:log, yaxis=:log, marker=:circle)
     savefig(p1,"./lambda_opt_G0.png")
 
-    it = findmax(ev)[2]
+    it = findmax(ev)[2]+1
     println("it:$it")
     max1 = s_F_rho[it]
     println("it:$it,  s_F:$max1")
     println(size(s_rho_l[it]))
-    rho_omega = -tr_w * s_rho_l[it]
+    rho_omega = -tr_w * s_rho_l[it,:,:]
     return rho_omega
 end
 
-function F_rho(ir::IR_params, g::Green_Sigma, rho_ls, λ)
+@everywhere function F_rho(ir::IR_params, g::Green_Sigma, rho_ls, λ)
     vec = g.g_ir_vec - (ir.basis.s .* rho_ls)
     
     return f = 0.5*sum((vec.^2)) + λ*sum(abs.(rho_ls))
 end
 
 function fit_rhow(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, tr_w, it_MAX::Int)
-    sn = range(-12.0, 0.0, length=l_num)
-    lam_test = 10 .^ (sn)
-    opt = ADAM()
-    s_rho_l::Vector{Matrix{Float64}} = []
+    @everywhere sn = range(-12.0, 0.0, length=l_num)
+    @everywhere lam_test = 10 .^ (sn)
+    @everywhere opt = ADAM()
+    #s_rho_l::Vector{Matrix{Float64}} = []
+    s_rho_l = SharedArray{Float64, 3}(l_num, g.n_ir, 4)
     #rand(Float64, l_num, g.n_ir)
+    #s_F_rho = 1000.0 * ones(Float64, l_num)
+    s_F_rho = SharedArray{Float64}(l_num)
     s_F_rho = 1000.0 * ones(Float64, l_num)
-    for ll in 1:l_num
+    @distributed for ll in 1:l_num
         lam = lam_test[ll]
-        #count::Int = 0
+        count::Int = 0
         for b in 1:batch_num
             rho_ll = rand(Float64, g.n_ir, 4)
             
@@ -282,21 +284,16 @@ function fit_rhow(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, tr_
                 if(abs(F_old-F_new)/abs(F_old)<1e-6)
                     break
                 end
-                #=
                 if(i==it_MAX)
                     count += 1
-                end=#
+                end
             end
             if(s_F_rho[ll] > F_new)
-                if(b==1)
-                    push!(s_rho_l, rho_ll)
-                else
-                    s_rho_l[ll] = rho_ll
-                end
+                s_rho_l[ll,:,:] = rho_ll
                 s_F_rho[ll] = F_new
             end 
         end
-        #println(count)
+        println(count)
     end
     b = (log(s_F_rho[end])-log(s_F_rho[1]))/(log(lam_test[end])-log(lam_test[1]))
     a = s_F_rho[1]*lam_test[1]^(-b)
@@ -305,10 +302,10 @@ function fit_rhow(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, tr_
     p1 = plot(lam_test, ev, xaxis=:log, yaxis=:log, marker=:circle)
     #savefig(p1,"./lambda_opt_G.png")
 
-    it = findmax(ev)[2]
+    it = findmax(ev)[2]+1
     max1 = s_F_rho[it]
     println("it:$it,  s_F:$max1")
-    rho_omega = -(tr_w * s_rho_l[it])
+    rho_omega = -(tr_w * s_rho_l[it,:,:])
     return rho_omega
 end
 
@@ -497,13 +494,10 @@ function main(arg::Vector{String})
     g0 = fit_rho0w(ir, g, lamda_num, batch_num, tr_w, 20000)
     gi = fit_rhow(ir, g, lamda_num, batch_num, tr_w, 20000)
 
-    println("fit completed!")
+    
 
     GR_int = reshape_g(w_mesh, ir.beta, gi)
     GR_0 = reshape_g(w_mesh, ir.beta, g0)
-
-    println("reshape completed!")
-
     
     #sigma_w = zeros(ComplexF64, w_num)
     sigma_w::Vector{Matrix{ComplexF64}} = []
@@ -517,10 +511,11 @@ function main(arg::Vector{String})
         end
     end
 
-    println("sigma completed!")
     GR_int_vec = MtoV(GR_int)
     SR_w = MtoV(sigma_w)
     save_data_g = DataFrame(w=w_mesh,img1=imag.(GR_int_vec[:,1]),reg1=real.(GR_int_vec[:,1]),img2=imag.(GR_int_vec[:,2]),reg2=real.(GR_int_vec[:,2]),img3=imag.(GR_int_vec[:,3]),reg3=real.(GR_int_vec[:,3]),img4=imag.(GR_int_vec[:,4]),reg4=real.(GR_int_vec[:,4]))
+
+
     save_data_s = DataFrame(w=w_mesh, ims1=imag.(SR_w[:,1]),res1=real.(SR_w[:,1]), ims2=imag.(SR_w[:,2]), res2=real.(SR_w[:,2]), ims3=imag.(SR_w[:,3]),res3=real.(SR_w[:,3]), ims4=imag.(SR_w[:,4]),res4=real.(SR_w[:,4]))
 
     #pg0 = plot(w_mesh, imag.(GR_0), linewidth=3.0, xlabel="ω", ylabel="A(ω)", title="local DOS")
@@ -547,7 +542,7 @@ function main(arg::Vector{String})
     for i in 1:size(kk)[1]
         e = set_H(kk[i],p)
         for w in 1:w_num
-            gk = inv((w_mesh[w] + 1.0im*p.eta)*Matrix{Complex{Float64}}(I,2,2) - e - sigma_w[w])
+            gk = inv(w_mesh[w]*Matrix{Complex{Float64}}(I,2,2) - e - sigma_w[w]+ 1.0im*p.eta)
             g_check1[w] += -p.dk2 * imag(gk[1,1])/pi
             g_check2[w] += -p.dk2 * imag(gk[2,2])/pi
         end        
