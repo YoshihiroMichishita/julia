@@ -103,6 +103,20 @@ function get_G0mlocal(p::Parm, k_BZ::Vector{Vector{Float64}}, w::ComplexF64, sw:
     return gw_l, gl
 end
 
+function get_LDOS0(p::Parm, k_BZ::Vector{Vector{Float64}}, w::Float64)
+    gl = 0.0
+    for i in 1:length(k_BZ)
+        g0i = -set_H(k_BZ[i],p) + w + p.mu + 1.0im*p.eta
+        gl += -p.dk2 * imag(1.0/g0i)/pi
+        #=
+        g0i = set_H(k_BZ[i],p) + (w+p.mu) * Matrix{Complex{Float64}}(I,2,2) + 1.0im*p.eta*Matrix{Complex{Float64}}(I,2,2)
+        gk = inv(g0i)
+        gl += -p.dk2 * imag(tr(gk))/pi
+        =#
+    end
+    return gl
+end
+
 
 function MatsuToTau!(ir::IR_params, g::Green_Sigma)
     g.g0_ir = fit(ir.smpl_matsu, g.g0_matsu, dim=1)
@@ -249,6 +263,13 @@ function main(arg::Vector{String})
     w_mesh = collect(-ir.bw:2ir.bw/(w_num-1):ir.bw)
 
     kk = get_kk(p.K_SIZE)
+    ldos = zeros(Float64, w_num)
+    for w in 1:w_num
+        ldos[w] = get_LDOS0(p,kk,w_mesh[w])
+    end
+    pg0 = plot(w_mesh, ldos, linewidth=3.0, xlabel="ω", ylabel="A(ω)", title="local DOS")
+    savefig(pg0,"./TMD_LDOS_free.png")
+    #=
     Disp_HSL(p)
 
     for it in 1:1000
@@ -281,8 +302,9 @@ function main(arg::Vector{String})
     CSV.write("./Sigma_U$(ir.U)_b$(ir.beta).csv", save_data_s)
 
     Spectral_HSL(p, w_mesh, sigma_w)
+    =#
 
 end
 
 
-@time main_3D(ARGS)
+@time main(ARGS)
