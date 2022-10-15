@@ -52,7 +52,8 @@ function micro_motion(Kp_t::Vector{Float32}, K_t::Vector{Float32}, en::TS_env, t
     Kp = VtoM(Kp_t,en)
     K_t_new::Vector{Float32} = K_t + (2pi/en.t_size/en.Ω) * Kp_t 
     Kt = VtoM(K_t_new,en)
-    HF_m = Hermitian(ComplexF32.(exp(1.0im*Kt)*(en.H_0 + en.V_t*sin(2pi*t/en.t_size) - Kp)*exp(-1.0im*Kt)))
+    U = exp(1.0im*Kt)
+    HF_m = Hermitian(ComplexF32.(U*(en.H_0 + en.V_t*sin(2pi*t/en.t_size) - Kp)* U'))
     HF = MtoV(HF_m, en)
     return K_t_new, HF
 end
@@ -61,7 +62,8 @@ function micro_motion2(Kp_t::Vector{Float32}, K_t::Vector{Float32}, en::TS_env, 
     Kp = VtoM(Kp_t,en)
     K_t_new::Vector{Float32} = K_t + (2pi/en.t_size/en.Ω) * Kp_t 
     Kt = VtoM(K_t_new,en)
-    HF_m = Hermitian(ComplexF32.(exp(1.0im*Kt)*(en.H_0 + en.V_t*sin(2pi*t/en.t_size) - Kp)*exp(-1.0im*Kt)))
+    U = exp(1.0im*Kt)
+    HF_m = Hermitian(ComplexF32.(U*(en.H_0 + en.V_t*sin(2pi*t/en.t_size) - Kp)* U'))
     HF = MtoV(HF_m,en)
     return HF
 end
@@ -148,7 +150,7 @@ function loss_calc_hyb(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float32})
         end
         p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
         #x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
-        x = gpu(vcat([p, ag.K_TL[tt,:]]...))
+        x = cu(vcat([p, ag.K_TL[tt,:]]...))
         #K_g = gpu(ag.K_TL[tt,:])
         Kp = cpu(model0(x))
         kp_sum += Kp
@@ -177,7 +179,7 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float32})
         end
         p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
         #x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
-        x = gpu(vcat([p, ag.K_TL[tt,:]]...))
+        x = cu(vcat([p, ag.K_TL[tt,:]]...))
         #Kp = model0(x)
         ag.Kp_TL[t,:] = cpu(model0(x))
         kp_sum += ag.Kp_TL[t,:]
@@ -257,7 +259,8 @@ function main(arg::Array{String,1})
     #-MtoV(en.V_t, en)/en.Ω
 
     #model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
-    model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
+    model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
+    #model = Chain(Dense(ag.in_size, ag.n_dense, relu), Dense(ag.n_dense, ag.n_dense, relu), Dense(ag.n_dense, ag.out_size))
     model_g = fmap(cu, model)
     #model = Chain(Dense(zeros(Float32, ag.n_dense, ag.in_size), zeros(Float32, ag.n_dense), tanh), Dense(zeros(Float32, ag.n_dense, ag.n_dense), zeros(Float32, ag.n_dense), tanh), Dense(zeros(Float32, ag.out_size, ag.n_dense), zeros(Float32, ag.out_size)))
     opt = ADAM()
@@ -287,7 +290,7 @@ function main(arg::Array{String,1})
                 end
                 p = [en.Ω, en.ξ*sin(2pi*t_step/en.t_size), en.Jz, en.Jx, en.hz]
                 #x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
-                x = gpu(vcat([p, ag.K_TL[tt,:]]...))
+                x = cu(vcat([p, ag.K_TL[tt,:]]...))
                 #Kp = model_g(x)
                 #Kt = Kt + dt*Kp
                 ag.Kp_TL[t_step,:] = cpu(model_g(x))
@@ -335,7 +338,8 @@ function main(arg::Array{String,1})
             CSV.write("./HFt_it="*"$it" *".csv", save_data1)
 
         end=#
-        if(it%500 == 0 && it!=0)
+        
+        if(it%1000 == 0 && it!=0)
             E = zeros(Float32, en.t_size, en.HS_size)
             for t_step in 1:en.t_size
                 E[t_step,:], v = eigen(VtoM(ag.HF_TL[t_step,:],en))

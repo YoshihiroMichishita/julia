@@ -200,8 +200,8 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
         end
         p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
         x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
-        #Kp = model0(x)
-        ag.Kp_TL[t,:] = model0(x)
+        xg = cu(x)
+        ag.Kp_TL[t,:] = Array(model0(x))
         kp_sum += ag.Kp_TL[t,:]
         #ag.K_TL[t,:] += Kp
         ag.K_TL[t,:], ag.HF_TL[t,:] = micro_motion(ag.Kp_TL[t,:], ag.K_TL[tt,:],en,t)
@@ -214,15 +214,6 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
         end
     end
     l += diff_norm(kp_sum,en)
-    #=
-    if((t+en.t_size/10)>=en.t_size)
-        v = ag.K_TL[t,:]
-        l += ag.γ^(en.t_size-t) * (v' * v)
-    elseif(t <= en.t_size/10)
-        v = ag.K_TL[t,:]
-        l += ag.γ^(t) * (v' * v)
-    end=#
-    #l = Kp' * Kp
     return l, kp_sum/en.t_size
 end
 
@@ -280,6 +271,7 @@ function main(arg::Array{String,1})
 
     #model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
     model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
+    model_g = fmap(cu, model)
     #model = Chain(Dense(zeros(Float64, ag.n_dense, ag.in_size), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.n_dense, ag.n_dense), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.out_size, ag.n_dense), zeros(Float64, ag.out_size)))
     opt = ADAM()
 
@@ -301,7 +293,8 @@ function main(arg::Array{String,1})
                 end
                 p = [en.Ω, en.ξ*sin(2pi*t_step/en.t_size), en.Jz, en.Jx, en.hz]
                 x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
-                ag.Kp_TL[t_step,:] = model(x)
+                xg = gpu(x)
+                ag.Kp_TL[t_step,:] = Array(model_g(x))
                 ag.K_TL[t_step,:], ag.HF_TL[t_step,:] = micro_motion(ag.Kp_TL[t_step,:], ag.K_TL[tt,:],en,t_step)
                 #ag.K_TL[t,:] += Kp
                 HF_it += ag.HF_TL[t_step,:]/en.t_size
@@ -310,13 +303,13 @@ function main(arg::Array{String,1})
         end
         
 
-        grads = Flux.gradient(Flux.params(model)) do
+        grads = Flux.gradient(Flux.params(model_g)) do
             loss_calc_hyb(model, en, ag, HF_it)
             #loss_calc0(model, en, ag, t_step, HF_it)
             #loss_t(model, en, ag, t_step, it)
             #loss_t!(model, en, ag, t_step, it)
         end
-        Flux.Optimise.update!(opt, Flux.params(model), grads)
+        Flux.Optimise.update!(opt, Flux.params(model_g), grads)
 
         if(it==1) 
             println("First Learning Finish!")

@@ -51,7 +51,8 @@ function micro_motion(Kp_t::Vector{Float64}, K_t::Vector{Float64}, en::TS_env, t
     Kp = VtoM(Kp_t,en)
     K_t_new = K_t + (2pi/en.t_size/en.Ω) * Kp_t 
     Kt = VtoM(K_t_new,en)
-    HF_m = Hermitian(exp(1.0im*Kt)*(en.H_0 + en.V_t*sin(2pi*t/en.t_size) - Kp)*exp(-1.0im*Kt))
+    U = exp(1.0im*Kt)
+    HF_m = Hermitian(U*(en.H_0 + en.V_t*sin(2pi*t/en.t_size) - Kp)*U')
     HF = MtoV(HF_m, en)
     return K_t_new, HF
 end
@@ -60,7 +61,8 @@ function micro_motion2(Kp_t::Vector{Float64}, K_t::Vector{Float64}, en::TS_env, 
     Kp = VtoM(Kp_t,en)
     K_t_new = K_t + (2pi/en.t_size/en.Ω) * Kp_t 
     Kt = VtoM(K_t_new,en)
-    HF_m = Hermitian(exp(1.0im*Kt)*(en.H_0 + en.V_t*sin(2pi*t/en.t_size) - Kp)*exp(-1.0im*Kt))
+    U = exp(1.0im*Kt)
+    HF_m = Hermitian(U*(en.H_0 + en.V_t*sin(2pi*t/en.t_size) - Kp)*U')
     HF = MtoV(HF_m,en)
     return HF
 end
