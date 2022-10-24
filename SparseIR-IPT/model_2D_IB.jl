@@ -42,7 +42,7 @@ end
 
 function set_H(k::Vector{Float64},p::Parm)
     eps0::Float64 = p.t_i*cos(k[2]) + p.mu
-    t_x::Float64 = p.t_i*cos(k[1])
+    t_x::Float64 = p.t_i*(1+cos(k[1]))
     t_y::Float64 = p.t_b*sin(k[1])
     t_z::Float64 = p.Δ 
     ee = [eps0, t_x, t_y, t_z]
