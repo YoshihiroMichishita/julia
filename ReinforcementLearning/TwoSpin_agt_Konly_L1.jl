@@ -15,7 +15,7 @@ end
 
 function init_nQ(en::TS_env, n::Int=32, γ0::Float64=0.9, ϵ0::Float64=1.0)
     #H_0,V_tのパラメータの数＋K_tの行列＋H_F^a(t)の行列
-    in_size::Int = en.num_parm + 2*en.HS_size^2 
+    in_size::Int = en.num_parm + en.HS_size^2 
 
     #K'(t)の行列を出力
     out_size::Int = en.HS_size^2
@@ -129,7 +129,8 @@ function loss_fn_hybrid(en::TS_env, ag::agtQ, HF_given::Vector{Float64}, HF_calc
             break
             #lt = t-n+en.t_size
         end
-        l += ag.ϵ*(ag.γ^(n-1)) * diff_norm((HF_calc-ag.HF_TL[lt,:]),en)/en.t_size
+        l += (ag.γ^(n-1)) * diff_norm((HF_calc-ag.HF_TL[lt,:]),en)/en.t_size
+        l += ag.ϵ * sum(abs.(ag.Kp_TL[t,:]))/en.t_size
     end
     #l += diff_norm(HF_given - HF_calc,en)/en.t_size
     return l
@@ -179,7 +180,8 @@ function loss_calc_hyb(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
             tt=t-1
         end
         p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
-        x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+        #x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+        x = vcat([p, ag.K_TL[tt,:]]...)
         Kp = model0(x)
         kp_sum += Kp
         #ag.K_TL[t,:] += Kp
@@ -189,7 +191,7 @@ function loss_calc_hyb(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
         #l += diff_norm(kp_sum,en)/en.t_size
         #l += ag.γ^(5*(en.t_size/2 - abs(en.t_size/2-t))) * diff_norm(ag.K_TL[t,:],en)
         if(t==en.t_size)
-            l += diff_norm(HF_calc-ag.HF_TL[1,:],en)
+            l += 10.0*diff_norm(HF_calc-ag.HF_TL[1,:],en)
         end
     end
     l += diff_norm(kp_sum,en)/en.t_size
@@ -206,7 +208,8 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
             tt=t-1
         end
         p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
-        x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+        #x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+        x = vcat([p, ag.K_TL[tt,:]]...)
         #Kp = model0(x)
         ag.Kp_TL[t,:] = model0(x)
         kp_sum += ag.Kp_TL[t,:]
@@ -217,7 +220,7 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
         #l += ag.γ^(5*(en.t_size/2 - abs(en.t_size/2-t))) * diff_norm(ag.K_TL[t,:],en)
         #l += ag.γ^(5*(en.t_size - t)) * diff_norm(ag.K_TL[t,:],en)
         if(t==en.t_size)
-            l += diff_norm(ag.HF_TL[t,:]-ag.HF_TL[1,:],en)
+            l += 10.0*diff_norm(ag.HF_TL[t,:]-ag.HF_TL[1,:],en)
         end
     end
     l += diff_norm(kp_sum,en)
@@ -240,7 +243,7 @@ function loss_calc!(model0, en::TS_env, ag::agtQ, t::Int, HF_given::Vector{Float
         tt=t-1
     end
     p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
-    x = vcat([p, ag.K_TL[tt,:], ag.HF_TL[tt,:]]...)
+    x = vcat([p, ag.K_TL[tt,:]]...)
     Kp = model0(x)
     
     #ag.K_TL[t,:] += Kp
@@ -256,18 +259,6 @@ function updata_KpK!(en::TS_env, ag::agtQ, Kp_av::Vector{Float64})
         ag.Kp_TL[t,:] = ag.Kp_TL[t,:] - Kp_av
         ag.K_TL[t,:] = ag.K_TL[t,:] - t*Kp_av
         ag.HF_TL[t,:] = micro_motion2(ag.Kp_TL[t,:], ag.K_TL[t,:], en, t)
-    end
-end
-
-function KtoKp!(en::TS_env, ag::agtQ)
-    dt = 2pi/en.Ω/en.t_size
-    for t in 1:en.t_size
-        if(t == en.t_size)
-            tt = 1
-        else
-            tt = t+1
-        end
-        ag.Kp_TL[t,:] = (ag.K_TL[tt,:]-ag.K_TL[t,:])/dt
     end
 end
 
@@ -295,20 +286,17 @@ function main(arg::Array{String,1})
 
     #二次の高周波展開で初期値を代入
     ag.HF_TL[en.t_size,:] = init_HF(en)
-    #ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
+    
     #-MtoV(en.V_t, en)/en.Ω
 
+    #model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
     if(arg[11]=="init")
         model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
         ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
     else
         @load arg[11] model
         ag.K_TL = Matrix(CSV.read(arg[12], DataFrame))
-        KtoKp!(en, ag)
     end
-
-    #model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
-    #model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
     #model = Chain(Dense(zeros(Float64, ag.n_dense, ag.in_size), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.n_dense, ag.n_dense), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.out_size, ag.n_dense), zeros(Float64, ag.out_size)))
     opt = ADAM()
 
@@ -329,7 +317,8 @@ function main(arg::Array{String,1})
                     tt=t_step-1
                 end
                 p = [en.Ω, en.ξ*sin(2pi*t_step/en.t_size), en.Jz, en.Jx, en.hz]
-                x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+                #x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+                x = vcat([p, ag.K_TL[tt,:]]...)
                 ag.Kp_TL[t_step,:] = model(x)
                 ag.K_TL[t_step,:], ag.HF_TL[t_step,:] = micro_motion(ag.Kp_TL[t_step,:], ag.K_TL[tt,:],en,t_step)
                 #ag.K_TL[t,:] += Kp
@@ -341,6 +330,7 @@ function main(arg::Array{String,1})
 
         grads = Flux.gradient(Flux.params(model)) do
             loss_calc_hyb(model, en, ag, HF_it)
+            #ll_it[it] = loss_calc_hyb_test(model, en, ag, HF_it)
             #loss_calc0(model, en, ag, t_step, HF_it)
             #loss_t(model, en, ag, t_step, it)
             #loss_t!(model, en, ag, t_step, it)
@@ -375,7 +365,7 @@ function main(arg::Array{String,1})
             CSV.write("./HFt_it="*"$it" *".csv", save_data1)
 
         end=#
-        if(it%500 == 0 && it!=0)
+        if(it%1000 == 0 && it!=0)
             E = zeros(Float64, en.t_size, en.HS_size)
             for t_step in 1:en.t_size
                 E[t_step,:], v = eigen(VtoM(ag.HF_TL[t_step,:],en))
@@ -400,7 +390,6 @@ function main(arg::Array{String,1})
                 p4 = plot!(ag.Kp_TL[:,i], width=2.0)
             end
             savefig(p4,"./Kp_t$(it).png")
-            @save "mymodel$(it).bson" model
         end
     end
     println("Learning Finish!")
@@ -436,10 +425,9 @@ function main(arg::Array{String,1})
     savefig(p3,"./loss_iterate.png")
     println("Drawing Finish!")
 
-    #@save "mymodel.bson" model
+    @save "mymodel.bson" model
     
     
 end
 
 @time main(ARGS)
-#@time main(ARGS)
