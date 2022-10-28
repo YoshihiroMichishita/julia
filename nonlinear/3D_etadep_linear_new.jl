@@ -11,7 +11,7 @@ using Plots
 
 function main(arg::Array{String,1})
     println("t, p0, v, mu, Delta, eta, T, K_SIZE, W_MAX, W_SIZE")
-    mu0 = [0.005, 0.01, 0.015, 0.02, 0.025, 0.03, 0.035, 0.04, 0.045, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.12, 0.15]
+    mu0 = [0.01, 0.015, 0.02, 0.025, 0.03, 0.035, 0.04, 0.045, 0.05, 0.055, 0.06, 0.065, 0.07, 0.075, 0.08, 0.09, 0.1, 0.11, 0.12,0.13, 0.14, 0.15, 0.16]
     Drude_mu = zeros(Float64,length(mu0))
     app_Drude0_mu = zeros(Float64,length(mu0))
     BC_mu = zeros(Float64,length(mu0))

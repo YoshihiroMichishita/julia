@@ -402,6 +402,33 @@ function main(arg::Array{String,1})
             savefig(p4,"./Kp_t$(it).png")
             @save "mymodel$(it).bson" model
         end
+        if(it_MAX==1)
+            E = zeros(Float64, en.t_size, en.HS_size)
+            for t_step in 1:en.t_size
+                E[t_step,:], v = eigen(VtoM(ag.HF_TL[t_step,:],en))
+            end
+
+            p1 = plot(E[:,1].-E[1,1], xlabel="t_step", ylabel="E of HF_t", width=3.0)
+            p1 = plot!(E[:,2].-E[1,2], width=3.0)
+            p1 = plot!(E[:,3].-E[1,3], width=3.0)
+            p1 = plot!(E[:,4].-E[1,4], width=3.0)
+            savefig(p1,"./HF_t_check_gene.png")
+            println("Drawing Finish!")
+            #println(E[:,4])
+            p2 = plot(ag.K_TL[:,1], xlabel="t_step", ylabel="E of K_t", width=2.0)
+            for i in 2:en.HS_size^2
+                p2 = plot!(ag.K_TL[:,i], width=2.0)
+            end
+            save_data1 = DataFrame(ag.K_TL, :auto)
+            CSV.write("./K_TL_check_gene.csv", save_data1)
+            savefig(p2,"./K_t_check_gene.png")
+            p4 = plot(ag.Kp_TL[:,1], xlabel="t_step", ylabel="E of Kp_t", width=2.0)
+            for i in 2:en.HS_size^2
+                p4 = plot!(ag.Kp_TL[:,i], width=2.0)
+            end
+            savefig(p4,"./Kp_t_check_gene.png")
+            @save "mymodel_check_gene.bson" model
+        end
     end
     println("Learning Finish!")
     #=

@@ -33,7 +33,7 @@ function get_kk(K_SIZE::Int)
 end
 
 function Disp_HSL(p::Parm, H_SIZE::Int)
-    E = zeros(Floart64, 4*p.K_SIZE, H_SIZE)
+    E = zeros(Float64, 4*p.K_SIZE, H_SIZE)
 
     for K0 in 1:p.K_SIZE
         KK = 4pi/3*K0/p.K_SIZE
