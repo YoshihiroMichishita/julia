@@ -211,7 +211,16 @@ function main(arg::Array{String,1})
     #println(arg)
     println("t, p0, v, mu, Delta, eta, T, K_SIZE, W_MAX, W_SIZE")
     #mu0 = [0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.1, 0.12, 0.14, 0.16]
-    mu0 = [0.01, 0.015, 0.02, 0.025, 0.03, 0.035, 0.04, 0.045, 0.05, 0.055, 0.06, 0.065, 0.07, 0.075, 0.08, 0.09, 0.1, 0.11, 0.12,0.13, 0.14, 0.15, 0.16]
+    mu0 = range(-0.2,0.2,length=21)
+    #collect(-0.2:0.02:0.2)
+    #, 0.025, 0.03, 0.035, 0.04, 0.045, 0.05, 0.055, 0.06]
+    #,0.065, 0.07, 0.075,0.08, 0.09, 0.1, 0.11, 0.12, 0.13, 0.14, 0.15, 0.16]
+    #0.005, 0.01, 0.015, 0.02, 0.025, 0.03, 0.035, 0.04, 0.045, 0.05, 0.055, 0.06, 
+    #[0.01, 0.015, 0.025, 0.035, 0.045, 0.055, 0.065, 0.075, 0.09, 0.11, 0.13, 0.15]
+    #[0.005, 0.01, 0.0125, 0.015, 0.0175, 0.02, 0.025, 0.03, 0.035, 0.04]
+    #[0.005, 0.01, 0.0125, 0.015, 0.0175, 0.02, 0.025, 0.03, 0.035, 0.04, 0.05, 0.06, 0.08, 0.1]
+    #collect(-0.2:0.02:0.2)
+    #collect(-0.2:0.01:0.01)
     DrudeX_mu = zeros(Float64,length(mu0))
     Drude0_mu = zeros(Float64,length(mu0))
     BCX_mu = zeros(Float64,length(mu0))
@@ -221,7 +230,7 @@ function main(arg::Array{String,1})
 
     for j in 1:length(mu0)
         #Parm: t, p0, v, mu, Delta, eta, T, K_SIZE, W_MAX, W_SIZE
-        p = Parm(parse(Float64,arg[1]), pi/2, parse(Float64,arg[2]), parse(Float64,arg[3]), parse(Float64,arg[4]), mu0[j], parse(Float64,arg[5]), parse(Int,arg[6]), parse(Float64,arg[7]), parse(Int,arg[8]))
+        p = Parm(parse(Float64,arg[1]), pi/2, parse(Float64,arg[2]), mu0[j], parse(Float64,arg[3]), parse(Float64,arg[4]), parse(Float64,arg[5]), parse(Int,arg[6]), parse(Float64,arg[7]), parse(Int,arg[8]))
 
         k2 = collect(Iterators.product((0:pi/p.K_SIZE:pi)[1:end-1], (pi/p.K_SIZE:pi/p.K_SIZE:(pi+pi/p.K_SIZE))[1:end-1]))
         for kz in collect(0:pi/p.K_SIZE:pi)[1:end]
@@ -262,18 +271,18 @@ function main(arg::Array{String,1})
     end
     println("finish the calculation!")
     # headerの名前を(Q,E1,E2)にして、CSVファイル形式を作成
-    save_data = DataFrame(eta=mu0, Drude=DrudeX_mu, BCD=BCX_mu, dQM=dQMX_mu, Green_Dr=Drude0_mu, app_QM=app_QM_mu, Green_tot=Green_mu)
+    save_data = DataFrame(mu=mu0, Drude=DrudeX_mu, BCD=BCX_mu, dQM=dQMX_mu, Green_Dr=Drude0_mu, app_QM=app_QM_mu, Green_tot=Green_mu)
     #「./」で現在の(tutorial.ipynbがある)ディレクトリにファイルを作成の意味、指定すれば別のディレクトリにファイルを作ることも出来る。
-    CSV.write("./eta_dep_ZZ.csv", save_data)
+    CSV.write("./mu_dep_ZZ.csv", save_data)
 
     #gr()
     ENV["GKSwstype"]="nul"
-    p1=plot(mu0, DrudeX_mu, label="Drude",xlabel="η",ylabel="σ",title="linear conductivity", width=2.0, marker=:circle)
+    p1=plot(mu0, DrudeX_mu, label="Drude",xlabel="μ",ylabel="σ",title="linear conductivity", width=2.0, marker=:circle)
     p1=plot!(mu0, BCX_mu, label="sQM_re", width=2.0, marker=:circle)
     p1=plot!(mu0, dQMX_mu, label="sQM_im", width=2.0, marker=:circle)
     p1=plot!(mu0, Green_mu-DrudeX_mu-BCX_mu-dQMX_mu, label="TF", width=2.0, marker=:circle)
     p1=plot!(mu0, Green_mu, label="Green", width=2.0, marker=:circle)
-    savefig(p1,"./eta_dep_ZZ.png")
+    savefig(p1,"./mu_dep_ZZ.png")
 end
 
 @time main(ARGS)
