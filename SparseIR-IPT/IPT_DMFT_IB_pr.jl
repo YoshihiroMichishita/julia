@@ -1,5 +1,5 @@
 using Distributed
-addprocs(12)
+addprocs(16)
 @everywhere include("model_2D_IB.jl")
 
 @everywhere using SparseIR, Plots
@@ -8,6 +8,8 @@ addprocs(12)
 @everywhere import SparseIR: valueim, value
 @everywhere import SparseIR: fit
 #using LinearAlgebra
+
+@everywhere using SharedArrays
 
 
 @everywhere struct IR_params
@@ -58,9 +60,11 @@ end
     sigma_matsu::Vector{Matrix{ComplexF64}}
 
     n_ir::Int
+    l_num::Int
+    batch_num::Int
 end
 
-@everywhere function init_zero_g(ir::IR_params)
+@everywhere function init_zero_g(ir::IR_params, l::Int, bb::Int)
     
     g0_ir::Vector{Matrix{ComplexF64}} = []
     g0_ir_vec = zeros(Float64, 43, 4)
@@ -76,11 +80,13 @@ end
     sigma_matsu::Vector{Matrix{ComplexF64}} = []
 
     n_ir::Int = 0
+    l_num = l
+    batch_num = bb
 
-    return g0_ir, g0_ir_vec, g0_tau, g0_matsu, g_ir, g_ir_vec, g_matsu, sigma_ir, sigma_tau, sigma_matsu, n_ir
+    return g0_ir, g0_ir_vec, g0_tau, g0_matsu, g_ir, g_ir_vec, g_matsu, sigma_ir, sigma_tau, sigma_matsu, n_ir, l_num, batch_num
 end
 
-function get_G0mlocal!(p::Parm, k_BZ::Vector{Vector{Float64}}, sw::Int,ir::IR_params, g::Green_Sigma)
+@everywhere function get_G0mlocal!(p::Parm, k_BZ::Vector{Vector{Float64}}, sw::Int,ir::IR_params, g::Green_Sigma)
     if(sw == 1)
         for wn in 1:ir.n_matsu
             gw_l = zeros(ComplexF64, 2, 2)
@@ -112,14 +118,14 @@ function get_G0mlocal!(p::Parm, k_BZ::Vector{Vector{Float64}}, sw::Int,ir::IR_pa
     return nothing
 end
 
-function MatsuToTau!(ir::IR_params, g::Green_Sigma)
+@everywhere function MatsuToTau!(ir::IR_params, g::Green_Sigma)
     g.g0_ir = fit(ir.smpl_matsu, g.g0_matsu, dim=1)
     g.g_ir = fit(ir.smpl_matsu, g.g_matsu, dim=1)
     g.n_ir = size(g.g0_ir)[1]
     g.g0_tau = evaluate(ir.smpl_tau, g.g0_ir, dim=1)
 end
 
-function calc_sigma!(sw::Int, ir::IR_params, g::Green_Sigma)
+@everywhere function calc_sigma!(sw::Int, ir::IR_params, g::Green_Sigma)
     for tau in 1:ir.n_tau
         if(sw == 1)
             test = zeros(ComplexF64, 2, 2)
@@ -138,7 +144,7 @@ function calc_sigma!(sw::Int, ir::IR_params, g::Green_Sigma)
     return nothing
 end
 
-function TauToMatsu!(sw::Int, ir::IR_params, g::Green_Sigma, γ::Float64)
+@everywhere function TauToMatsu!(sw::Int, ir::IR_params, g::Green_Sigma, γ::Float64)
     ir_new = fit(ir.smpl_tau, g.sigma_tau)
     diff0 =0.0
     sum0 = 0.0
@@ -161,7 +167,7 @@ function TauToMatsu!(sw::Int, ir::IR_params, g::Green_Sigma, γ::Float64)
     return diff
 end
 
-function update_g!(p::Parm, k_BZ::Vector{Vector{Float64}},sw::Int, ir::IR_params, g::Green_Sigma, γ::Float64)
+@everywhere function update_g!(p::Parm, k_BZ::Vector{Vector{Float64}},sw::Int, ir::IR_params, g::Green_Sigma, γ::Float64)
     get_G0mlocal!(p, k_BZ, sw, ir, g)
     MatsuToTau!(ir, g)
     calc_sigma!(sw, ir, g)
@@ -170,7 +176,7 @@ function update_g!(p::Parm, k_BZ::Vector{Vector{Float64}},sw::Int, ir::IR_params
     return diff
 end
 
-function MtoV!(g::Green_Sigma)
+@everywhere function MtoV!(g::Green_Sigma)
     g.g0_ir_vec = zeros(Float64, g.n_ir, 4)
     g.g_ir_vec = zeros(Float64, g.n_ir, 4)
     for it in 1:g.n_ir
@@ -181,7 +187,7 @@ function MtoV!(g::Green_Sigma)
     end
 end
 
-function MtoV(MM::Vector{Matrix{ComplexF64}})
+@everywhere function MtoV(MM::Vector{Matrix{ComplexF64}})
     l = size(MM)[1]
     VV = zeros(ComplexF64, l, 4)
     for it in 1:l
@@ -200,20 +206,26 @@ using Flux
     return f = 0.5*sum((vec.^2)) + λ*sum(abs.(rho_ls))
 end
 
-function fit_rho0w(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, tr_w, it_MAX::Int)
-    @everywhere sn = range(-12.0, 0.0, length=l_num)
-    @everywhere lam_test = 10 .^ (sn)
-    @everywhere opt = ADAM()
+@everywhere function fit_rho0w(ir::IR_params, g::Green_Sigma, tr_w, it_MAX::Int)
+    sn = range(-12.0, 0.0, length=g.l_num)
+    lam_test = 10 .^ (sn)
+    opt = ADAM()
     #s_rho_l::Vector{Matrix{Float64}} = []
-    s_rho_l = SharedArray{Float64, 3}(l_num, g.n_ir, 4)
-    #rand(Float64, l_num, g.n_ir)
-    #s_F_rho = 1000.0 * ones(Float64, l_num)
-    s_F_rho = SharedArray{Float64}(l_num)
-    s_F_rho = 1000.0 * ones(Float64, l_num)
-    @distributed for ll in 1:l_num
+    s_rho_l = zeros(Float64, g.l_num, g.n_ir, 4)
+    #SharedArray{Float64, 3}(g.l_num, g.n_ir, 4)
+    #rand(Float64, g.l_num, g.n_ir)
+    #s_F_rho = 1000.0 * ones(Float64, g.l_num)
+    #s_F_rho = SharedArray{Float64}(g.l_num)
+    s_F_rho = 1000.0 * ones(Float64, g.l_num)
+    for ll in 1:g.l_num
         lam = lam_test[ll]
-        for b in 1:batch_num
+        #count::Int = 0
+        s_rho_lb = SharedArray{Float64, 3}(g.batch_num, g.n_ir, 4)
+        s_F_rhob = SharedArray{Float64}(g.batch_num)
+        @distributed for b in 1:g.batch_num
             rho_ll = rand(Float64, g.n_ir, 4)
+            
+            #rho_ll = rand(Float64, g.n_ir)
             F_old = 1000.0
             F_new = 1000.0
             for i in 1:it_MAX
@@ -226,12 +238,22 @@ function fit_rho0w(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, tr
                 if(abs(F_old-F_new)/abs(F_old)<1e-6)
                     break
                 end
+                #if(i==it_MAX)
+                #    count += 1
+                #end
             end
-            if(s_F_rho[ll] > F_new)
-                s_rho_l[ll,:,:] = rho_ll
-                s_F_rho[ll] = F_new
+            if(s_F_rhob[b] > F_new)
+                s_rho_lb[b,:,:] = rho_ll
+                s_F_rhob[b] = F_new
             end 
         end
+        for b in 1:g.batch_num
+            if(s_F_rho[ll] > s_F_rhob[b])
+                s_rho_l[ll,:,:] = s_rho_lb[b,:,:]
+                s_F_rho[ll] = s_F_rhob[b]
+            end 
+        end
+        #println(count)
     end
     b = (log(s_F_rho[end])-log(s_F_rho[1]))/(log(lam_test[end])-log(lam_test[1]))
     a = s_F_rho[1]*lam_test[1]^(-b)
@@ -255,20 +277,23 @@ end
     return f = 0.5*sum((vec.^2)) + λ*sum(abs.(rho_ls))
 end
 
-function fit_rhow(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, tr_w, it_MAX::Int)
-    @everywhere sn = range(-12.0, 0.0, length=l_num)
-    @everywhere lam_test = 10 .^ (sn)
-    @everywhere opt = ADAM()
+@everywhere function fit_rhow(ir::IR_params, g::Green_Sigma, tr_w, it_MAX::Int)
+    sn = range(-12.0, 0.0, length=g.l_num)
+    lam_test = 10 .^ (sn)
+    opt = ADAM()
     #s_rho_l::Vector{Matrix{Float64}} = []
-    s_rho_l = SharedArray{Float64, 3}(l_num, g.n_ir, 4)
-    #rand(Float64, l_num, g.n_ir)
-    #s_F_rho = 1000.0 * ones(Float64, l_num)
-    s_F_rho = SharedArray{Float64}(l_num)
-    s_F_rho = 1000.0 * ones(Float64, l_num)
-    @distributed for ll in 1:l_num
+    s_rho_l = zeros(Float64, g.l_num, g.n_ir, 4)
+    #SharedArray{Float64, 3}(g.l_num, g.n_ir, 4)
+    #rand(Float64, g.l_num, g.n_ir)
+    s_F_rho = 1000.0 * ones(Float64, g.l_num)
+    #s_F_rho = SharedArray{Float64}(g.l_num)
+    #s_F_rho = 1000.0 * ones(Float64, g.l_num)
+    for ll in 1:g.l_num
         lam = lam_test[ll]
         count::Int = 0
-        for b in 1:batch_num
+        s_rho_lb = SharedArray{Float64, 3}(g.batch_num, g.n_ir, 4)
+        s_F_rhob = SharedArray{Float64}(g.batch_num)
+        @distributed for b in 1:g.batch_num
             rho_ll = rand(Float64, g.n_ir, 4)
             
             #rho_ll = rand(Float64, g.n_ir)
@@ -288,9 +313,15 @@ function fit_rhow(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, tr_
                     count += 1
                 end
             end
-            if(s_F_rho[ll] > F_new)
-                s_rho_l[ll,:,:] = rho_ll
-                s_F_rho[ll] = F_new
+            if(s_F_rhob[b] > F_new)
+                s_rho_lb[b,:,:] = rho_ll
+                s_F_rhob[b] = F_new
+            end 
+        end
+        for b in 1:g.batch_num
+            if(s_F_rho[ll] > s_F_rhob[b])
+                s_rho_l[ll,:,:] = s_rho_lb[b,:,:]
+                s_F_rho[ll] = s_F_rhob[b]
             end 
         end
         println(count)
@@ -310,14 +341,14 @@ function fit_rhow(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, tr_
 end
 
 #=
-function fit_rhow_pr(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, tr_w, it_MAX::Int)
-    sn = range(-12.0, 0.0, length=l_num)
+function fit_rhow_pr(ir::IR_params, g::Green_Sigma, g.l_num::Int, batch_num::Int, tr_w, it_MAX::Int)
+    sn = range(-12.0, 0.0, length=g.l_num)
     lam_test = 10 .^ (sn)
     opt = ADAM()
     s_rho_l::Vector{Matrix{Float64}} = []
-    #rand(Float64, l_num, g.n_ir)
-    s_F_rho = 1000.0 * ones(Float64, l_num)
-    @distributed for ll in 1:l_num
+    #rand(Float64, g.l_num, g.n_ir)
+    s_F_rho = 1000.0 * ones(Float64, g.l_num)
+    @distributed for ll in 1:g.l_num
         lam = lam_test[ll]
         count::Int = 0
         for b in 1:batch_num
@@ -365,7 +396,7 @@ function fit_rhow_pr(ir::IR_params, g::Green_Sigma, l_num::Int, batch_num::Int, 
     return rho_omega
 end=#
 
-function reshape(rho::Vector{Float64}, cutoff::Float64)
+@everywhere function reshape(rho::Vector{Float64}, cutoff::Float64)
     v_it::Vector{Int} = []
     rho_rep = rho
     sw = true
@@ -404,8 +435,8 @@ function reshape(rho::Vector{Float64}, cutoff::Float64)
     return rho_rep
 end
 
-f(beta::Float64, w::Float64) = 1.0/(1.0+exp(beta*w))
-function renorm_rho(beta::Float64, w::Vector{Float64}, rho::Vector{Float64})
+@everywhere f(beta::Float64, w::Float64) = 1.0/(1.0+exp(beta*w))
+@everywhere function renorm_rho(beta::Float64, w::Vector{Float64}, rho::Vector{Float64})
     n = 0.0
     dw = w[2]-w[1]
     for i in 1:length(w)
@@ -417,7 +448,7 @@ function renorm_rho(beta::Float64, w::Vector{Float64}, rho::Vector{Float64})
 end
 
 
-function KK_GR(w::Vector{Float64}, rho::Vector{Matrix{ComplexF64}})
+@everywhere function KK_GR(w::Vector{Float64}, rho::Vector{Matrix{ComplexF64}})
     #GR_ = zeros(ComplexF64, length(w))
     GR_::Vector{Matrix{ComplexF64}} = []
     dw = w[2]-w[1]
@@ -434,7 +465,7 @@ function KK_GR(w::Vector{Float64}, rho::Vector{Matrix{ComplexF64}})
     return GR_
 end
 
-function VtoM(Vec::Matrix{Float64})
+@everywhere function VtoM(Vec::Matrix{Float64})
     MM::Vector{Matrix{ComplexF64}} = []
     for it in 1:size(Vec)[1]
         Mat = Vec[it,:]' * sigma
@@ -443,7 +474,7 @@ function VtoM(Vec::Matrix{Float64})
     return MM
 end
 
-function reshape_g(w::Vector{Float64}, beta::Float64, Aw::Matrix{Float64})
+@everywhere function reshape_g(w::Vector{Float64}, beta::Float64, Aw::Matrix{Float64})
     g11 = reshape(Aw[:,1]+Aw[:,4],0.3)
     g22 = reshape(Aw[:,1]-Aw[:,4],0.3)
 
@@ -471,10 +502,8 @@ function main(arg::Vector{String})
     p = Parm(set_parm(arg)...)
     println(p)
     ir = IR_params(set_IR(parse(Float64,arg[7]),parse(Float64,arg[8]),parse(Float64,arg[9]))...)
-    lamda_num = parse(Int,arg[10])
-    batch_num = parse(Int,arg[11])
     w_num = parse(Int,arg[12])
-    g = Green_Sigma(init_zero_g(ir)...)
+    g = Green_Sigma(init_zero_g(ir, parse(Int,arg[10]), parse(Int,arg[11]))...)
     w_mesh = collect(-ir.bw:2ir.bw/(w_num-1):ir.bw)
 
     tr_w = transpose(ir.basis.v(w_mesh))
@@ -491,8 +520,8 @@ function main(arg::Vector{String})
     end
 
     MtoV!(g)
-    g0 = fit_rho0w(ir, g, lamda_num, batch_num, tr_w, 20000)
-    gi = fit_rhow(ir, g, lamda_num, batch_num, tr_w, 20000)
+    g0 = fit_rho0w(ir, g, tr_w, 20000)
+    gi = fit_rhow(ir, g, tr_w, 20000)
 
     
 
