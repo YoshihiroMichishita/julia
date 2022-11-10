@@ -193,6 +193,8 @@ function main(arg::Array{String,1})
         opt = Flux.Optimise.Optimiser(ClipValue(1e-3),Adam(1e-3))
     elseif(arg[10]=="rms")
         opt = RMSProp()
+    elseif(arg[10]=="gd")
+        opt = Descent()
     else
         opt = ADAM()
     end
