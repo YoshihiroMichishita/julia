@@ -15,7 +15,7 @@ end
 
 function init_nQ(en::TS_env, n::Int=32, γ0::Float64=0.9, ϵ0::Float64=1.0)
     #H_0,V_tのパラメータの数＋K_tの行列＋H_F^a(t)の行列
-    in_size::Int = en.num_parm + en.HS_size^2 
+    in_size::Int = en.num_parm + en.HS_size^2 -1
 
     #K'(t)の行列を出力
     out_size::Int = en.HS_size^2
@@ -101,7 +101,7 @@ function loss_calc_hyb(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
         else
             tt=t-1
         end
-        p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
+        p = [en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
         #x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
         x = vcat([p, ag.K_TL[tt,:]]...)
         Kp = model0(x)
@@ -130,7 +130,7 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
         else
             tt=t-1
         end
-        p = [en.Ω, en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
+        p = [en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
         #x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
         x = vcat([p, ag.K_TL[tt,:]]...)
 
@@ -173,6 +173,8 @@ using CSV
 using BSON: @save
 using BSON: @load
 using Plots
+using LaTeXStrings
+Plots.scalefontsizes(1.4)
 ENV["GKSwstype"]="nul"
 
 function main(arg::Array{String,1})
@@ -210,7 +212,8 @@ function main(arg::Array{String,1})
     #model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
 
     if(arg[12]=="init")
-        model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
+        #model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
+        model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
         ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
     else
         @load arg[12] model
@@ -227,7 +230,7 @@ function main(arg::Array{String,1})
                 else
                     tt=t_step-1
                 end
-                p = [en.Ω, en.ξ*sin(2pi*t_step/en.t_size), en.Jz, en.Jx, en.hz]
+                p = [en.ξ*sin(2pi*t_step/en.t_size), en.Jz, en.Jx, en.hz]
                 x = vcat([p, ag.K_TL[tt,:]]...)
 
                 ag.Kp_TL[t_step,:] = model(x)
@@ -244,21 +247,29 @@ function main(arg::Array{String,1})
                 E[t_step,:], v = eigen(VtoM(ag.HF_TL[t_step,:],en))
             end
 
-            p1 = plot(E[:,1].-E[1,1], xlabel="t_step", ylabel="E of HF_t", width=3.0)
-            p1 = plot!(E[:,2].-E[1,2], width=3.0)
-            p1 = plot!(E[:,3].-E[1,3], width=3.0)
-            p1 = plot!(E[:,4].-E[1,4], width=3.0)
-            savefig(p1,"./HF_t_check_gene.png")
+            p0 = plot(ag.HF_TL[:,1].-ag.HF_TL[1,1], xlabel="t-step", ylabel=L"H_r(t)", width=2.0, label="h1")
+            for i in 2:en.HS_size^2
+                p0 = plot!(ag.HF_TL[:,i].-ag.HF_TL[1,i], width=2.0, label="h$(i)")
+            end
+            savefig(p0,"./Hr_t_check_gene.pdf")
+            save_data0 = DataFrame(ag.HF_TL, :auto)
+            CSV.write("./Hr_TL_check_gene.csv", save_data0)
+
+            p1 = plot(E[:,1].-E[1,1], xlabel="t-step", ylabel="E of "*L"H_r(t)", width=3.0, label="E1")
+            p1 = plot!(E[:,2].-E[1,2], width=3.0, label="E2")
+            p1 = plot!(E[:,3].-E[1,3], width=3.0, label="E3")
+            p1 = plot!(E[:,4].-E[1,4], width=3.0, label="E4")
+            savefig(p1,"./HF_t_check_gene_bad.pdf")
             println("Drawing Finish!")
             #println(E[:,4])
-            p2 = plot(ag.K_TL[:,1], xlabel="t_step", ylabel="E of K_t", width=2.0)
+            p2 = plot(ag.K_TL[:,1], xlabel="t-step", ylabel="K(t)", width=2.0, label="h1")
             for i in 2:en.HS_size^2
-                p2 = plot!(ag.K_TL[:,i], width=2.0)
+                p2 = plot!(ag.K_TL[:,i], width=2.0, label="h$(i)")
             end
             save_data1 = DataFrame(ag.K_TL, :auto)
             CSV.write("./K_TL_check_gene.csv", save_data1)
-            savefig(p2,"./K_t_check_gene.png")
-            p4 = plot(ag.Kp_TL[:,1], xlabel="t_step", ylabel="E of Kp_t", width=2.0)
+            savefig(p2,"./K_t_check_gene.pdf")
+            p4 = plot(ag.Kp_TL[:,1], xlabel="t-step", ylabel="E of Kp_t", width=2.0)
             for i in 2:en.HS_size^2
                 p4 = plot!(ag.Kp_TL[:,i], width=2.0)
             end
@@ -284,7 +295,7 @@ function main(arg::Array{String,1})
                 E[t_step,:], v = eigen(VtoM(ag.HF_TL[t_step,:],en))
             end
 
-            p1 = plot(E[:,1].-E[1,1], xlabel="t_step", ylabel="E of HF_t", width=3.0)
+            p1 = plot(E[:,1].-E[1,1], xlabel="t-step", ylabel="E of HF_t", width=3.0)
             p1 = plot!(E[:,2].-E[1,2], width=3.0)
             p1 = plot!(E[:,3].-E[1,3], width=3.0)
             p1 = plot!(E[:,4].-E[1,4], width=3.0)
