@@ -14,19 +14,19 @@ mutable struct agtQ
 end
 
 function init_nQ(en::TS_env, n::Int=32, γ0::Float64=0.9, ϵ0::Float64=1.0)
-    #width of the input layer (ξ, J_z, J_x, h_z, K(t))
+    #H_0,V_tのパラメータの数＋K_tの行列＋H_F^a(t)の行列
     in_size::Int = en.num_parm + en.HS_size^2 -1
 
-    #the size of K'(t)
+    #K'(t)の行列を出力
     out_size::Int = en.HS_size^2
 
-    #width of the hidden layers
+    #中間層のニューロンの数
     n_dense::Int = n
 
-    # inverse weight of the time-periodicity 
+    #乱数発生用のパラメータ
     ϵ::Float64 = ϵ0
 
-    #discount rate
+    #割引率
     γ::Float64 = γ0
 
     HF_TL = zeros(Float64, en.t_size, en.HS_size^2)
@@ -37,37 +37,28 @@ function init_nQ(en::TS_env, n::Int=32, γ0::Float64=0.9, ϵ0::Float64=1.0)
 end
 
 
-#calculate H_r(t) & K(t+δt) from K'(t) & K(t)
+#K'(t)からK(t),H_F^a(t)を計算する関数
 function micro_motion(Kp_t::Vector{Float64}, K_t::Vector{Float64}, en::TS_env, t::Int)
-    #Kp = VtoM(Kp_t,en)
-    #dt = (2pi/en.t_size/en.Ω)
-    Kt = VtoM(K_t, en)
+    Kp = VtoM(Kp_t,en)
+    K_t_new = K_t + (2pi/en.t_size/en.Ω) * Kp_t 
+    Kt = VtoM(K_t_new,en)
     U = exp(1.0im*Kt)
-    K_t_new = K_t + en.dt * Kp_t
-    Kt_new = VtoM(K_t_new,en)
-    U_new = exp(1.0im*Kt_new)
-    dU = (U_new - U)/en.dt
-    HF_m = Hermitian(U*(en.H_0 + en.V_t*sin(2pi*t/en.t_size))*U' -1.0im*(U*dU'-dU*U')/2)
+    HF_m = Hermitian(U*(en.H_0 + en.V_t*sin(2pi*t/en.t_size) - Kp)*U')
     HF = MtoV(HF_m, en)
     return K_t_new, HF
 end
 
-#calculate H_r(t) from K'(t) & K(t)
 function micro_motion2(Kp_t::Vector{Float64}, K_t::Vector{Float64}, en::TS_env, t::Int)
-    #dt = (2pi/en.t_size/en.Ω)
-    Kt = VtoM(K_t, en)
+    Kp = VtoM(Kp_t,en)
+    K_t_new = K_t + (2pi/en.t_size/en.Ω) * Kp_t 
+    Kt = VtoM(K_t_new,en)
     U = exp(1.0im*Kt)
-    K_t_new = K_t + en.dt * Kp_t
-    Kt_new = VtoM(K_t_new,en)
-    U_new = exp(1.0im*Kt_new)
-    dU = (U_new - U)/en.dt
-    HF_m = Hermitian(U*(en.H_0 + en.V_t*sin(2pi*t/en.t_size))*U' -1.0im*(dU*dU'-dU*U')/2)
-    #HF_m = Hermitian(U*(en.H_0 + en.V_t*sin(2pi*t/en.t_size) - Kp)*U')
+    HF_m = Hermitian(U*(en.H_0 + en.V_t*sin(2pi*t/en.t_size) - Kp)*U')
     HF = MtoV(HF_m,en)
     return HF
 end
 
-#caclulate L2 norm for matrix
+
 function diff_norm(V::Vector{Float64}, en::TS_env)
     M = VtoM(V,en)
     e, v = eigen(M)
@@ -82,7 +73,7 @@ function diff_L1norm(V::Vector{Float64}, en::TS_env)
     return n
 end
 
-#loss function
+#lossの関数
 function loss_fn_hybrid(en::TS_env, ag::agtQ, HF_given::Vector{Float64}, HF_calc::Vector{Float64}, t::Int)
     l::Float64 = 0.0
     for n in 1:(en.t_size-1) 
@@ -100,7 +91,7 @@ function loss_fn_hybrid(en::TS_env, ag::agtQ, HF_given::Vector{Float64}, HF_calc
     return l
 end
 
-#calculate the loss function in a single cycle 
+#gradient内で変数をHF,Ktを更新する事が出来ないので更新しないversion
 function loss_calc_hyb(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
     l::Float64 = 0.0
     kp_sum = zeros(Float64, en.HS_size^2)
@@ -129,7 +120,7 @@ function loss_calc_hyb(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
     return l 
 end
 
-#calculate the loss function in a single cycle & update K(t)&H_r(t)
+#更新するversion
 function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
     l::Float64 = 0.0
     kp_sum = zeros(Float64, en.HS_size^2)
@@ -204,8 +195,6 @@ function main(arg::Array{String,1})
         opt = RMSProp()
     elseif(arg[10]=="gd")
         opt = Descent()
-    elseif(arg[10]=="adab")
-        opt = AdaBelief()
     else
         opt = ADAM()
     end

@@ -100,6 +100,16 @@ function loss_fn_hybrid(en::TS_env, ag::agtQ, HF_given::Vector{Float64}, HF_calc
     return l
 end
 
+function periodic(en::TS_env, Kp_sum::Vector{Float64})
+    K_M = VtoM(Kp_sum,en)
+    e, v = eigen(K_M)
+    s::Float64 = 0.0
+    for i in 1:en.HS_size
+        s += (e[i] * (e[i]^2 - (2pi)^2))^2
+    end
+    return s
+end
+
 #calculate the loss function in a single cycle 
 function loss_calc_hyb(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
     l::Float64 = 0.0
@@ -114,7 +124,7 @@ function loss_calc_hyb(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
         #x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
         x = vcat([p, ag.K_TL[tt,:]]...)
         Kp = model0(x)
-        kp_sum += Kp
+        kp_sum += Kp*en.dt
 
         HF_calc = micro_motion2(Kp, ag.K_TL[tt,:],en,t)
         l += loss_fn_hybrid(en,ag, HF_given, HF_calc,t)
@@ -125,7 +135,8 @@ function loss_calc_hyb(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
         end
         =#
     end
-    l += diff_norm(kp_sum,en)/en.t_size
+    l += periodic(en, kp_sum)
+    #diff_norm(kp_sum,en)/en.t_size
     return l 
 end
 
@@ -145,7 +156,7 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
 
         ag.Kp_TL[t,:] = model0(x)
 
-        kp_sum += ag.Kp_TL[t,:]
+        kp_sum += ag.Kp_TL[t,:]*en.dt
 
         ag.K_TL[t,:], ag.HF_TL[t,:] = micro_motion(ag.Kp_TL[t,:], ag.K_TL[tt,:],en,t)
         l += loss_fn_hybrid(en,ag, HF_given, ag.HF_TL[t,:],t)
@@ -155,7 +166,8 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
         end
         =#
     end
-    l += diff_norm(kp_sum,en)/en.t_size
+    l += periodic(en, kp_sum)
+    #diff_norm(kp_sum,en)/en.t_size
     #=
     if((t+en.t_size/10)>=en.t_size)
         v = ag.K_TL[t,:]
@@ -204,8 +216,6 @@ function main(arg::Array{String,1})
         opt = RMSProp()
     elseif(arg[10]=="gd")
         opt = Descent()
-    elseif(arg[10]=="adab")
-        opt = AdaBelief()
     else
         opt = ADAM()
     end
