@@ -26,6 +26,7 @@ struct TS_env
     H_0::Hermitian{ComplexF64, Matrix{ComplexF64}}
     V_t::Hermitian{ComplexF64, Matrix{ComplexF64}}
     σ_vec::Vector{Hermitian{ComplexF64, Matrix{ComplexF64}}}
+    dt::Float64
 end
 
 # generate matrix for the vectrization of matrix
@@ -76,8 +77,9 @@ function init_env(t::Int=100, Ω0::Float64 = 10.0, ξ0::Float64 = 0.2, Jz0::Floa
     V_t::Hermitian{ComplexF64, Matrix{ComplexF64}} = Hermitian([ 0 -ξ -ξ 0; -ξ 0 0 -ξ; -ξ 0 0 -ξ; 0 -ξ -ξ 0])
 
     σ_vec = generate_M(HS_size)
+    dt = 2pi/t_size/Ω
 
-    return t_size, HS_size, num_parm, Ω, ξ, Jz, Jx, hz, H_0, V_t, σ_vec
+    return t_size, HS_size, num_parm, Ω, ξ, Jz, Jx, hz, H_0, V_t, σ_vec, dt
 end
 
 #translate vector to matrix 
