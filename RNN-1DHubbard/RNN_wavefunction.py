@@ -64,6 +64,7 @@ class RNNwavefunction(object):
                 #zero state returns a zero filled tensor withs shape = (self.numsamples, num_units)
 
                 for n in range(self.N):
+                    #inputを全て0にして、RNN使ってサンプルを生成。学習はしていないっぽい？
                     rnn_output, rnn_state = self.rnn(inputs, rnn_state) #Compute the next hidden states
                     output=self.dense(rnn_output) #Apply the Softmax layer
                     #outputの生成確率を使って各サイトの状態についてラベル付け(1~n)したものを生成
