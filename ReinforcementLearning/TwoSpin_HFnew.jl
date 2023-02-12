@@ -14,19 +14,19 @@ mutable struct agtQ
 end
 
 function init_nQ(en::TS_env, n::Int=32, γ0::Float64=0.9, ϵ0::Float64=1.0)
-    #width of the input layer (ξ, J_z, J_x, h_z, K(t))
+    #H_0,V_tのパラメータの数＋K_tの行列＋H_F^a(t)の行列
     in_size::Int = en.num_parm + en.HS_size^2 -1
 
-    #the size of K'(t)
+    #K'(t)の行列を出力
     out_size::Int = en.HS_size^2
 
-    #width of the hidden layers
+    #中間層のニューロンの数
     n_dense::Int = n
 
-    # inverse weight of the time-periodicity 
+    #乱数発生用のパラメータ
     ϵ::Float64 = ϵ0
 
-    #discount rate
+    #割引率
     γ::Float64 = γ0
 
     HF_TL = zeros(Float64, en.t_size, en.HS_size^2)
@@ -37,10 +37,7 @@ function init_nQ(en::TS_env, n::Int=32, γ0::Float64=0.9, ϵ0::Float64=1.0)
 end
 
 
-#calculate H_r(t) & K(t+δt) from K'(t) & K(t)
 function micro_motion(Kp_t::Vector{Float64}, K_t::Vector{Float64}, en::TS_env, t::Int)
-    #Kp = VtoM(Kp_t,en)
-    #dt = (2pi/en.t_size/en.Ω)
     Kt = VtoM(K_t, en)
     U = exp(1.0im*Kt)
     K_t_new = K_t + en.dt * Kp_t
@@ -49,10 +46,12 @@ function micro_motion(Kp_t::Vector{Float64}, K_t::Vector{Float64}, en::TS_env, t
     dU = (U_new - U)/en.dt
     HF_m = Hermitian(U*(en.H_0 + en.V_t*sin(2pi*t/en.t_size))*U' -1.0im*(U*dU'-dU*U')/2)
     HF = MtoV(HF_m, en)
+
     return K_t_new, HF
 end
 
 #calculate H_r(t) from K'(t) & K(t)
+
 function micro_motion2(Kp_t::Vector{Float64}, K_t::Vector{Float64}, en::TS_env, t::Int)
     #dt = (2pi/en.t_size/en.Ω)
     Kt = VtoM(K_t, en)
@@ -67,12 +66,13 @@ function micro_motion2(Kp_t::Vector{Float64}, K_t::Vector{Float64}, en::TS_env, 
     return HF
 end
 
-#caclulate L2 norm for matrix
+
 function diff_norm(V::Vector{Float64}, en::TS_env)
     M = VtoM(V,en)
-    e, v = eigen(M)
+    n = tr(M*M)
+    #e, v = eigen(M)
     #n::Float64 = V' * V
-    n::Float64 = e' * e
+    #n::Float64 = e' * e
     #n = sum(e[n]^2 for n in 1:size(e))
     return n
 end
@@ -82,7 +82,7 @@ function diff_L1norm(V::Vector{Float64}, en::TS_env)
     return n
 end
 
-#loss function
+#lossの関数
 function loss_fn_hybrid(en::TS_env, ag::agtQ, HF_given::Vector{Float64}, HF_calc::Vector{Float64}, t::Int)
     l::Float64 = 0.0
     for n in 1:(en.t_size-1) 
@@ -100,7 +100,7 @@ function loss_fn_hybrid(en::TS_env, ag::agtQ, HF_given::Vector{Float64}, HF_calc
     return l
 end
 
-#calculate the loss function in a single cycle 
+#gradient内で変数をHF,Ktを更新する事が出来ないので更新しないversion
 function loss_calc_hyb(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
     l::Float64 = 0.0
     kp_sum = zeros(Float64, en.HS_size^2)
@@ -129,35 +129,7 @@ function loss_calc_hyb(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
     return l 
 end
 
-function loss_calc_new(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
-    l::Float64 = 0.0
-    kp_sum = zeros(Float64, en.HS_size^2)
-    for t in 1:en.t_size
-        if(t==1)
-            tt=en.t_size
-        else
-            tt=t-1
-        end
-        p = [en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
-        #x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
-        x = vcat([p, ag.K_TL[tt,:]]...)
-        Kp = model0(x)
-        kp_sum += Kp
-
-        HF_calc = micro_motion2(Kp, ag.K_TL[tt,:],en,t)
-        l += loss_fn_hybrid(en,ag, HF_given, HF_calc,t)
-
-        #=
-        if(t==en.t_size)
-            l += diff_norm(HF_calc-ag.HF_TL[1,:],en)
-        end
-        =#
-    end
-    l += diff_norm(kp_sum,en)/en.t_size
-    return l 
-end
-
-#calculate the loss function in a single cycle & update K(t)&H_r(t)
+#更新するversion
 function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
     l::Float64 = 0.0
     kp_sum = zeros(Float64, en.HS_size^2)
@@ -196,6 +168,153 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
     return l, kp_sum/en.t_size
 end
 
+function micro_motion2(Kp_t::Vector{Float64}, ag::agtQ, en::TS_env, t::Int)
+    if(t==1)
+        #Kt = VtoM(K_t, en)
+        KtM = zeros(Float64, en.HS_size, en.HS_size)
+        KtpM = VtoM(Kp_t*en.dt ,en)
+        KtmM = VtoM(-Kp_t*en.dt,en)
+        Ud = exp(-1.0im*KtM)
+        U = Ud'
+        Ud_p = (exp(-1.0im*KtpM)-exp(-1.0im*KtmM))/(2en.dt)
+        HF_m = U*(en.H_0 + sin(2pi*(t-1)/en.t_size)*en.V_t)*Ud -1.0im*U*Ud_p
+        HF_m = Hermitian(HF_m)
+    elseif(t==2)
+        KtM = VtoM(ag.K_TL[t-1,:], en)
+        KtpM = VtoM(ag.K_TL[t-1,:]+Kp_t*en.dt ,en)
+        KtmM = zeros(Float64, en.HS_size, en.HS_size)
+        Ud = exp(-1.0im*KtM)
+        U = Ud'
+        Ud_p = (exp(-1.0im*KtpM)-exp(-1.0im*KtmM))/(2en.dt)
+        HF_m = U*(en.H_0 + sin(2pi*(t-1)/en.t_size)*en.V_t)*Ud -1.0im*U*Ud_p
+        HF_m = Hermitian(HF_m)
+    else
+        #Kt = VtoM(K_t, en)
+        KtM = VtoM(ag.K_TL[t-1,:], en)
+        KtpM = VtoM(ag.K_TL[t-1,:]+Kp_t*en.dt ,en)
+        KtmM = VtoM(ag.K_TL[t-2,:],en)
+        Ud = exp(-1.0im*KtM)
+        U = Ud'
+        Ud_p = (exp(-1.0im*KtpM)-exp(-1.0im*KtmM))/(2en.dt)
+        HF_m = U*(en.H_0 + sin(2pi*(t-1)/en.t_size)*en.V_t)*Ud -1.0im*U*Ud_p
+        HF_m = Hermitian(HF_m)
+    end
+    #HF_m = Hermitian(U*(en.H_0 + en.V_t*sin(2pi*t/en.t_size) - Kp)*U')
+    HF = MtoV(HF_m,en)
+    return HF
+end
+function loss_fn_hybrid2(en::TS_env, ag::agtQ, HF_calc::Vector{Float64}, t::Int)
+    l::Float64 = 0.0
+    if(t>2)
+        l += ag.ϵ * diff_norm((HF_calc-ag.HF_TL[t-2,:]),en)
+    end
+    #l += diff_norm(HF_given - HF_calc,en)/en.t_size
+    return l
+end
+
+function loss_calc_hyb2(model0, en::TS_env, ag::agtQ)
+    l::Float64 = 0.0
+    kp_sum = zeros(Float64, en.HS_size^2)
+    for t in 1:en.t_size
+        if(t==1)
+            tt=en.t_size
+        else
+            tt=t-1
+        end
+        p = [en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
+        x = vcat([p, ag.K_TL[tt,:]]...)
+        Kp = model0(x)
+        kp_sum += Kp*en.dt
+
+        HF_calc = micro_motion2(Kp, ag,en,t)
+        l += loss_fn_hybrid2(en,ag, HF_calc,t)
+    end
+    l += diff_norm(kp_sum,en)*en.t_size
+    return l 
+end
+
+function loss_calc_hyb2!(model0, en::TS_env, ag::agtQ)
+    l::Float64 = 0.0
+    kp_sum = zeros(Float64, en.HS_size^2)
+    for t in 1:en.t_size
+        if(t==1)
+            tt=en.t_size
+        else
+            tt=t-1
+        end
+        p = [en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
+        x = vcat([p, ag.K_TL[tt,:]]...)
+        ag.Kp_TL[t,:] = model0(x)
+        kp_sum += ag.Kp_TL[t,:]*en.dt
+        ag.K_TL[t,:] = kp_sum 
+
+        ag.HF_TL[tt,:] = micro_motion2(ag.Kp_TL[t,:], ag,en,t)
+        l += loss_fn_hybrid2(en,ag, ag.HF_TL[tt,:],t)
+    end
+    l += diff_norm(kp_sum,en)*en.t_size
+    return l 
+end
+
+function micro_motion_new(Kp::Vector{Float64}, kp_sum::Vector{Float64}, kt_old::Vector{Float64},en::TS_env,t::Int)
+    KtM = VtoM(kp_sum,en)
+    KtpM = VtoM(kp_sum + Kp*en.dt ,en)
+    KtmM = VtoM(kt_old,en)
+    Ud = exp(-1.0im*KtM)
+    U = Ud'
+    Ud_p = (exp(-1.0im*KtpM)-exp(-1.0im*KtmM))/(2en.dt)
+    HfM = U*(en.H_0 + sin(2pi*(t-1)/en.t_size)*en.V_t)*Ud -1.0im*U*Ud_p
+    HfM = Hermitian(HfM)
+    return HfM
+end
+
+function loss_calc_new(model0, en::TS_env, ag::agtQ)
+    l::Float64 = 0.0
+    kp_sum = zeros(Float64, en.HS_size^2)
+    kt_old = zeros(Float64, en.HS_size^2)
+    HF_old = zeros(Float64, en.HS_size, en.HS_size)
+    for t in 1:en.t_size
+        p = [en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
+        #x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+        x = vcat([p, kp_sum]...)
+        Kp = model0(x)
+        if(t>1)
+            HF_calc = micro_motion_new(Kp, kp_sum, kt_old,en,t)
+            del = HF_calc-HF_old
+            l += ag.ϵ*tr(del*del)
+            HF_old = HF_calc
+        end
+        kt_old = kp_sum
+        kp_sum += Kp * en.dt
+    end
+    l += diff_norm(kp_sum,en)
+    return l 
+end
+
+function loss_calc_new!(model0, en::TS_env, ag::agtQ)
+    l::Float64 = 0.0
+    kp_sum = zeros(Float64, en.HS_size^2)
+    kt_old = zeros(Float64, en.HS_size^2)
+    HF_old = zeros(Float64, en.HS_size, en.HS_size)
+    for t in 1:en.t_size
+        p = [en.ξ*sin(2pi*t/en.t_size), en.Jz, en.Jx, en.hz]
+        #x = vcat([p, ag.K_TL[tt,:], ag.Kp_TL[tt,:]]...)
+        x = vcat([p, kp_sum]...)
+        ag.Kp_TL[t,:] = model0(x)
+        if(t>1)
+            HF_calc = micro_motion_new(ag.Kp_TL[t,:], kp_sum, kt_old,en,t)
+            del = HF_calc-HF_old
+            l += ag.ϵ*tr(del*del)
+            HF_old = HF_calc
+            ag.HF_TL[t-1,:] = MtoV(HF_calc, en)
+        end
+        kt_old = kp_sum
+        kp_sum += ag.Kp_TL[t,:] * en.dt
+        ag.K_TL[t,:] = kp_sum
+    end
+    l += diff_norm(kp_sum,en)
+    return l 
+end
+
 
 function init_HF(en::TS_env)
     jp = en.Jz + en.hz
@@ -232,8 +351,6 @@ function main(arg::Array{String,1})
         opt = RMSProp()
     elseif(arg[10]=="gd")
         opt = Descent()
-    elseif(arg[10]=="adab")
-        opt = AdaBelief()
     else
         opt = ADAM()
     end
@@ -260,8 +377,9 @@ function main(arg::Array{String,1})
     #model = Chain(Dense(zeros(Float64, ag.n_dense, ag.in_size), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.n_dense, ag.n_dense), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.out_size, ag.n_dense), zeros(Float64, ag.out_size)))
     
     for it in 1:it_MAX
-        HF_it = zeros(Float64, en.HS_size^2) 
+        
         if(it==1)
+            k_sum = zeros(Float64, en.HS_size^2)
             for t_step in 1:en.t_size
                 if(t_step==1)
                     tt=en.t_size
@@ -272,9 +390,9 @@ function main(arg::Array{String,1})
                 x = vcat([p, ag.K_TL[tt,:]]...)
 
                 ag.Kp_TL[t_step,:] = model(x)
-                ag.K_TL[t_step,:], ag.HF_TL[t_step,:] = micro_motion(ag.Kp_TL[t_step,:], ag.K_TL[tt,:],en,t_step)
-
-                HF_it += ag.HF_TL[t_step,:]/en.t_size
+                k_sum += ag.Kp_TL[t_step,:] * en.dt
+                ag.K_TL[t_step,:] = k_sum
+                ag.HF_TL[t_step,:] = micro_motion2(ag.Kp_TL[t_step,:], ag, en, t_step)
             end
             println("HF_calc Finish!")
         end
@@ -309,7 +427,8 @@ function main(arg::Array{String,1})
         end
 
         grads = Flux.gradient(Flux.params(model)) do
-            loss_calc_hyb(model, en, ag, HF_it)
+            #loss_calc_new(model, en, ag)
+            loss_calc_hyb2(model, en, ag)
         end
         Flux.Optimise.update!(opt, Flux.params(model), grads)
 
@@ -318,7 +437,8 @@ function main(arg::Array{String,1})
         end
 
         ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
-        ll_it[it], Kp_av = loss_calc_hyb!(model,en, ag, HF_it)
+        #ll_it[it] = loss_calc_new!(model,en, ag)
+        ll_it[it] = loss_calc_hyb2!(model,en, ag)
         if(it%1000 == 0 && it!=0)
             E = zeros(Float64, en.t_size, en.HS_size)
             for t_step in 1:en.t_size
