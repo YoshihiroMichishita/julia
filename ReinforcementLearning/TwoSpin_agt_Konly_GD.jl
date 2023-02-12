@@ -191,12 +191,11 @@ function loss_calc_hyb(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
         #l += ag.ϵ^2*diff_norm(kp_sum,en)/en.t_size
         #l += diff_norm(kp_sum,en)/en.t_size
         #l += ag.γ^(5*(en.t_size/2 - abs(en.t_size/2-t))) * diff_norm(ag.K_TL[t,:],en)
-        #if(t==en.t_size)
-        #    l += diff_norm(HF_calc-ag.HF_TL[1,:],en)
-        #end
+        if(t==en.t_size)
+            l += diff_norm(HF_calc-ag.HF_TL[1,:],en)
+        end
     end
-    l += diff_norm(kp_sum,en)
-    #/en.t_size
+    l += diff_norm(kp_sum,en)/en.t_size
     return l 
 end
 
@@ -221,9 +220,9 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
         #l += diff_norm(kp_sum,en)/en.t_size
         #l += ag.γ^(5*(en.t_size/2 - abs(en.t_size/2-t))) * diff_norm(ag.K_TL[t,:],en)
         #l += ag.γ^(5*(en.t_size - t)) * diff_norm(ag.K_TL[t,:],en)
-        #if(t==en.t_size)
-        #    l += diff_norm(ag.HF_TL[t,:]-ag.HF_TL[1,:],en)
-        #end
+        if(t==en.t_size)
+            l += diff_norm(ag.HF_TL[t,:]-ag.HF_TL[1,:],en)
+        end
     end
     l += diff_norm(kp_sum,en)
     #=
@@ -300,8 +299,8 @@ function main(arg::Array{String,1})
         ag.K_TL = Matrix(CSV.read(arg[12], DataFrame))
     end
     #model = Chain(Dense(zeros(Float64, ag.n_dense, ag.in_size), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.n_dense, ag.n_dense), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.out_size, ag.n_dense), zeros(Float64, ag.out_size)))
-    opt = ADAM()
-    #Flux.Optimise.Optimiser(ClipValue(1e-3), Adam(1e-3))
+    opt = Flux.Optimise.Descent(0.02)
+    #Optimiser(ClipValue(1e-3), Adam(1e-3))
 
 
     it_MAX = parse(Int,arg[10])
