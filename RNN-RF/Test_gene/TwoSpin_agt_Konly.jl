@@ -109,15 +109,14 @@ function loss_calc_hyb(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
 
         HF_calc = micro_motion2(Kp, ag.K_TL[tt,:],en,t)
         l += loss_fn_hybrid(en,ag, HF_given, HF_calc,t)
-        #l += ag.ϵ^2*diff_norm(kp_sum,en)/en.t_size
-        #l += diff_norm(kp_sum,en)/en.t_size
-        #l += ag.γ^(5*(en.t_size/2 - abs(en.t_size/2-t))) * diff_norm(ag.K_TL[t,:],en)
+
+        #=
         if(t==en.t_size)
             l += diff_norm(HF_calc-ag.HF_TL[1,:],en)
         end
+        =#
     end
-    l += diff_norm(kp_sum,en)
-    #/en.t_size
+    l += diff_norm(kp_sum,en)/en.t_size
     return l 
 end
 
@@ -141,12 +140,11 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
 
         ag.K_TL[t,:], ag.HF_TL[t,:] = micro_motion(ag.Kp_TL[t,:], ag.K_TL[tt,:],en,t)
         l += loss_fn_hybrid(en,ag, HF_given, ag.HF_TL[t,:],t)
-        #l += diff_norm(kp_sum,en)/en.t_size
-        #l += ag.γ^(5*(en.t_size/2 - abs(en.t_size/2-t))) * diff_norm(ag.K_TL[t,:],en)
-        #l += ag.γ^(5*(en.t_size - t)) * diff_norm(ag.K_TL[t,:],en)
+        #=
         if(t==en.t_size)
             l += diff_norm(ag.HF_TL[t,:]-ag.HF_TL[1,:],en)
         end
+        =#
     end
     l += diff_norm(kp_sum,en)/en.t_size
     #=
@@ -219,14 +217,6 @@ function main(arg::Array{String,1})
         ag.K_TL = Matrix(CSV.read(arg[13], DataFrame))
     end
     #model = Chain(Dense(zeros(Float64, ag.n_dense, ag.in_size), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.n_dense, ag.n_dense), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.out_size, ag.n_dense), zeros(Float64, ag.out_size)))
-    opt = ADAM()
-
-
-    it_MAX = parse(Int,arg[10])
-    ll_it = zeros(Float64, it_MAX)
-    println("start!")
-    #ll_it[1] = loss_t!(model,en, ag, 2, 1)
-    #println(ll_it[1])
     
     for it in 1:it_MAX
         HF_it = zeros(Float64, en.HS_size^2) 

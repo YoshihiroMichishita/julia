@@ -20,10 +20,6 @@ function set_parm(arg::Array{String,1})
     return t_i, Pr, mu0, eta, K_SIZE, dk2
 end
 
-#a1 = [1.0, 0.0]
-#a2 = [-0.5, sqrt(3.0)/2]
-#a3 = [0.5, sqrt(3.0)/2]
-
 function get_kk(K_SIZE::Int)
     kk::Vector{Vector{Float64}} = []
     dk = 2pi/(K_SIZE)
@@ -33,32 +29,6 @@ function get_kk(K_SIZE::Int)
             push!(kk,k0)
         end
     end
-    #dk2 = 2.0/(3*sqrt(3.0)*K_SIZE*K_SIZE)
-    #=
-    for i in collect(dk:dk:4pi/3)
-        
-        for j in collect(0:dk:4pi/3)
-            k = j*a1 + i*a2
-            push!(kk,k)
-        end
-        
-        for j in collect(dk:dk:4pi/3)
-            if (i+j) < (4pi/3+dk)
-                k = -j*a1 + i*a3
-                push!(kk,k)
-            end
-        end
-    end
-    l = length(kk)
-    for i in 1:l
-        k0 = kk[i]
-        k0 = -1 .* k0
-        push!(kk,k0)
-    end
-    for i in collect(-4pi/3:dk:4pi/3)
-        k = i*a1
-        push!(kk,k)
-    end=#
     return kk
 end
 
