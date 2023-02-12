@@ -229,7 +229,7 @@ function loss_calc_hyb2(model0, en::TS_env, ag::agtQ)
         HF_calc = micro_motion2(Kp, ag,en,t)
         l += loss_fn_hybrid2(en,ag, HF_calc,t)
     end
-    l += diff_norm(kp_sum,en)*en.t_size
+    l += diff_norm(kp_sum,en)
     return l 
 end
 
@@ -251,7 +251,7 @@ function loss_calc_hyb2!(model0, en::TS_env, ag::agtQ)
         ag.HF_TL[tt,:] = micro_motion2(ag.Kp_TL[t,:], ag,en,t)
         l += loss_fn_hybrid2(en,ag, ag.HF_TL[tt,:],t)
     end
-    l += diff_norm(kp_sum,en)*en.t_size
+    l += diff_norm(kp_sum,en)
     return l 
 end
 
@@ -339,7 +339,7 @@ function main(arg::Array{String,1})
     ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
     #-MtoV(en.V_t, en)/en.Ω
 
-    
+    eta = parse(Float64,arg[15])
 
     if(arg[10]=="clip1")
         opt = Flux.Optimise.Optimiser(ClipValue(1e-1),Adam(1e-1))
@@ -350,9 +350,9 @@ function main(arg::Array{String,1})
     elseif(arg[10]=="rms")
         opt = RMSProp()
     elseif(arg[10]=="gd")
-        opt = Descent()
+        opt = Descent(eta)
     else
-        opt = ADAM()
+        opt = ADAM(eta)
     end
 
     it_MAX = parse(Int,arg[11])
