@@ -205,7 +205,7 @@ function micro_motion2(Kp_t::Vector{Float64}, ag::agtQ, en::TS_env, t::Int)
 end
 function loss_fn_hybrid2(en::TS_env, ag::agtQ, HF_calc::Vector{Float64}, t::Int)
     l::Float64 = 0.0
-    if(t>2)
+    if(t>20)
         for i in 1:t-2
             l += ag.ϵ * ag.γ^(i) * diff_norm((HF_calc-ag.HF_TL[t-1-i,:]),en)/en.t_size
         end
