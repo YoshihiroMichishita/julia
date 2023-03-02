@@ -168,7 +168,7 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
     return l, kp_sum/en.t_size
 end
 
-function micro_motion2(Kp_t, ag::agtQ, en::TS_env, t::Int)
+function micro_motion2(Kp_t::Vector{Float64}, ag::agtQ, en::TS_env, t::Int)
     if(t==1)
         #Kt = VtoM(K_t, en)
         KtM = zeros(Float64, en.HS_size, en.HS_size)
@@ -397,170 +397,128 @@ ENV["GKSwstype"]="nul"
 
 function main(arg::Array{String,1})
 
-    en = TS_env(init_env(parse(Int,arg[1]), parse(Float64,arg[2]), parse(Float64,arg[3]), parse(Float64,arg[4]), parse(Float64,arg[5]), parse(Float64,arg[6]))...)
-    ag = agtQ(init_nQ(en,parse(Int,arg[7]),parse(Float64,arg[8]),parse(Float64,arg[9]))...)
-
-    ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
-    #-MtoV(en.V_t, en)/en.Ω
-
-    eta = parse(Float64,arg[15])
-
-    if(arg[10]=="clip1")
+    if(arg[1]=="clip1")
         opt = Flux.Optimise.Optimiser(ClipValue(1e-1),Adam(1e-1))
-    elseif(arg[10]=="clip2")
+    elseif(arg[1]=="clip2")
         opt = Flux.Optimise.Optimiser(ClipValue(1e-2),Adam(1e-2))
-    elseif(arg[10]=="clip3")
+    elseif(arg[1]=="clip3")
         opt = Flux.Optimise.Optimiser(ClipValue(1e-3),Adam(1e-3))
-    elseif(arg[10]=="rms")
+    elseif(arg[1]=="rms")
         opt = RMSProp()
-    elseif(arg[10]=="gd")
-        opt = Descent(eta)
+    elseif(arg[1]=="gd")
+        opt = Descent()
     else
-        opt = ADAM(eta)
+        opt = ADAM()
     end
 
-    it_MAX = parse(Int,arg[11])
+    it_MAX = parse(Int,arg[2])
+    b_MAX = parse(Int,arg[3])
     ll_it = zeros(Float64, it_MAX)
     println("start!")
-
-
-    #model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
-
-    #two hidden layer
-    #model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
-    st::Int = 0
-    if(arg[12]=="init")
-        #model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
-        model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
+    t_size = parse(Int,arg[4])
+    H_size = parse(Int,arg[5])
+    width = parse(Int,arg[6])
+    Ω = parse(Float64,arg[7])
+    γ = parse(Float64,arg[8])
+    ϵ = parse(Float64,arg[9])
+    model = Chain(Dense(20, width, tanh), Dense(width, width, tanh), Dense(width, H_size^2))
+    for b in 1:b_MAX
+        xi = rand()
+        Jz = rand()
+        Jx = rand()
+        hz = rand()
+        println("xi=$(xi), Jz=$(Jz), Jx=$(Jx), hz=$(hz)")
+        en = TS_env(init_env(t_size, Ω, xi, Jz, Jx, hz)...)
+        ag = agtQ(init_nQ(en,width,γ,ϵ)...)
         ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
-    else
-        @load arg[12] model
-        ag.K_TL = Matrix(CSV.read(arg[13], DataFrame))
-        st = parse(Int,arg[14])
-    end
-    #model = Chain(Dense(zeros(Float64, ag.n_dense, ag.in_size), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.n_dense, ag.n_dense), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.out_size, ag.n_dense), zeros(Float64, ag.out_size)))
-    
-    ll_min = 10000.0
-    it_min = 0
-    Kt_min = zeros(Float64, en.t_size, en.HS_size^2)
-    HF_min = zeros(Float64, en.t_size, en.HS_size^2)
-    for it in 1:it_MAX
-        
-        if(it==1)
-            k_sum = zeros(Float64, en.HS_size^2)
-            for t_step in 1:en.t_size
-                if(t_step==1)
-                    tt=en.t_size
-                else
-                    tt=t_step-1
+        #model = Chain(Dense(zeros(Float64, ag.n_dense, ag.in_size), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.n_dense, ag.n_dense), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.out_size, ag.n_dense), zeros(Float64, ag.out_size)))
+
+        for it in 1:it_MAX
+            
+            if(it==1)
+                k_sum = zeros(Float64, en.HS_size^2)
+                for t_step in 1:en.t_size
+                    if(t_step==1)
+                        tt=en.t_size
+                    else
+                        tt=t_step-1
+                    end
+                    p = [en.ξ*sin(2pi*t_step/en.t_size), en.Jz, en.Jx, en.hz]
+                    x = vcat([p, ag.K_TL[tt,:]]...)
+
+                    ag.Kp_TL[t_step,:] = model(x)
+                    k_sum += ag.Kp_TL[t_step,:] * en.dt
+                    ag.K_TL[t_step,:] = k_sum
+                    ag.HF_TL[t_step,:] = micro_motion2(ag.Kp_TL[t_step,:], ag, en, t_step)
                 end
-                p = [en.ξ*sin(2pi*t_step/en.t_size), en.Jz, en.Jx, en.hz]
-                x = vcat([p, ag.K_TL[tt,:]]...)
-
-                ag.Kp_TL[t_step,:] = model(x)
-                k_sum += ag.Kp_TL[t_step,:] * en.dt
-                ag.K_TL[t_step,:] = k_sum
-                ag.HF_TL[t_step,:] = micro_motion2(ag.Kp_TL[t_step,:], ag, en, t_step)
-            end
-            println("HF_calc Finish!")
-        end
-
-        if(it_MAX==1)
-            E = zeros(Float64, en.t_size, en.HS_size)
-            for t_step in 1:en.t_size
-                E[t_step,:], v = eigen(VtoM(ag.HF_TL[t_step,:],en))
+                println("HF_calc Finish!")
             end
 
-            p1 = plot(E[:,1].-E[1,1], xlabel="t_step", ylabel="E of HF_t", width=3.0)
-            p1 = plot!(E[:,2].-E[1,2], width=3.0)
-            p1 = plot!(E[:,3].-E[1,3], width=3.0)
-            p1 = plot!(E[:,4].-E[1,4], width=3.0)
-            savefig(p1,"./HF_t_check_gene.png")
-            println("Drawing Finish!")
-            #println(E[:,4])
-            p2 = plot(ag.K_TL[:,1], xlabel="t_step", ylabel="E of K_t", width=2.0)
-            for i in 2:en.HS_size^2
-                p2 = plot!(ag.K_TL[:,i], width=2.0)
+            grads = Flux.gradient(Flux.params(model)) do
+                #loss_calc_new(model, en, ag)
+                loss_calc_hyb2(model, en, ag)
+                #loss_calc_hyb3(model, en, ag)
             end
-            save_data1 = DataFrame(ag.K_TL, :auto)
-            CSV.write("./K_TL_check_gene.csv", save_data1)
-            savefig(p2,"./K_t_check_gene.png")
-            p4 = plot(ag.Kp_TL[:,1], xlabel="t_step", ylabel="E of Kp_t", width=2.0)
-            for i in 2:en.HS_size^2
-                p4 = plot!(ag.Kp_TL[:,i], width=2.0)
+            Flux.Optimise.update!(opt, Flux.params(model), grads)
+
+            if(it==1) 
+                println("First Learning Finish!")
             end
-            savefig(p4,"./Kp_t_check_gene.png")
-            @save "mymodel_check_gene.bson" model
-            break
-        end
-        ll = 0.0
-        grads = Flux.gradient(Flux.params(model)) do
-            #loss_calc_new(model, en, ag)
-            ll = loss_calc_hyb2(model, en, ag)
-            #loss_calc_hyb3(model, en, ag)
-        end
-        ll_it[it] = ll
-        if(ll_it[it]<ll_min)
-            ll_min = ll_it[it]
-            it_min = it
-            Kt_min = ag.K_TL
-            HF_min = ag.HF_TL
-        end
-        Flux.Optimise.update!(opt, Flux.params(model), grads)
 
-        if(it==1) 
-            println("First Learning Finish!")
-        end
+            ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
+            ll_it[(b-1)*it_MAX + it] = loss_calc_hyb2!(model,en, ag)
 
-        ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
-        #ll_it[it] = loss_calc_new!(model,en, ag)
-        #ll_it[it] = loss_calc_hyb2!(model,en, ag)
-        lll = loss_calc_hyb2!(model,en, ag)
-        #ll_it[it] = loss_calc_hyb3!(model,en, ag)
+            if(it == it_MAX)
+                @save "mymodel$(b).bson" model
+            end
+        end
         
 
-        if(it%1000 == 0 && it!=0)
-            @save "mymodel$(st+it).bson" model
-        end
-        
     end
+    println("Training Finish!")
+    println("=====================")
 
-    println("Learning Finish!")
-    save_data2 = DataFrame(HF_min, :auto)
-    CSV.write("./HF_TL_min.csv", save_data2)
+    xi = parse(Float64,arg[10])
+    Jz = parse(Float64,arg[11])
+    Jx = parse(Float64,arg[12])
+    hz = parse(Float64,arg[13])
+    println("test: xi=$(xi), Jz=$(Jz), Jx=$(Jx), hz=$(hz)")
+    en = TS_env(init_env(t_size, Ω, xi, Jz, Jx, hz)...)
+    ag = agtQ(init_nQ(en,width,γ,ϵ)...)
+    ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
+    ll_test = loss_calc_hyb2!(model,en, ag)
+    println("test Finish!")
+    println("=====================")
 
-    p2 = plot(Kt_min[:,1], xlabel="t_step", ylabel="E of K_t", width=2.0)
+    save_data2 = DataFrame(ag.HF_TL, :auto)
+    CSV.write("./HF_TL.csv", save_data2)
+
+    p2 = plot(ag.K_TL[:,1], xlabel="t_step", ylabel="E of K_t", width=2.0)
     for i in 2:en.HS_size^2
-        p2 = plot!(Kt_min[:,i], width=2.0)
+        p2 = plot!(ag.K_TL[:,i], width=2.0)
     end
-    savefig(p2,"./K_t$(st+it_min)_minimum.png")
+    savefig(p2,"./Kt_test.png")
     
 
     save_data0 = DataFrame(ag.K_TL, :auto)
-    CSV.write("./K_TL$(st+it_MAX).csv", save_data0)
-
-    save_data1 = DataFrame(Kt_min, :auto)
-    CSV.write("./K_TL_min.csv", save_data1)
+    CSV.write("./K_TL_test.csv", save_data0)
 
     
 
     p3 = plot(ll_it, xlabel="it_step", ylabel="loss", yaxis=:log, width=3.0)
-    savefig(p3,"./loss_iterate_$(ll_min).png")
+    savefig(p3,"./loss_iterate.png")
     save_data_l = DataFrame(loss = ll_it)
-    if(arg[12]=="init")
-        CSV.write("./loss.csv", save_data_l)
-    else
-        CSV.write("./loss_add$(it_MAX).csv", save_data_l)
-    end
+    CSV.write("./loss.csv", save_data_l)
+
     E = zeros(Float64, en.t_size, en.HS_size)
     for t_step in 1:en.t_size
-        E[t_step,:], v = eigen(VtoM(HF_min[t_step,:],en))
+        E[t_step,:], v = eigen(VtoM(ag.HF_TL[t_step,:],en))
     end
     p1 = plot(E[1:end-1,1].-E[1,1], xlabel="t_step", ylabel="E of HF_t", width=3.0)
     p1 = plot!(E[1:end-1,2].-E[1,2], width=3.0)
     p1 = plot!(E[1:end-1,3].-E[1,3], width=3.0)
     p1 = plot!(E[1:end-1,4].-E[1,4], width=3.0)
-    savefig(p1,"./HF_t$(st+it_min).png")
+    savefig(p1,"./E_HF_test.png")
 
     
     println("Drawing Finish!")
