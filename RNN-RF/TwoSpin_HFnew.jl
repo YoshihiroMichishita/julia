@@ -493,11 +493,18 @@ function main(arg::Array{String,1})
             @save "mymodel_check_gene.bson" model
             break
         end
-
+        ll = 0.0
         grads = Flux.gradient(Flux.params(model)) do
             #loss_calc_new(model, en, ag)
-            loss_calc_hyb2(model, en, ag)
+            ll = loss_calc_hyb2(model, en, ag)
             #loss_calc_hyb3(model, en, ag)
+        end
+        ll_it[it] = ll
+        if(ll_it[it]<ll_min)
+            ll_min = ll_it[it]
+            it_min = it
+            Kt_min = ag.K_TL
+            HF_min = ag.HF_TL
         end
         Flux.Optimise.update!(opt, Flux.params(model), grads)
 
@@ -507,14 +514,10 @@ function main(arg::Array{String,1})
 
         ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
         #ll_it[it] = loss_calc_new!(model,en, ag)
-        ll_it[it] = loss_calc_hyb2!(model,en, ag)
+        #ll_it[it] = loss_calc_hyb2!(model,en, ag)
+        lll = loss_calc_hyb2!(model,en, ag)
         #ll_it[it] = loss_calc_hyb3!(model,en, ag)
-        if(ll_it[it]<ll_min)
-            ll_min = ll_it[it]
-            it_min = it
-            Kt_min = ag.K_TL
-            HF_min = ag.HF_TL
-        end
+        
 
         if(it%1000 == 0 && it!=0)
             @save "mymodel$(st+it).bson" model
