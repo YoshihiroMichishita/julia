@@ -26,8 +26,10 @@ struct TS_env
     H_0::Hermitian{ComplexF64, Matrix{ComplexF64}}
     V_t::Hermitian{ComplexF64, Matrix{ComplexF64}}
     σ_vec::Vector{Hermitian{ComplexF64, Matrix{ComplexF64}}}
+    dt::Float64
 end
 
+# generate matrix for the vectrization of matrix
 function generate_M(H_size::Int)
     A::Vector{Hermitian{ComplexF64, Matrix{ComplexF64}}} =[]
     for i in 1:H_size
@@ -65,8 +67,8 @@ function init_env(t::Int=100, Ω0::Float64 = 10.0, ξ0::Float64 = 0.2, Jz0::Floa
     num_parm::Int = 5
     Ω::Float64 = Ω0
     ξ::Float64 = ξ0
-    Jz::Float16 = Jz0
-    Jx::Float16 = Jx0
+    Jz::Float64 = Jz0
+    Jx::Float64 = Jx0
     hz::Float64 = hz0
     #H_0::Matrix{ComplexF64} = [ -Jz-2hz 0 0 -Jx; 0 Jz -Jx 0; 0 -Jx Jz 0; -Jx 0 0 -Jz+2hz]
     #V_t::Matrix{ComplexF64} = [ 0 -ξ -ξ 0; -ξ 0 0 -ξ; -ξ 0 0 -ξ; 0 -ξ -ξ 0]
@@ -75,19 +77,23 @@ function init_env(t::Int=100, Ω0::Float64 = 10.0, ξ0::Float64 = 0.2, Jz0::Floa
     V_t::Hermitian{ComplexF64, Matrix{ComplexF64}} = Hermitian([ 0 -ξ -ξ 0; -ξ 0 0 -ξ; -ξ 0 0 -ξ; 0 -ξ -ξ 0])
 
     σ_vec = generate_M(HS_size)
+    dt = 2pi/t_size/Ω
 
-    return t_size, HS_size, num_parm, Ω, ξ, Jz, Jx, hz, H_0, V_t, σ_vec
+    return t_size, HS_size, num_parm, Ω, ξ, Jz, Jx, hz, H_0, V_t, σ_vec, dt
 end
 
+#translate vector to matrix 
 function VtoM(V::Vector{Float64},en::TS_env)
     M = V' * en.σ_vec
     return M
 end
 
+#translate matrix to vector
 function MtoV(M::Hermitian{ComplexF64, Matrix{ComplexF64}}, en::TS_env)
     V = real.(tr.(en.σ_vec .* (M,)))
     return V
 end
+
 
 function reward(v_old::Vector{Float64}, v_new::Vector{Float64}, en::TS_env)
     K_old = vec_to_matrix(v_old)
@@ -100,5 +106,7 @@ function reward(v_old::Vector{Float64}, v_new::Vector{Float64}, en::TS_env)
     r = - e'* e
     return r
 end
+    
+    
     
     
