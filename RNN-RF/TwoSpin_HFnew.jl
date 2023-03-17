@@ -168,7 +168,7 @@ function loss_calc_hyb!(model0, en::TS_env, ag::agtQ, HF_given::Vector{Float64})
     return l, kp_sum/en.t_size
 end
 
-function micro_motion2(Kp_t::Vector{Float64}, ag::agtQ, en::TS_env, t::Int)
+function micro_motion2(Kp_t, ag::agtQ, en::TS_env, t::Int)
     if(t==1)
         #Kt = VtoM(K_t, en)
         KtM = zeros(Float64, en.HS_size, en.HS_size)
@@ -524,6 +524,7 @@ function main(arg::Array{String,1})
         end
         
     end
+
     println("Learning Finish!")
     save_data2 = DataFrame(HF_min, :auto)
     CSV.write("./HF_TL_min.csv", save_data2)
