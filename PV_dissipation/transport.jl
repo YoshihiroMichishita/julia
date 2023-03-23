@@ -638,7 +638,7 @@ function Green_PV_BI(p::Parm, H::Hamiltonian)
         end
         for i in 1:5
             G_PV[2i-1] += dw*imag(PV_bc[2i-1] + PV_bc[2i])*f(w,p.T)/(2*p.W_in^2)
-            G_PV[2i] += -dw*real(PV_bc[2i-1] - PV_bc[2i])*f(w,p.T)/p.W_in^2
+            G_PV[2i] += dw*real(PV_bc[2i-1] - PV_bc[2i])*f(w,p.T)/p.W_in^2
         end
     end
     return G_PV
