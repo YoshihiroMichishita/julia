@@ -469,9 +469,10 @@ function Green_DC_sea_nonlinear(p::Parm, H::Hamiltonian)
 end=#
 
 #Calculate photo-voltaic effect with Parker's BI methods (under the velocity gauge)
+
 function Length_PV_BI(p::Parm, H::Hamiltonian)
     #(iii, eei, eie, iee, eee)*(LP, CP)
-    PV = zeros(Float64, 10)
+    PV = zeros(Float64, 12)
 
     #(iii, eei, eie, iee, eee)*(bc, cb)
     PV_bc = zeros(ComplexF64, 10)
@@ -488,12 +489,16 @@ function Length_PV_BI(p::Parm, H::Hamiltonian)
                 PV_bc[4] += -((H.Va[i,j]*H.Vb[j,i]-H.Vb[i,j]*H.Va[j,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2)*H.Vc[i,i]-(H.Va[i,j]*H.Vc[j,i]-H.Vc[i,j]*H.Va[j,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2)*H.Vb[i,i])*df(H.E[i],p.T)/p.W_in
                 
                 #Injection
-                PV_bc[7] += 2*(H.Va[i,i]-H.Va[j,j])*H.Vb[i,j]*H.Vc[j,i]*(f(H.E[i],p.T)-f(H.E[j],p.T))/((p.W_in+H.E[i]-H.E[j])^2+(2p.eta)^2)
-                PV_bc[8] += 2*(H.Va[i,i]-H.Va[j,j])*H.Vb[i,j]*H.Vc[j,i]*(f(H.E[i],p.T)-f(H.E[j],p.T))/((-p.W_in+H.E[i]-H.E[j])^2+(2p.eta)^2)
+                PV_bc[7] += 2*2p.eta*(H.Va[i,i]-H.Va[j,j])*H.Vb[i,j]*H.Vc[j,i]*(f(H.E[i],p.T)-f(H.E[j],p.T))/((p.W_in+H.E[i]-H.E[j])^2+(2p.eta)^2)
+                PV_bc[8] += 2*2p.eta*(H.Va[i,i]-H.Va[j,j])*H.Vb[i,j]*H.Vc[j,i]*(f(H.E[i],p.T)-f(H.E[j],p.T))/((-p.W_in+H.E[i]-H.E[j])^2+(2p.eta)^2)
 
                 #eie
                 PV_bc[5] += (H.Va[i,j]*(H.Vb[j,j]-H.Va[i,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2) + H.Vab[i,j]*(H.E[i]-H.E[j])/((H.E[i]-H.E[j])^2+(2p.eta)^2))*H.Vc[j,i]*(f(H.E[j],p.T)-f(H.E[i],p.T))/((H.E[i]-H.E[j])^2+(2p.eta)^2)/(p.W_in+H.E[i]-H.E[j]+2.0im*p.eta) + (H.Va[i,j]*(H.Vc[j,j]-H.Va[i,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2) + H.Vca[i,j]*(H.E[i]-H.E[j])/((H.E[i]-H.E[j])^2+(2p.eta)^2))*H.Vb[j,i]*(f(H.E[j],p.T)-f(H.E[i],p.T))/((H.E[i]-H.E[j])^2+(2p.eta)^2)/(-p.W_in+H.E[i]-H.E[j]+2.0im*p.eta)
                 PV_bc[6] += (H.Va[i,j]*(H.Vb[j,j]-H.Va[i,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2) + H.Vab[i,j]*(H.E[i]-H.E[j])/((H.E[i]-H.E[j])^2+(2p.eta)^2))*H.Vc[j,i]*(f(H.E[j],p.T)-f(H.E[i],p.T))/((H.E[i]-H.E[j])^2+(2p.eta)^2)/(-p.W_in+H.E[i]-H.E[j]+2.0im*p.eta) + (H.Va[i,j]*(H.Vc[j,j]-H.Va[i,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2) + H.Vca[i,j]*(H.E[i]-H.E[j])/((H.E[i]-H.E[j])^2+(2p.eta)^2))*H.Vb[j,i]*(f(H.E[j],p.T)-f(H.E[i],p.T))/((H.E[i]-H.E[j])^2+(2p.eta)^2)/(p.W_in+H.E[i]-H.E[j]+2.0im*p.eta)
+
+                #IFS
+                PV_bc[9] += 2H.Va[i,i]*(H.Vb[i,j]*H.Vc[j,i])*df(H.E[i], p.T)*p.W_in*(p.W_in -(H.E[i]-H.E[j]))/((p.W_in -(H.E[i]-H.E[j]))^2+4.0*p.eta^2)
+                PV_bc[10] += 2H.Va[i,i]*(H.Vb[i,j]*H.Vc[j,i])*df(H.E[i], p.T)*p.W_in*(-p.W_in -(H.E[i]-H.E[j]))/((-p.W_in -(H.E[i]-H.E[j]))^2+4.0*p.eta^2)
 
                 #eee
                 for k in 1:p.H_size
@@ -507,27 +512,80 @@ function Length_PV_BI(p::Parm, H::Hamiltonian)
     for i in 1:5
         PV[2i-1] = real(PV_bc[2i-1] + PV_bc[2i])/2
         PV[2i] = imag(PV_bc[2i-1] - PV_bc[2i])
-    end
+        PV[11] += PV[2i-1]
+        PV[12] += PV[2i]
+    end 
     return PV
 end
+
+
+function Length_PV_BI2(p::Parm, H::Hamiltonian)
+    #(iii, eei, eie, iee, eee)*(LP, CP)
+    PV = zeros(Float64, 12)
+
+    #(iii, eei, eie, iee, eee)*(bc, cb)
+    PV_bc = zeros(ComplexF64, 10)
+    for i in 1:p.H_size
+        PV_bc[1] += H.Va[i,i]*(H.Vbc[i,i]*df(H.E[i], p.T)+H.Vb[i,i]*H.Vc[i,i]*ddf(H.E[i], p.T))/p.W_in^2
+        PV_bc[2] += H.Va[i,i]*(H.Vbc[i,i]*df(H.E[i], p.T)+H.Vb[i,i]*H.Vc[i,i]*ddf(H.E[i], p.T))/p.W_in^2
+        for j in 1:p.H_size
+            if(j!=i)
+                #Drude
+                PV_bc[1] += (H.E[i]-H.E[j])*H.Va[i,i]*(H.Vb[i,j]*H.Vc[j,i]+H.Vb[i,j]*H.Vc[j,i])/((H.E[i]-H.E[j])^2+(p.eta)^2)*df(H.E[i], p.T)/p.W_in^2
+                PV_bc[2] += (H.E[i]-H.E[j])*H.Va[i,i]*(H.Vb[i,j]*H.Vc[j,i]+H.Vb[i,j]*H.Vc[j,i])/((H.E[i]-H.E[j])^2+(p.eta)^2)*df(H.E[i], p.T)/p.W_in^2
+                #BCD
+                PV_bc[3] += ((H.Va[i,j]*H.Vb[j,i]-H.Vb[i,j]*H.Va[j,i])/((H.E[i]-H.E[j])^2+(p.eta)^2)*H.Vc[i,i]-(H.Va[i,j]*H.Vc[j,i]-H.Vc[i,j]*H.Va[j,i])/((H.E[i]-H.E[j])^2+(p.eta)^2)*H.Vb[i,i])*df(H.E[i],p.T)/p.W_in
+                PV_bc[4] += -((H.Va[i,j]*H.Vb[j,i]-H.Vb[i,j]*H.Va[j,i])/((H.E[i]-H.E[j])^2+(p.eta)^2)*H.Vc[i,i]-(H.Va[i,j]*H.Vc[j,i]-H.Vc[i,j]*H.Va[j,i])/((H.E[i]-H.E[j])^2+(p.eta)^2)*H.Vb[i,i])*df(H.E[i],p.T)/p.W_in
+                
+                #Injection
+                PV_bc[7] += 2p.eta*(H.Va[i,i]-H.Va[j,j])*H.Vb[i,j]*H.Vc[j,i]*(f(H.E[i],p.T)-f(H.E[j],p.T))/((p.W_in+H.E[i]-H.E[j])^2+(p.eta)^2)
+                PV_bc[8] += 2p.eta*(H.Va[i,i]-H.Va[j,j])*H.Vb[i,j]*H.Vc[j,i]*(f(H.E[i],p.T)-f(H.E[j],p.T))/((-p.W_in+H.E[i]-H.E[j])^2+(p.eta)^2)
+
+                #eie
+                PV_bc[5] += (H.Va[i,j]*(H.Vb[j,j]-H.Va[i,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2) + H.Vab[i,j]*(H.E[i]-H.E[j])/((H.E[i]-H.E[j])^2+(p.eta)^2))*H.Vc[j,i]*(f(H.E[j],p.T)-f(H.E[i],p.T))/((H.E[i]-H.E[j])^2+(p.eta)^2)/(p.W_in+H.E[i]-H.E[j]+1.0im*p.eta) + (H.Va[i,j]*(H.Vc[j,j]-H.Va[i,i])/((H.E[i]-H.E[j])^2+(p.eta)^2) + H.Vca[i,j]*(H.E[i]-H.E[j])/((H.E[i]-H.E[j])^2+(p.eta)^2))*H.Vb[j,i]*(f(H.E[j],p.T)-f(H.E[i],p.T))/((H.E[i]-H.E[j])^2+(p.eta)^2)/(-p.W_in+H.E[i]-H.E[j]+1.0im*p.eta)
+                PV_bc[6] += (H.Va[i,j]*(H.Vb[j,j]-H.Va[i,i])/((H.E[i]-H.E[j])^2+(p.eta)^2) + H.Vab[i,j]*(H.E[i]-H.E[j])/((H.E[i]-H.E[j])^2+(p.eta)^2))*H.Vc[j,i]*(f(H.E[j],p.T)-f(H.E[i],p.T))/((H.E[i]-H.E[j])^2+(p.eta)^2)/(-p.W_in+H.E[i]-H.E[j]+1.0im*p.eta) + (H.Va[i,j]*(H.Vc[j,j]-H.Va[i,i])/((H.E[i]-H.E[j])^2+(p.eta)^2) + H.Vca[i,j]*(H.E[i]-H.E[j])/((H.E[i]-H.E[j])^2+(p.eta)^2))*H.Vb[j,i]*(f(H.E[j],p.T)-f(H.E[i],p.T))/((H.E[i]-H.E[j])^2+(p.eta)^2)/(p.W_in+H.E[i]-H.E[j]+1.0im*p.eta)
+
+                #IFS
+                PV_bc[9] += 2H.Va[i,i]*(H.Vb[i,j]*H.Vc[j,i])*df(H.E[i], p.T)*p.W_in*(p.W_in -(H.E[i]-H.E[j]))/((p.W_in -(H.E[i]-H.E[j]))^2+p.eta^2)
+                PV_bc[10] += 2H.Va[i,i]*(H.Vb[i,j]*H.Vc[j,i])*df(H.E[i], p.T)*p.W_in*(-p.W_in -(H.E[i]-H.E[j]))/((-p.W_in -(H.E[i]-H.E[j]))^2+p.eta^2)
+
+                #eee
+                for k in 1:p.H_size
+                    PV_bc[9] += -(H.E[i]-H.E[j])*(H.E[j]-H.E[k])*(H.E[k]-H.E[i])*(H.Va[i,j]*H.Vb[j,k]-H.Vb[i,j]*H.Va[j,k])*H.Vc[k,i]/((H.E[i]-H.E[j])^2+(p.eta)^2)/((H.E[j]-H.E[k])^2+(p.eta)^2)/((H.E[k]-H.E[i])^2+(p.eta)^2) * (f(H.E[i],p.T)-f(H.E[k],p.T))/(p.W_in + H.E[i]-H.E[k]+ 1.0im*p.eta)
+                        -(H.E[i]-H.E[j])*(H.E[j]-H.E[k])*(H.E[k]-H.E[i])*(H.Va[i,j]*H.Vc[j,k]-H.Vc[i,j]*H.Va[j,k])*H.Vb[k,i]/((H.E[i]-H.E[j])^2+(p.eta)^2)/((H.E[j]-H.E[k])^2+(p.eta)^2)/((H.E[k]-H.E[i])^2+(p.eta)^2) * (f(H.E[i],p.T)-f(H.E[k],p.T))/(-p.W_in + H.E[i]-H.E[k]+ 1.0im*p.eta)
+
+                    PV_bc[10] += -(H.E[i]-H.E[j])*(H.E[j]-H.E[k])*(H.E[k]-H.E[i])*(H.Va[i,j]*H.Vb[j,k]-H.Vb[i,j]*H.Va[j,k])*H.Vc[k,i]/((H.E[i]-H.E[j])^2+(p.eta)^2)/((H.E[j]-H.E[k])^2+(p.eta)^2)/((H.E[k]-H.E[i])^2+(p.eta)^2) * (f(H.E[i],p.T)-f(H.E[k],p.T))/(-p.W_in + H.E[i]-H.E[k]+ 1.0im*p.eta)-(H.E[i]-H.E[j])*(H.E[j]-H.E[k])*(H.E[k]-H.E[i])*(H.Va[i,j]*H.Vc[j,k]-H.Vc[i,j]*H.Va[j,k])*H.Vb[k,i]/((H.E[i]-H.E[j])^2+(p.eta)^2)/((H.E[j]-H.E[k])^2+(p.eta)^2)/((H.E[k]-H.E[i])^2+(p.eta)^2) * (f(H.E[i],p.T)-f(H.E[k],p.T))/(p.W_in + H.E[i]-H.E[k]+ 1.0im*p.eta)
+                end
+            end
+        end
+    end
+    for i in 1:5
+        PV[2i-1] = real(PV_bc[2i-1] + PV_bc[2i])/2
+        PV[2i] = imag(PV_bc[2i-1] - PV_bc[2i])
+        PV[11] += PV[2i-1]
+        PV[12] += PV[2i]
+    end 
+    return PV
+end
+
 
 #Calculate photo-voltaic effect with Parker's BI methods (under the velocity gauge)
 function Velocity_PV_BI(p::Parm, H::Hamiltonian)
     #(iii, eei, eie, iee, eee)*(LP, CP)
     #(Drude, BCD, Shift1, Injection, Shift2)
-    PV = zeros(Float64, 10)
+    PV = zeros(Float64, 12)
 
     #(iii, eei, eie, iee, eee)*(bc, cb)
     PV_bc = zeros(ComplexF64, 10)
     for i in 1:p.H_size
-        PV_bc[1] += H.Vabc[i,i]*f(H.E[i], p.T)
-        PV_bc[2] += H.Vabc[i,i]*f(H.E[i], p.T)
+        PV_bc[1] += H.Vabc[i,i]*f(H.E[i], p.T)/2
+        PV_bc[2] += H.Vabc[i,i]*f(H.E[i], p.T)/2
         #PV_bc[1] += H.Va[i,i]*H.Vbc[i,i]*f(H.E[i], p.T)/(2.0im*p.eta)/(p.W_in)^2/2
         #PV_bc[2] += H.Va[i,i]*H.Vbc[i,i]*f(H.E[i], p.T)/(2.0im*p.eta)/(p.W_in)^2/2
         #PV_bc[3] += H.Vab[i,i]*H.Vc[i,i]*f(H.E[i], p.T)/(p.W_in+1.0im*p.eta)/(p.W_in)^2
         #PV_bc[4] += H.Vac[i,i]*H.Vb[i,i]*f(H.E[i], p.T)/(-p.W_in+1.0im*p.eta)/(p.W_in)^2
         for j in 1:p.H_size
-            PV1 = H.Va[i,j]*H.Vbc[j,i]*(f(H.E[i], p.T)-f(H.E[j], p.T))/(H.E[i]-H.E[j]+2.0im*p.eta)
+            PV1 = H.Va[i,j]*H.Vbc[j,i]*(f(H.E[i], p.T)-f(H.E[j], p.T))/(H.E[i]-H.E[j]+1.0im*p.eta)/2
             PV_bc1 = (H.Vab[i,j]*H.Vc[j,i]/(p.W_in +H.E[i]-H.E[j]+1.0im*p.eta))*(f(H.E[i], p.T)-f(H.E[j], p.T))
             PV_cb1 = (H.Vab[i,j]*H.Vc[j,i]/(-p.W_in +H.E[i]-H.E[j]+1.0im*p.eta))*(f(H.E[i], p.T)-f(H.E[j], p.T))
             PV_bc2 = (H.Vca[i,j]*H.Vb[j,i]/(-p.W_in +H.E[i]-H.E[j]+1.0im*p.eta))*(f(H.E[i], p.T)-f(H.E[j], p.T))
@@ -544,7 +602,8 @@ function Velocity_PV_BI(p::Parm, H::Hamiltonian)
                 PV_bc[10] += PV1 + PV_cb1 + PV_cb2
             end
             for k in 1:p.H_size
-                PVbc1 = H.Va[i,j] * H.Vb[j,k] * H.Vc[k,i]* (f(H.E[i], p.T)/(H.E[i]-H.E[j]+2.0im*p.eta)*(1.0/(p.W_in+H.E[i]-H.E[k]+1.0im*p.eta)) + f(H.E[k],p.T)*(1.0/((-p.W_in-H.E[j]+H.E[k]+1.0im*p.eta)*(-p.W_in-H.E[i]+H.E[k]-1.0im*p.eta))+1.0/((p.W_in-H.E[j]+H.E[k]+1.0im*p.eta)*(p.W_in-H.E[i]+H.E[k]-1.0im*p.eta))) + f(H.E[j],p.T)/(H.E[i]-H.E[j]+2.0im*p.eta)*(1.0/(-p.W_in+H.E[k]-H.E[j]+1.0im*p.eta)))
+                #PVbc1 = H.Va[i,j] * H.Vb[j,k] * H.Vc[k,i]* (f(H.E[i], p.T)/(H.E[i]-H.E[j]+2.0im*p.eta)*(1.0/(p.W_in+H.E[i]-H.E[k]+1.0im*p.eta)) + f(H.E[k],p.T)*(1.0/((-p.W_in-H.E[j]+H.E[k]+1.0im*p.eta)*(-p.W_in-H.E[i]+H.E[k]-1.0im*p.eta))+1.0/((p.W_in-H.E[j]+H.E[k]+1.0im*p.eta)*(p.W_in-H.E[i]+H.E[k]-1.0im*p.eta))) + f(H.E[j],p.T)/(H.E[i]-H.E[j]+2.0im*p.eta)*(1.0/(-p.W_in+H.E[k]-H.E[j]+1.0im*p.eta)))
+                PVbc1 = H.Va[i,j] * H.Vb[j,k] * H.Vc[k,i]* (f(H.E[i], p.T)/(H.E[i]-H.E[j]+2.0im*p.eta)*(1.0/(p.W_in+H.E[i]-H.E[k]+1.0im*p.eta)) + f(H.E[k],p.T)*(1.0/((-p.W_in-H.E[j]+H.E[k]+1.0im*p.eta)*(-p.W_in-H.E[i]+H.E[k]-1.0im*p.eta))) + f(H.E[j],p.T)/(H.E[i]-H.E[j]+2.0im*p.eta)*(1.0/(-p.W_in+H.E[k]-H.E[j]+1.0im*p.eta)))
 
                 PVbc2 = H.Va[i,j] * H.Vc[j,k] * H.Vb[k,i]* (f(H.E[i], p.T)/(H.E[i]-H.E[j]+2.0im*p.eta)*(1.0/(-p.W_in+H.E[i]-H.E[k]+1.0im*p.eta)) + f(H.E[k],p.T)*(1.0/((p.W_in-H.E[j]+H.E[k]+1.0im*p.eta)*(p.W_in-H.E[i]+H.E[k]-1.0im*p.eta))) + f(H.E[j],p.T)/(H.E[i]-H.E[j]+2.0im*p.eta)*(1.0/(p.W_in+H.E[k]-H.E[j]+1.0im*p.eta)) )
 
@@ -575,26 +634,28 @@ function Velocity_PV_BI(p::Parm, H::Hamiltonian)
     end
     
     for i in 1:5
-        PV[2i-1] = real(PV_bc[2i-1] + PV_bc[2i])/(2*p.W_in^2)
+        PV[2i-1] = -real(PV_bc[2i-1] + PV_bc[2i])/(2*p.W_in^2)
         PV[2i] = imag(PV_bc[2i-1] - PV_bc[2i])/p.W_in^2
+        PV[11] += PV[2i-1]
+        PV[12] += PV[2i]
     end
     return PV
 end
 
 #before using this function, you must use the band-index representation(use HV_BI!())
 function Green_PV_BI(p::Parm, H::Hamiltonian)
-    G_PV = zeros(Float64, 10)
+    G_PV = zeros(Float64, 12)
     #mi = minimum([p.W_MAX,10p.T])
     dw::Float64 = (2p.W_MAX)/p.W_SIZE/(2.0pi)
     
-    for w in collect(-p.W_MAX:2pi*dw:10.0p.T)
+    for w in collect(-p.W_MAX:2pi*dw:10p.T)
         G = PV_Green(set_PV_Gk(w,p,H)...)
         PV_bc = zeros(ComplexF64, 10)
         for i in 1:p.H_size
-            PV_bc[1] += H.Vabc[i,i]*G.GRmA[i,i]
-            PV_bc[2] += H.Vabc[i,i]*G.GRmA[i,i]
+            PV_bc[1] += H.Vabc[i,i]*G.GRmA[i,i]/2
+            PV_bc[2] += H.Vabc[i,i]*G.GRmA[i,i]/2
             for j in 1:p.H_size
-                pv1 = H.Va[i,j]*G.GR[j,j]*H.Vbc[j,i]*G.GRmA[i,i]
+                pv1 = H.Va[i,j]*H.Vbc[j,i]*(G.GR[j,j]*G.GRmA[i,i]+ G.GRmA[j,j]*G.GA[i,i])/2
                 PV_bc1 = (H.Vab[i,j]*H.Vc[j,i])*(G.GRp[j,j]*G.GRmA[i,i]+G.GRmA[j,j]*G.GAm[i,i])
                 PV_cb1 = (H.Vab[i,j]*H.Vc[j,i])*(G.GRm[j,j]*G.GRmA[i,i]+G.GRmA[j,j]*G.GAp[i,i])
                 PV_bc2 = (H.Vca[i,j]*H.Vb[j,i])*(G.GRm[j,j]*G.GRmA[i,i]+G.GRmA[j,j]*G.GAp[i,i])
@@ -640,6 +701,10 @@ function Green_PV_BI(p::Parm, H::Hamiltonian)
             G_PV[2i-1] += dw*imag(PV_bc[2i-1] + PV_bc[2i])*f(w,p.T)/(2*p.W_in^2)
             G_PV[2i] += dw*real(PV_bc[2i-1] - PV_bc[2i])*f(w,p.T)/p.W_in^2
         end
+    end
+    for i in 1:5
+        G_PV[11] += G_PV[2i-1]
+        G_PV[12] += G_PV[2i]
     end
     return G_PV
 end
