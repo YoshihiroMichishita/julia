@@ -21,6 +21,7 @@ struct Env
 
     n_level::Int
     n_batch::Int
+    penalty::Float64
 
     #op_fn
     op_br
@@ -41,7 +42,7 @@ function set_br()
     #return [(x,y)->(x+y), (x,y)->(x-y), (x,y)->(x*y), (x,y)->-1.0im*(x*y .- y*x), (x,y)->(x*y .+ y*x)/2]
 end
 
-function init_Env(N::Int, b::Int)
+function init_Env(N::Int, b::Int, p::Float64)
     Ns = N #siteの数
     num_var = 2*Ns  #operatorの数(ψ_iとψ'_i)
     num_br = 3 #binary operatorの数。多分上記の +, -, *, -i[,], {,} の５つ？([,]などは*と+で表現できるが、のちに変数は２回以上使わないという制約を課したいので、変数を一回使うだけで交換関係を表現できるように導入しておく)100の位に格納
@@ -52,6 +53,8 @@ function init_Env(N::Int, b::Int)
 
     n_level = 2
     n_batch = b
+
+    penalty = p
 
     #op_fn = set_fn()
     op_br = set_br()
@@ -69,15 +72,15 @@ function init_Env(N::Int, b::Int)
     end=#
 
     #return Ns, num_var, num_br, num_fn, num_ter, num_tot, n_level, n_batch, op_fn, op_br, conv_ac
-    return Ns, num_var, num_br, num_ter, num_tot, n_level, n_batch, op_br, conv_ac
+    return Ns, num_var, num_br, num_ter, num_tot, n_level, n_batch, penalty, op_br, conv_ac
 end
 
 struct DQN 
-    width
-    act_MAX
-    ϵ
-    prob
-    rand_ac
+    width::Int
+    act_MAX::Int
+    ϵ::Float64# for ϵ-greedy
+    prob::Vector{Float64}
+    rand_ac::Vector{Float64}
 end
 
 function init_DQN(w::Int, a_MAX::Int, ϵ::Float64, en::Env)
@@ -142,7 +145,7 @@ function experience(en::Env,ag::Agt)
         br = ag.branch[end-i+1]
         br_num += ((en.num_br+1)^(i-1))*br
     end
-    return sqrt(sum(ag.ex_table[recent_num, br_num,:]))./(ag.ex_table[recent_num, br_num,:].+1)
+    return log(sum(ag.ex_table[recent_num, br_num,:])+1)./(ag.ex_table[recent_num, br_num,:].+1)
 end
 
 function exp_update!(en::Env,ag::Agt, act::Int)
@@ -190,16 +193,15 @@ function decide_action!(en::Env, dq::DQN, ag::Agt, model, t::Int)
     return q_t, act
 end
 
+#return the penalty of the rule violation
 function rule_violate(ag::Agt, ac::Int)
     if(length(ag.state)>0)
         if(ac<10)
             #if(ac>999) #branch
             if(length(ag.state)>0)
                 if(ac == ag.state[end])
-                    #println("branch violation!")
                     return true
                 elseif(ac<3 && ag.state[end]<3)
-                    #println("branch violation!")
                     return true
                 else
                     return false
@@ -233,6 +235,7 @@ function rule_violate(ag::Agt, ac::Int)
     end
 end
 
+#Check the inveriance and add it to the loss
 function VarToLoss(var::Vector{Matrix{ComplexF64}})
     loss = 0.0
     sw = (size(var[1])[1]==size(var[1])[2])
@@ -282,6 +285,7 @@ function VarToLoss(var::Vector{Adjoint{ComplexF64, Vector{ComplexF64}}})
     return loss/size(var)[1]
 end
 
+#(θ,ϕ) => ψ
 function wave_fn(var::Vector{Float64}, sw::Int)
     if(sw==1)
         wv_fn = ([cos(var[1]), sin(var[1])*exp(1.0im*var[2])])'
@@ -315,7 +319,7 @@ end
 =#
 
 
-function Fn_Gauge(en::Env, sample::Sample, st::Vector{Int}, var_now, var_sub1, var_sub2, it::Int)
+function Fn_Gauge!(en::Env, sample::Sample, st::Vector{Int}, var_now, var_sub1, var_sub2, it::Int)
     if(it==0)
         return VarToLoss(var_now)
     else
@@ -328,7 +332,7 @@ function Fn_Gauge(en::Env, sample::Sample, st::Vector{Int}, var_now, var_sub1, v
         i_s = (div(ac,10)-1)%en.Ns + 1
         sw = div(div(ac,10), en.Ns+1)
         var_now = [exp((2sw-1)*1.0im*sample.gauge_sample[b,i_s])*wave_fn(sample.var[i_s], sw) for b in 1:en.n_batch]
-    #elseif(ac < 100)
+        #elseif(ac < 100)
         #println("fn")
         #=
         if(typeof(var_now)==Vector{Matrix{ComplexF64}})
@@ -361,10 +365,11 @@ function Fn_Gauge(en::Env, sample::Sample, st::Vector{Int}, var_now, var_sub1, v
             var_sub1 = nothing
             var_sub1 = var_sub2
         catch
-            return 100.0
+            return en.penalty
         end
     end
-    Fn_Gauge(en, sample, st, var_now, var_sub1, var_sub2, it-1)
+    #println("var_now:$(var_now), var1:$(var_sub1), var2:$(var_sub2)")
+    Fn_Gauge!(en, sample, st, var_now, var_sub1, var_sub2, it-1)
 end
 
 
@@ -374,7 +379,7 @@ function reward(en::Env, sample::Sample, ag::Agt)
     T = length(ag.state)
     #gauge_sample = 2pi*rand(Float64, n_batch, Ns)
     #st_copy = copy(ag.state)
-    l = Fn_Gauge(en, sample, ag.state, nothing, nothing, nothing, T)
+    l = Fn_Gauge!(en, sample, ag.state, nothing, nothing, nothing, T)
     return -l + 1.0
 end
 
@@ -410,14 +415,14 @@ function Search!(en::Env, dq::DQN, sample::Sample, ag::Agt, model)
             end
         end
         if(rule_violate(ag, act)) #rule違反をしていたら、罰則(負の報酬)を与えて終了
-            #push!(ag.state, act)
-            r = -100.0
+            push!(ag.state, act)
+            r = -en.penalty
             break;
         end
 
         push!(ag.state, act)
         if(turn == dq.act_MAX)
-            r = -20.0
+            r = -en.penalty
         end
         #r[turn] = reward(state, act)
     end
@@ -512,6 +517,11 @@ function RandPolitics(en::Env, dq::DQN, sample::Sample, ag::Agt, model)
     for turn in 1:dq.act_MAX
         #ag.q_table[turn,:], act = decide_action!(en, dq, ag, turn)
         ag.q_table[turn,:], act = decide_action!(en, dq, ag,model, turn)
+        if(rule_violate(ag, act)) #rule違反をしていたら、罰則(負の報酬)を与えて終了
+            r = -en.penalty
+            push!(ag.state, act)
+            break;
+        end
         push!(ag.state, act)
         if(act < 10) #actionでbinaryを選んだ場合、２つに分岐するので分岐点を覚えておくためにbranchに入れておく
             push!(ag.branch, act)
@@ -524,10 +534,7 @@ function RandPolitics(en::Env, dq::DQN, sample::Sample, ag::Agt, model)
             end
         end
         #push!(ag.state, act)
-        if(rule_violate(ag, act)) #rule違反をしていたら、罰則(負の報酬)を与えて終了
-            r = -100.0
-            break;
-        end
+        
         #r[turn] = reward(state, act)
     end
     if(r == 0.0)
@@ -550,14 +557,36 @@ function init_optimistic!(η::Float64, dq::DQN, model)
     end
 end
 
+function show_formula(state::Vector{Int})
+    for i in 1:length(state)
+        st = state[i]
+        if(st<10)
+            if(st==1)
+                print("+")
+            elseif(st==2)
+                print("-")
+            elseif(st==3)
+                print("*")
+            end
+        else
+            if(st==10)
+                print("ψ^†")
+            elseif(st==20)
+                print("ψ")
+            end
+        end
+    end
+    print(": ")
+end
+
 function main(arg::Array{String,1})
     #N_s, n_batch
-    en = Env(init_Env(parse(Int, arg[1]), parse(Int, arg[2]))...)
+    en = Env(init_Env(parse(Int, arg[1]), parse(Int, arg[2]), parse(Float64, arg[7]))...)
     #width, act_MAX, ϵ
     dq = DQN(init_DQN(parse(Int, arg[3]), parse(Int, arg[4]), parse(Float64, arg[5]), en)...)
     ag = Agt(init_agt(en, dq)...)
 
-    #model = Chain(Dense(dq.act_MAX, dq.width, relu), Dense(dq.width, dq.width, relu) , Dense(dq.width, dq.width, relu), Dense(dq.width, en.num_tot))
+    #model = Chain(Dense(dq.act_MAX, dq.width, relu), Dense(dq.width, dq.width, relu), Dense(dq.width, dq.width, relu), Dense(dq.width, en.num_tot))
     model = Chain(Dense(dq.act_MAX, dq.width), Dense(dq.width, dq.width) , Dense(dq.width, dq.width), Dense(dq.width, en.num_tot))
     #, Dense(dq.width, dq.width, relu) , Dense(dq.width, dq.width, relu),
 
@@ -573,6 +602,10 @@ function main(arg::Array{String,1})
 
     ll_MAX = parse(Int, arg[6])
     ll_it = zeros(Float64, ll_MAX)
+    best_score = 1.0
+    best_state::Vector{Int} = [3, 10, 20]
+    n_replay::Int = 0
+    noup::Int = 0
     for it in 1:ll_MAX
         #var = Gene_Rand_Var()
         #gauge_sample = 2pi*rand(Float64, n_batch, Ns)
@@ -587,11 +620,31 @@ function main(arg::Array{String,1})
             loss(dq,ag, model)/length(ag.state)
         end
         ll_it[it] = loss(dq,ag, model)
+        
         #Flux.Optimise.update!(ADAM(), Flux.params(ag.model), grads)
         Flux.Optimise.update!(ADAM(η), Flux.params(model), grads)
         
+        if(best_score > reward(en, sample, ag))
+            n_replay += 1
+            ag.state = best_state
+            grads = Flux.gradient(Flux.params(model)) do
+                loss(dq,ag, model)/length(ag.state)
+            end
+            Flux.Optimise.update!(ADAM(η), Flux.params(model), grads)
+        else
+            noup +=1
+            best_state = ag.state
+        end
     end
-
+    #println(findmax(ag.ex_table))
+    println("replay: $(n_replay)")
+    println("noup: $(noup)")
+    println(best_state)
+    println("==============================")
+    println(size(ag.ex_table))
+    println(ag.ex_table[1,1,:])
+    println(ag.ex_table[6,4,:])
+    println(ag.ex_table[30+2,1,:])
     p3 = plot(ll_it.+1.0, xlabel="it_step", ylabel="loss",yscale=:log10, width=3.0)
     savefig(p3,"./loss_iterate.png")
     #m = copy(ag.model)
@@ -601,8 +654,10 @@ function main(arg::Array{String,1})
     sample = Sample(get_Sample(en)...)
     for i in 1:20
         r, pol = RandPolitics(en, dq, sample, ag, model)
+        
+        show_formula(pol)
         println(r)
-        println(pol)
+        #println(pol)
     end
     ag.state=[3, 10, 20]
     r = reward(en, sample, ag)
