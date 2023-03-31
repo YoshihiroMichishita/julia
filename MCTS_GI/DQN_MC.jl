@@ -114,6 +114,7 @@ mutable struct Agt
     state::Vector{Int}
     branch::Vector{Int}
     q_table::Matrix{Float32}
+    ex_table::Array{Int, 3} #経験数(2or3手前までの式, ２手前までのbranch, action)
 end
 
 function init_agt(en::Env, dq::DQN)
@@ -121,12 +122,59 @@ function init_agt(en::Env, dq::DQN)
     state::Vector{Int}=[]
     branch::Vector{Int}=[]
     q_table = zeros(Float32, dq.act_MAX, en.num_tot)
+    ex_table = zeros(Int, (en.num_tot+1)^3, (en.num_br+1)^2, en.num_tot)
     #return model, state, branch, q_table
-    return state, branch, q_table
+    return state, branch, q_table, ex_table
 end
 
-function action_vec(q_t::Vector{Float32}, en::Env, dq::DQN)
-    ac_prob = softmax(q_t)
+function experience(en::Env,ag::Agt)
+    recent_num = 1
+    br_num = 1
+    for i in 1:min(3, length(ag.state))
+        recent=ag.state[end-i+1]
+        if(recent<10)#br
+            recent_num += ((en.num_tot+1)^(i-1))*(recent+ en.num_var)
+        else#var
+            recent_num += ((en.num_tot+1)^(i-1))*(div(recent,10))
+        end
+    end
+    for i in 1:min(2, length(ag.branch))
+        br = ag.branch[end-i+1]
+        br_num += ((en.num_br+1)^(i-1))*br
+    end
+    return sqrt(sum(ag.ex_table[recent_num, br_num,:]))./(ag.ex_table[recent_num, br_num,:].+1)
+end
+
+function exp_update!(en::Env,ag::Agt, act::Int)
+    recent_num = 1
+    br_num = 1
+    act_num = 0
+    for i in 1:min(3, length(ag.state))
+        recent=ag.state[end-i+1]
+        if(recent<10)#br
+            recent_num += ((en.num_tot+1)^(i-1))*(recent+ en.num_var)
+        else#var
+            recent_num += ((en.num_tot+1)^(i-1))*(div(recent,10))
+        end
+    end
+    for i in 1:min(2, length(ag.branch))
+        br = ag.branch[end-i+1]
+        br_num += ((en.num_br+1)^(i-1))*br
+    end
+    if(act<10)#br
+        act_num += act+ en.num_var
+    else#var
+        act_num += div(act,10)
+    end
+    ag.ex_table[recent_num, br_num, act_num] += 1
+end
+
+function UCT(q_t::Vector{Float32}, ρ::Float64, en::Env, ag::Agt)
+    return q_t + ρ*experience(en, ag)
+end
+
+function action_vec(q_t::Vector{Float32}, en::Env, ag::Agt)
+    ac_prob = softmax(UCT(q_t,sqrt(2.0)*maximum(q_t), en, ag))
     act = rand(Categorical(ac_prob))
     return onehot(Int, 1:en.num_tot, act)
 end
@@ -137,7 +185,8 @@ function decide_action!(en::Env, dq::DQN, ag::Agt, model, t::Int)
     st_vec = vcat(ag.state, rem_turn)
     #q_t = ag.model(st_vec)
     q_t = model(st_vec)
-    act = en.conv_ac' * action_vec(q_t, en, dq) 
+    act = en.conv_ac' * action_vec(q_t, en, ag)
+    exp_update!(en, ag, act)
     return q_t, act
 end
 
@@ -264,6 +313,8 @@ function Fn_Gauge(en::Env, sample::Sample, st::Vector{Int}, var_sub, var_now)
     Fn_Gauge(en, sample, st, var_sub, var_now)
 end
 =#
+
+
 function Fn_Gauge(en::Env, sample::Sample, st::Vector{Int}, var_now, var_sub1, var_sub2, it::Int)
     if(it==0)
         return VarToLoss(var_now)
