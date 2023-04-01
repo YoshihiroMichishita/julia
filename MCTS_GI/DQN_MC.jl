@@ -177,7 +177,7 @@ function UCT(q_t::Vector{Float32}, ρ::Float64, en::Env, ag::Agt)
 end
 
 function action_vec(q_t::Vector{Float32}, en::Env, ag::Agt)
-    ac_prob = softmax(UCT(q_t,sqrt(2.0)*maximum(q_t), en, ag))
+    ac_prob = softmax(UCT(q_t,sqrt(2.0)*maximum(abs.(q_t)), en, ag))
     act = rand(Categorical(ac_prob))
     return onehot(Int, 1:en.num_tot, act)
 end
@@ -194,6 +194,7 @@ function decide_action!(en::Env, dq::DQN, ag::Agt, model, t::Int)
 end
 
 #return the penalty of the rule violation
+
 function rule_violate(ag::Agt, ac::Int)
     if(length(ag.state)>0)
         if(ac<10)
@@ -224,6 +225,47 @@ function rule_violate(ag::Agt, ac::Int)
             #end
         else
             if(length(findall(isequal(ac),ag.state))==0)
+                return false
+            else
+                #println("reuse the same var!")
+                return true
+            end
+        end
+    else
+        return false
+    end
+end
+
+function rule_violate(state::Vector{Int}, ac::Int)
+    if(length(state)>0)
+        if(ac<10)
+            #if(ac>999) #branch
+            if(length(state)>0)
+                if(ac == state[end])
+                    return true
+                elseif(ac<3 && state[end]<3)
+                    return true
+                else
+                    return false
+                end
+            else
+                return false
+            end
+            #else
+                #=
+                if((ac==1 && ag.state[end]==2) || (ac==2 && ag.state[end]==1))
+                    #println("fn violation!")
+                    return true
+                elseif(ac== ag.state[end])
+                    #println("fn violation!")
+                    return true
+                else
+                    return false
+                end
+                =#
+            #end
+        else
+            if(length(findall(isequal(ac),state))==0)
                 return false
             else
                 #println("reuse the same var!")
@@ -325,51 +367,55 @@ function Fn_Gauge!(en::Env, sample::Sample, st::Vector{Int}, var_now, var_sub1, 
     else
         ac = st[it]
     end
-    if(ac>9)
-        #println("var")
-        var_sub1 = var_now
-        var_sub2 = var_sub1
-        i_s = (div(ac,10)-1)%en.Ns + 1
-        sw = div(div(ac,10), en.Ns+1)
-        var_now = [exp((2sw-1)*1.0im*sample.gauge_sample[b,i_s])*wave_fn(sample.var[i_s], sw) for b in 1:en.n_batch]
-        #elseif(ac < 100)
-        #println("fn")
-        #=
-        if(typeof(var_now)==Vector{Matrix{ComplexF64}})
-            var_now = en.op_fn[div(ac,100)](var_now)
-        else
-            return 100.0
-        end=#
-        #=
-        try
-            var_now = en.op_fn[div(ac,100)](var_now)
-        catch
-            return 100.0
-        end
-        =#
+    if(rule_violate(st[1:it-1], st[it]))
+        return en.penalty
     else
-        #println("br")
-        #=
-        if(div(ac,100)<3 && typeof(var_now)!=typeof(var_sub1))
-            return 100.0
-        elseif(div(ac,100)==3 && typeof(var_now)==typeof(var_sub1) && typeof(var_now)!=Vector{Matrix{ComplexF64}})
-            return 100.0
+        if(ac>9)
+            #println("var")
+            var_sub1 = var_now
+            var_sub2 = var_sub1
+            i_s = (div(ac,10)-1)%en.Ns + 1
+            sw = div(div(ac,10), en.Ns+1)
+            var_now = [exp((2sw-1)*1.0im*sample.gauge_sample[b,i_s])*wave_fn(sample.var[i_s], sw) for b in 1:en.n_batch]
+            #elseif(ac < 100)
+            #println("fn")
+            #=
+            if(typeof(var_now)==Vector{Matrix{ComplexF64}})
+                var_now = en.op_fn[div(ac,100)](var_now)
+            else
+                return 100.0
+            end=#
+            #=
+            try
+                var_now = en.op_fn[div(ac,100)](var_now)
+            catch
+                return 100.0
+            end
+            =#
         else
-            var_now = en.op_br[div(ac,100)](var_sub1, var_now)
-            var_sub1 = nothing
-            var_sub1 = var_sub2
-        end=#
-        try
-            #var_now = en.op_br[div(ac,100)](var_sub1, var_now)
-            var_now = en.op_br[ac](var_sub1, var_now)
-            var_sub1 = nothing
-            var_sub1 = var_sub2
-        catch
-            return en.penalty
+            #println("br")
+            #=
+            if(div(ac,100)<3 && typeof(var_now)!=typeof(var_sub1))
+                return 100.0
+            elseif(div(ac,100)==3 && typeof(var_now)==typeof(var_sub1) && typeof(var_now)!=Vector{Matrix{ComplexF64}})
+                return 100.0
+            else
+                var_now = en.op_br[div(ac,100)](var_sub1, var_now)
+                var_sub1 = nothing
+                var_sub1 = var_sub2
+            end=#
+            try
+                #var_now = en.op_br[div(ac,100)](var_sub1, var_now)
+                var_now = en.op_br[ac](var_sub1, var_now)
+                var_sub1 = nothing
+                var_sub1 = var_sub2
+            catch
+                return en.penalty
+            end
         end
+        #println("var_now:$(var_now), var1:$(var_sub1), var2:$(var_sub2)")
+        Fn_Gauge!(en, sample, st, var_now, var_sub1, var_sub2, it-1)
     end
-    #println("var_now:$(var_now), var1:$(var_sub1), var2:$(var_sub2)")
-    Fn_Gauge!(en, sample, st, var_now, var_sub1, var_sub2, it-1)
 end
 
 
@@ -386,9 +432,11 @@ end
 function q_update!(en::Env, ag::Agt, r::Float64)
     T = length(ag.state)
     q_max = Float32(r)
-    for t in T:1
-        ag.q_table[t, act_ind(ag.state[t],en)] = q_max
-        q_max = maximum(ag.q_table[t,:])
+    #println(q_max)
+    for t in 1:T
+        ag.q_table[T-t+1, act_ind(ag.state[T-t+1],en)] = q_max
+        #println(q_max)
+        q_max = maximum(ag.q_table[T-t+1,:])
     end
 end
 
@@ -431,6 +479,16 @@ function Search!(en::Env, dq::DQN, sample::Sample, ag::Agt, model)
     end
     q_update!(en, ag, r)
 end
+#=
+function replay!(en::Env, dq::DQN, sample::Sample, ag::Agt, model, best_state::Vector{Int})
+    l = length(best_state)
+    st = zeros(Float32, en.num_tot)
+    for i in 1:l
+        ag.q_table[i,:] = model(st)
+        st[i] = best_state[i]        
+    end
+    ag.state = best_state
+end=#
 
 function act_ind(ac::Int, en::Env)
     id = 0
@@ -586,8 +644,9 @@ function main(arg::Array{String,1})
     dq = DQN(init_DQN(parse(Int, arg[3]), parse(Int, arg[4]), parse(Float64, arg[5]), en)...)
     ag = Agt(init_agt(en, dq)...)
 
-    #model = Chain(Dense(dq.act_MAX, dq.width, relu), Dense(dq.width, dq.width, relu), Dense(dq.width, dq.width, relu), Dense(dq.width, en.num_tot))
-    model = Chain(Dense(dq.act_MAX, dq.width), Dense(dq.width, dq.width) , Dense(dq.width, dq.width), Dense(dq.width, en.num_tot))
+    #model = Chain(Dense(dq.act_MAX, dq.width, relu), Dense(dq.width, dq.width, relu), Dense(dq.width, dq.width, relu) , Dense(dq.width, dq.width, relu), Dense(dq.width, dq.width, relu), Dense(dq.width, en.num_tot))
+    model = Chain(Dense(dq.act_MAX, dq.width, relu, init=Flux.randn32), Dense(dq.width, dq.width, relu, init=Flux.randn32), Dense(dq.width, dq.width, relu, init=Flux.randn32) , Dense(dq.width, dq.width, relu, init=Flux.randn32), Dense(dq.width, dq.width, relu, init=Flux.randn32), Dense(dq.width, en.num_tot, init=Flux.randn32))
+    #model = Chain(Dense(dq.act_MAX, dq.width), Dense(dq.width, dq.width) , Dense(dq.width, dq.width), Dense(dq.width, en.num_tot))
     #, Dense(dq.width, dq.width, relu) , Dense(dq.width, dq.width, relu),
 
     
@@ -602,14 +661,15 @@ function main(arg::Array{String,1})
 
     ll_MAX = parse(Int, arg[6])
     ll_it = zeros(Float64, ll_MAX)
-    best_score = 1.0
-    best_state::Vector{Int} = [3, 10, 20]
+    best_score = -100.0
+    best_state::Vector{Int} = []
     n_replay::Int = 0
     noup::Int = 0
+    sample = Sample(get_Sample(en)...)
     for it in 1:ll_MAX
         #var = Gene_Rand_Var()
         #gauge_sample = 2pi*rand(Float64, n_batch, Ns)
-        sample = Sample(get_Sample(en)...)
+        #sample = Sample(get_Sample(en)...)
         #Search!(en, dq, sample, ag)
         Search!(en, dq, sample, ag, model)
         #println(ag.state)
@@ -627,6 +687,7 @@ function main(arg::Array{String,1})
         if(best_score > reward(en, sample, ag))
             n_replay += 1
             ag.state = best_state
+            q_update!(en, ag, best_score)
             grads = Flux.gradient(Flux.params(model)) do
                 loss(dq,ag, model)/length(ag.state)
             end
@@ -634,12 +695,14 @@ function main(arg::Array{String,1})
         else
             noup +=1
             best_state = ag.state
+            best_score = reward(en, sample, ag)
         end
     end
     #println(findmax(ag.ex_table))
     println("replay: $(n_replay)")
     println("noup: $(noup)")
     println(best_state)
+    println(model(zeros(Float32, en.num_tot)))
     println("==============================")
     println(size(ag.ex_table))
     println(ag.ex_table[1,1,:])
