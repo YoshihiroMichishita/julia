@@ -147,7 +147,7 @@ function experience(en::Env,ag::Agt)
         br = ag.branch[end-i+1]
         br_num += ((en.num_br+1)^(i-1))*br
     end
-    return log(sum(ag.ex_table[recent_num, br_num,:])+1)./(ag.ex_table[recent_num, br_num,:].+1)
+    return sqrt.(log(sum(ag.ex_table[recent_num, br_num,:])+1)./(ag.ex_table[recent_num, br_num,:].+1))
 end
 
 function exp_update!(en::Env,ag::Agt, act::Int)
@@ -191,6 +191,16 @@ function decide_action!(en::Env, dq::DQN, ag::Agt, model, t::Int)
     #q_t = ag.model(st_vec)
     q_t = model(st_vec)
     act = en.conv_ac' * action_vec(q_t, en, ag)
+    exp_update!(en, ag, act)
+    return q_t, act
+end
+
+function decide_action(en::Env, dq::DQN, ag::Agt, model, t::Int)
+    rem_turn = zeros(Int, dq.act_MAX + 1 - t)
+    st_vec = vcat(ag.state, rem_turn)
+    q_t = model(st_vec)
+    ac_prob = softmax(q_t)
+    act = en.conv_ac' * (onehot(Int, 1:en.num_tot, rand(Categorical(ac_prob))))
     exp_update!(en, ag, act)
     return q_t, act
 end
@@ -576,7 +586,8 @@ function RandPolitics(en::Env, dq::DQN, sample::Sample, ag::Agt, model)
     #q_table = []
     for turn in 1:dq.act_MAX
         #ag.q_table[turn,:], act = decide_action!(en, dq, ag, turn)
-        ag.q_table[turn,:], act = decide_action!(en, dq, ag,model, turn)
+        #ag.q_table[turn,:], act = decide_action!(en, dq, ag,model, turn)
+        ag.q_table[turn,:], act = decide_action(en, dq, ag, model, turn)
         if(rule_violate(ag, act)) #rule違反をしていたら、罰則(負の報酬)を与えて終了
             r = -en.penalty
             push!(ag.state, act)
@@ -710,7 +721,14 @@ function main(arg::Array{String,1})
     println(ag.ex_table[1,1,:])
     println(ag.ex_table[6,4,:])
     println(ag.ex_table[30+2,1,:])
-    p3 = plot(ll_it.+1.0, xlabel="it_step", ylabel="loss",yscale=:log10, width=3.0)
+    loss_ave::Vector{Float64} = []
+    for nn in 1:div(ll_MAX,100)
+        if((100*(nn-1)+1000)<ll_MAX)
+            l_av = sum(ll_it[(100*(nn-1)+1):(100*(nn-1)+1000)])/1000
+            push!(loss_ave, l_av)
+        end
+    end
+    p3 = plot(loss_ave.+1.0, xlabel="it_step", ylabel="loss",yscale=:log10, width=3.0)
     savefig(p3,"./loss_iterate.png")
     #m = copy(ag.model)
 
