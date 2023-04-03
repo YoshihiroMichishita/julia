@@ -22,6 +22,7 @@ struct Env
     n_level::Int
     n_batch::Int
     penalty::Float64
+    γ::Float64# discount
 
     #op_fn
     op_br
@@ -42,7 +43,7 @@ function set_br()
     #return [(x,y)->(x+y), (x,y)->(x-y), (x,y)->(x*y), (x,y)->-1.0im*(x*y .- y*x), (x,y)->(x*y .+ y*x)/2]
 end
 
-function init_Env(N::Int, b::Int, p::Float64)
+function init_Env(N::Int, b::Int, p::Float64, γ::Float64)
     Ns = N #siteの数
     num_var = 2*Ns  #operatorの数(ψ_iとψ'_i)
     num_br = 3 #binary operatorの数。多分上記の +, -, *, -i[,], {,} の５つ？([,]などは*と+で表現できるが、のちに変数は２回以上使わないという制約を課したいので、変数を一回使うだけで交換関係を表現できるように導入しておく)100の位に格納
@@ -72,13 +73,14 @@ function init_Env(N::Int, b::Int, p::Float64)
     end=#
 
     #return Ns, num_var, num_br, num_fn, num_ter, num_tot, n_level, n_batch, op_fn, op_br, conv_ac
-    return Ns, num_var, num_br, num_ter, num_tot, n_level, n_batch, penalty, op_br, conv_ac
+    return Ns, num_var, num_br, num_ter, num_tot, n_level, n_batch, penalty, γ, op_br, conv_ac
 end
 
 struct DQN 
     width::Int
     act_MAX::Int
     ϵ::Float64# for ϵ-greedy
+    #γ::Float64# discount
     prob::Vector{Float64}
     rand_ac::Vector{Float64}
 end
@@ -436,7 +438,7 @@ function q_update!(en::Env, ag::Agt, r::Float64)
     for t in 1:T
         ag.q_table[T-t+1, act_ind(ag.state[T-t+1],en)] = q_max
         #println(q_max)
-        q_max = maximum(ag.q_table[T-t+1,:])
+        q_max = en.γ * maximum(ag.q_table[T-t+1,:])
     end
 end
 
@@ -639,7 +641,7 @@ end
 
 function main(arg::Array{String,1})
     #N_s, n_batch
-    en = Env(init_Env(parse(Int, arg[1]), parse(Int, arg[2]), parse(Float64, arg[7]))...)
+    en = Env(init_Env(parse(Int, arg[1]), parse(Int, arg[2]), parse(Float64, arg[7]), parse(Float64, arg[8]))...)
     #width, act_MAX, ϵ
     dq = DQN(init_DQN(parse(Int, arg[3]), parse(Int, arg[4]), parse(Float64, arg[5]), en)...)
     ag = Agt(init_agt(en, dq)...)
