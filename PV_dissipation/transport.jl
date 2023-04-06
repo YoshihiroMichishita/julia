@@ -14,6 +14,7 @@ mutable struct Hamiltonian
     Vca::Array{ComplexF64,2}
     Vabc::Array{ComplexF64,2}
     E::Array{ComplexF64,1}
+    γ::Array{Float64,1}
 end
 
 using ForwardDiff
@@ -76,6 +77,7 @@ function VtoM(v)
     M::Array{ComplexF64,2} = sigma' * v 
     return M
 end
+
 #set Va~Vc
 function set_v1_fd(k,p::Parm)
     m(x) = set_H_v(x,p)
@@ -106,75 +108,8 @@ end
 #init_Hamiltonian
 #function HandV_fd(k0::NTuple{2, Float64},p::Parm)
 function HandV_fd(k::Vector{Float64},p::Parm)
-    #k = [k0[1], k0[2]]
-
     H = set_H(k,p)
 
-    #=
-    if(p.α == 'X')
-        Va = VtoM(set_vx_fd(k,p))#set_vx(k,p)
-        if(p.β == 'X')
-            Vb = VtoM(set_vx_fd(k,p))
-            Vab = VtoM(set_vxx_fd(k,p))
-            if(p.γ == 'X')
-                Vc = VtoM(set_vx_fd(k,p))
-                Vbc = VtoM(set_vxx_fd(k,p))
-                Vca = VtoM(set_vxx_fd(k,p))
-                Vabc = VtoM(set_vxxx_fd(k,p))
-            elseif(p.γ == 'Y')
-                Vc = VtoM(set_vy_fd(k,p))
-                Vbc = VtoM(set_vxy_fd(k,p))
-                Vca = VtoM(set_vxy_fd(k,p))
-                Vabc = VtoM(set_vxxy_fd(k,p))
-            end
-        elseif(p.β == 'Y')
-            Vb = VtoM(set_vy_fd(k,p))
-            Vab = VtoM(set_vxy_fd(k,p))
-            if(p.γ == 'X')
-                Vc = VtoM(set_vx_fd(k,p))
-                Vbc = VtoM(set_vxy_fd(k,p))
-                Vca = VtoM(set_vxx_fd(k,p))
-                Vabc = VtoM(set_vxxy_fd(k,p))
-            elseif(p.γ == 'Y')
-                Vc = VtoM(set_vy_fd(k,p))
-                Vbc = VtoM(set_vyy_fd(k,p))
-                Vca = VtoM(set_vxy_fd(k,p))
-                Vabc = VtoM(set_vxyy_fd(k,p))
-            end
-        end
-    elseif(p.α == 'Y')
-        Va = VtoM(set_vy_fd(k,p))#set_vx(k,p)
-        if(p.β == 'X')
-            Vb = VtoM(set_vx_fd(k,p))
-            Vab = VtoM(set_vxy_fd(k,p))
-            if(p.γ == 'X')
-                Vc = VtoM(set_vx_fd(k,p))
-                Vbc = VtoM(set_vxx_fd(k,p))
-                Vca = VtoM(set_vxy_fd(k,p))
-                Vabc = VtoM(set_vxxy_fd(k,p))
-            elseif(p.γ == 'Y')
-                Vc = VtoM(set_vy_fd(k,p))
-                Vbc = VtoM(set_vxy_fd(k,p))
-                Vca = VtoM(set_vyy_fd(k,p))
-                Vabc = VtoM(set_vxyy_fd(k,p))
-            end
-        elseif(p.β == 'Y')
-            Vb = VtoM(set_vy_fd(k,p))
-            Vab = VtoM(set_vyy_fd(k,p))
-            if(p.γ == 'X')
-                Vc = VtoM(set_vx_fd(k,p))
-                Vbc = VtoM(set_vxy_fd(k,p))
-                Vca = VtoM(set_vxy_fd(k,p))
-                Vabc = VtoM(set_vxyy_fd(k,p))
-            elseif(p.γ == 'Y')
-                Vc = VtoM(set_vy_fd(k,p))
-                Vbc = VtoM(set_vyy_fd(k,p))
-                Vca = VtoM(set_vyy_fd(k,p))
-                Vabc = VtoM(set_vyyy_fd(k,p))
-            end
-        end
-    end
-    =#
     Va_v, Vb_v, Vc_v = set_v1_fd(k,p)
     Vab_v, Vbc_v, Vca_v = set_v2_fd(k,p)
     Vabc_v = set_v3_fd(k,p)
@@ -187,8 +122,9 @@ function HandV_fd(k::Vector{Float64},p::Parm)
     Vabc = VtoM(Vabc_v)
     
     E::Array{ComplexF64,1} = zeros(p.H_size)
+    γ = zeros(Float64, p.H_size)
 
-    return H, Va, Vb, Vc, Vab, Vbc, Vca, Vabc, E 
+    return H, Va, Vb, Vc, Vab, Vbc, Vca, Vabc, E, γ 
 end
 
 # when you focus on the DC (input is also DC) conductivity
@@ -308,6 +244,10 @@ end
 function HV_BI!(H::Hamiltonian)
 
     H.E, BI::Array{ComplexF64,2} = eigen(H.Hk)
+    e, BI2::Array{ComplexF64,2} = eigen(H.Hk')
+    for i in 1:length(H.γ)
+        H.γ[i] = real((BI'*BI)[i,i]*(BI2'*BI2)[i,i]/((BI2'*BI)[i,i]*(BI'*BI2)[i,i]+1.0e-4))
+    end
     H.Hk = Diagonal(H.E)
     #H.Hk = [H.E[1] 0.0; 0.0 H.E[2]]
     Va_BI::Array{ComplexF64,2} = BI' * H.Va * BI
@@ -482,19 +422,20 @@ function Length_PV_BI(p::Parm, H::Hamiltonian)
         for j in 1:p.H_size
             if(j!=i)
                 #Drude
-                PV_bc[1] += (H.E[i]-H.E[j])*H.Va[i,i]*(H.Vb[i,j]*H.Vc[j,i]+H.Vb[i,j]*H.Vc[j,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2)*df(H.E[i], p.T)/p.W_in^2
-                PV_bc[2] += (H.E[i]-H.E[j])*H.Va[i,i]*(H.Vb[i,j]*H.Vc[j,i]+H.Vb[i,j]*H.Vc[j,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2)*df(H.E[i], p.T)/p.W_in^2
+                PV_bc[1] += (H.E[i]-H.E[j])*H.Va[i,i]*(H.Vb[i,j]*H.Vc[j,i]+H.Vb[i,j]*H.Vc[j,i])/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2)*df(H.E[i], p.T)/p.W_in^2
+                PV_bc[2] += (H.E[i]-H.E[j])*H.Va[i,i]*(H.Vb[i,j]*H.Vc[j,i]+H.Vb[i,j]*H.Vc[j,i])/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2)*df(H.E[i], p.T)/p.W_in^2
                 #BCD
-                PV_bc[3] += ((H.Va[i,j]*H.Vb[j,i]-H.Vb[i,j]*H.Va[j,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2)*H.Vc[i,i]-(H.Va[i,j]*H.Vc[j,i]-H.Vc[i,j]*H.Va[j,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2)*H.Vb[i,i])*df(H.E[i],p.T)/p.W_in
-                PV_bc[4] += -((H.Va[i,j]*H.Vb[j,i]-H.Vb[i,j]*H.Va[j,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2)*H.Vc[i,i]-(H.Va[i,j]*H.Vc[j,i]-H.Vc[i,j]*H.Va[j,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2)*H.Vb[i,i])*df(H.E[i],p.T)/p.W_in
+                PV_bc[3] += ((H.Va[i,j]*H.Vb[j,i]-H.Vb[i,j]*H.Va[j,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2)*H.Vc[i,i]-(H.Va[i,j]*H.Vc[j,i]-H.Vc[i,j]*H.Va[j,i])/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2)*H.Vb[i,i])*df(H.E[i],p.T)/p.W_in
+                PV_bc[4] += -((H.Va[i,j]*H.Vb[j,i]-H.Vb[i,j]*H.Va[j,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2)*H.Vc[i,i]-(H.Va[i,j]*H.Vc[j,i]-H.Vc[i,j]*H.Va[j,i])/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2)*H.Vb[i,i])*df(H.E[i],p.T)/p.W_in
                 
                 #Injection
-                PV_bc[7] += 2*2p.eta*(H.Va[i,i]-H.Va[j,j])*H.Vb[i,j]*H.Vc[j,i]*(f(H.E[i],p.T)-f(H.E[j],p.T))/((p.W_in+H.E[i]-H.E[j])^2+(2p.eta)^2)
-                PV_bc[8] += 2*2p.eta*(H.Va[i,i]-H.Va[j,j])*H.Vb[i,j]*H.Vc[j,i]*(f(H.E[i],p.T)-f(H.E[j],p.T))/((-p.W_in+H.E[i]-H.E[j])^2+(2p.eta)^2)
+                PV_bc[7] += 2*2p.eta*(H.Va[i,i]-H.Va[j,j])*H.Vb[i,j]*H.Vc[j,i]*(f(H.E[i],p.T)-f(H.E[j],p.T))/((p.W_in+H.E[i]-H.E[j])'*(p.W_in+H.E[i]-H.E[j])+(2p.eta)^2)
+                PV_bc[8] += 2*2p.eta*(H.Va[i,i]-H.Va[j,j])*H.Vb[i,j]*H.Vc[j,i]*(f(H.E[i],p.T)-f(H.E[j],p.T))/((-p.W_in+H.E[i]-H.E[j])'*(-p.W_in+H.E[i]-H.E[j])+(2p.eta)^2)
 
                 #eie
-                PV_bc[5] += (H.Va[i,j]*(H.Vb[j,j]-H.Va[i,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2) + H.Vab[i,j]*(H.E[i]-H.E[j])/((H.E[i]-H.E[j])^2+(2p.eta)^2))*H.Vc[j,i]*(f(H.E[j],p.T)-f(H.E[i],p.T))/((H.E[i]-H.E[j])^2+(2p.eta)^2)/(p.W_in+H.E[i]-H.E[j]+2.0im*p.eta) + (H.Va[i,j]*(H.Vc[j,j]-H.Va[i,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2) + H.Vca[i,j]*(H.E[i]-H.E[j])/((H.E[i]-H.E[j])^2+(2p.eta)^2))*H.Vb[j,i]*(f(H.E[j],p.T)-f(H.E[i],p.T))/((H.E[i]-H.E[j])^2+(2p.eta)^2)/(-p.W_in+H.E[i]-H.E[j]+2.0im*p.eta)
-                PV_bc[6] += (H.Va[i,j]*(H.Vb[j,j]-H.Va[i,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2) + H.Vab[i,j]*(H.E[i]-H.E[j])/((H.E[i]-H.E[j])^2+(2p.eta)^2))*H.Vc[j,i]*(f(H.E[j],p.T)-f(H.E[i],p.T))/((H.E[i]-H.E[j])^2+(2p.eta)^2)/(-p.W_in+H.E[i]-H.E[j]+2.0im*p.eta) + (H.Va[i,j]*(H.Vc[j,j]-H.Va[i,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2) + H.Vca[i,j]*(H.E[i]-H.E[j])/((H.E[i]-H.E[j])^2+(2p.eta)^2))*H.Vb[j,i]*(f(H.E[j],p.T)-f(H.E[i],p.T))/((H.E[i]-H.E[j])^2+(2p.eta)^2)/(p.W_in+H.E[i]-H.E[j]+2.0im*p.eta)
+                PV_bc[5] += (H.Va[i,j]*(H.Vb[j,j]-H.Va[i,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2) + H.Vab[i,j]*(H.E[i]-H.E[j])/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2))*H.Vc[j,i]*(f(H.E[j],p.T)-f(H.E[i],p.T))/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2)/(p.W_in+H.E[i]-H.E[j]+2.0im*p.eta) + (H.Va[i,j]*(H.Vc[j,j]-H.Va[i,i])/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2) + H.Vca[i,j]*(H.E[i]-H.E[j])/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2))*H.Vb[j,i]*(f(H.E[j],p.T)-f(H.E[i],p.T))/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2)/(-p.W_in+H.E[i]-H.E[j]+2.0im*p.eta)
+
+                PV_bc[6] += (H.Va[i,j]*(H.Vb[j,j]-H.Va[i,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2) + H.Vab[i,j]*(H.E[i]-H.E[j])/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2))*H.Vc[j,i]*(f(H.E[j],p.T)-f(H.E[i],p.T))/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2)/(-p.W_in+H.E[i]-H.E[j]+2.0im*p.eta) + (H.Va[i,j]*(H.Vc[j,j]-H.Va[i,i])/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2) + H.Vca[i,j]*(H.E[i]-H.E[j])/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2))*H.Vb[j,i]*(f(H.E[j],p.T)-f(H.E[i],p.T))/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2)/(p.W_in+H.E[i]-H.E[j]+2.0im*p.eta)
 
                 #IFS
                 PV_bc[9] += 2H.Va[i,i]*(H.Vb[i,j]*H.Vc[j,i])*df(H.E[i], p.T)*p.W_in*(p.W_in -(H.E[i]-H.E[j]))/((p.W_in -(H.E[i]-H.E[j]))^2+4.0*p.eta^2)
@@ -502,9 +443,9 @@ function Length_PV_BI(p::Parm, H::Hamiltonian)
 
                 #eee
                 for k in 1:p.H_size
-                    PV_bc[9] += -(H.E[i]-H.E[j])*(H.E[j]-H.E[k])*(H.E[k]-H.E[i])*(H.Va[i,j]*H.Vb[j,k]-H.Vb[i,j]*H.Va[j,k])*H.Vc[k,i]/((H.E[i]-H.E[j])^2+(2p.eta)^2)/((H.E[j]-H.E[k])^2+(2p.eta)^2)/((H.E[k]-H.E[i])^2+(2p.eta)^2) * (f(H.E[i],p.T)-f(H.E[k],p.T))/(p.W_in + H.E[i]-H.E[k]+ 2.0im*p.eta)-(H.E[i]-H.E[j])*(H.E[j]-H.E[k])*(H.E[k]-H.E[i])*(H.Va[i,j]*H.Vc[j,k]-H.Vc[i,j]*H.Va[j,k])*H.Vb[k,i]/((H.E[i]-H.E[j])^2+(2p.eta)^2)/((H.E[j]-H.E[k])^2+(2p.eta)^2)/((H.E[k]-H.E[i])^2+(2p.eta)^2) * (f(H.E[i],p.T)-f(H.E[k],p.T))/(-p.W_in + H.E[i]-H.E[k]+ 2.0im*p.eta)
+                    PV_bc[9] += -(H.E[i]-H.E[j])*(H.E[j]-H.E[k])*(H.E[k]-H.E[i])*(H.Va[i,j]*H.Vb[j,k]-H.Vb[i,j]*H.Va[j,k])*H.Vc[k,i]/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2)/((H.E[j]-H.E[k])'*(H.E[j]-H.E[k])+(2p.eta)^2)/((H.E[k]-H.E[i])'*(H.E[k]-H.E[i])+(2p.eta)^2) * (f(H.E[i],p.T)-f(H.E[k],p.T))/(p.W_in + H.E[i]-H.E[k]+ 2.0im*p.eta)-(H.E[i]-H.E[j])*(H.E[j]-H.E[k])*(H.E[k]-H.E[i])*(H.Va[i,j]*H.Vc[j,k]-H.Vc[i,j]*H.Va[j,k])*H.Vb[k,i]/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2)/((H.E[j]-H.E[k])'*(H.E[j]-H.E[k])+(2p.eta)^2)/((H.E[k]-H.E[i])'*(H.E[k]-H.E[i])+(2p.eta)^2) * (f(H.E[i],p.T)-f(H.E[k],p.T))/(-p.W_in + H.E[i]-H.E[k]+ 2.0im*p.eta)
 
-                    PV_bc[10] += -(H.E[i]-H.E[j])*(H.E[j]-H.E[k])*(H.E[k]-H.E[i])*(H.Va[i,j]*H.Vb[j,k]-H.Vb[i,j]*H.Va[j,k])*H.Vc[k,i]/((H.E[i]-H.E[j])^2+(2p.eta)^2)/((H.E[j]-H.E[k])^2+(2p.eta)^2)/((H.E[k]-H.E[i])^2+(2p.eta)^2) * (f(H.E[i],p.T)-f(H.E[k],p.T))/(-p.W_in + H.E[i]-H.E[k]+ 2.0im*p.eta)-(H.E[i]-H.E[j])*(H.E[j]-H.E[k])*(H.E[k]-H.E[i])*(H.Va[i,j]*H.Vc[j,k]-H.Vc[i,j]*H.Va[j,k])*H.Vb[k,i]/((H.E[i]-H.E[j])^2+(2p.eta)^2)/((H.E[j]-H.E[k])^2+(2p.eta)^2)/((H.E[k]-H.E[i])^2+(2p.eta)^2) * (f(H.E[i],p.T)-f(H.E[k],p.T))/(p.W_in + H.E[i]-H.E[k]+ 2.0im*p.eta)
+                    PV_bc[10] += -(H.E[i]-H.E[j])*(H.E[j]-H.E[k])*(H.E[k]-H.E[i])*(H.Va[i,j]*H.Vb[j,k]-H.Vb[i,j]*H.Va[j,k])*H.Vc[k,i]/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2)/((H.E[j]-H.E[k])'*(H.E[j]-H.E[k])+(2p.eta)^2)/((H.E[k]-H.E[i])'*(H.E[k]-H.E[i])+(2p.eta)^2) * (f(H.E[i],p.T)-f(H.E[k],p.T))/(-p.W_in + H.E[i]-H.E[k]+ 2.0im*p.eta)-(H.E[i]-H.E[j])*(H.E[j]-H.E[k])*(H.E[k]-H.E[i])*(H.Va[i,j]*H.Vc[j,k]-H.Vc[i,j]*H.Va[j,k])*H.Vb[k,i]/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2)/((H.E[j]-H.E[k])'*(H.E[j]-H.E[k])+(2p.eta)^2)/((H.E[k]-H.E[i])'*(H.E[k]-H.E[i])+(2p.eta)^2) * (f(H.E[i],p.T)-f(H.E[k],p.T))/(p.W_in + H.E[i]-H.E[k]+ 2.0im*p.eta)
                 end
             end
         end
@@ -578,14 +519,14 @@ function Velocity_PV_BI(p::Parm, H::Hamiltonian)
     #(iii, eei, eie, iee, eee)*(bc, cb)
     PV_bc = zeros(ComplexF64, 10)
     for i in 1:p.H_size
-        PV_bc[1] += H.Vabc[i,i]*f(H.E[i], p.T)/2
-        PV_bc[2] += H.Vabc[i,i]*f(H.E[i], p.T)/2
+        PV_bc[1] += H.Vabc[i,i]*f(H.E[i], p.T)
+        PV_bc[2] += H.Vabc[i,i]*f(H.E[i], p.T)
         #PV_bc[1] += H.Va[i,i]*H.Vbc[i,i]*f(H.E[i], p.T)/(2.0im*p.eta)/(p.W_in)^2/2
         #PV_bc[2] += H.Va[i,i]*H.Vbc[i,i]*f(H.E[i], p.T)/(2.0im*p.eta)/(p.W_in)^2/2
         #PV_bc[3] += H.Vab[i,i]*H.Vc[i,i]*f(H.E[i], p.T)/(p.W_in+1.0im*p.eta)/(p.W_in)^2
         #PV_bc[4] += H.Vac[i,i]*H.Vb[i,i]*f(H.E[i], p.T)/(-p.W_in+1.0im*p.eta)/(p.W_in)^2
         for j in 1:p.H_size
-            PV1 = H.Va[i,j]*H.Vbc[j,i]*(f(H.E[i], p.T)-f(H.E[j], p.T))/(H.E[i]-H.E[j]+1.0im*p.eta)/2
+            PV1 = H.Va[i,j]*H.Vbc[j,i]*(f(H.E[i], p.T)-f(H.E[j], p.T))/(H.E[i]-H.E[j]+1.0im*p.eta)
             PV_bc1 = (H.Vab[i,j]*H.Vc[j,i]/(p.W_in +H.E[i]-H.E[j]+1.0im*p.eta))*(f(H.E[i], p.T)-f(H.E[j], p.T))
             PV_cb1 = (H.Vab[i,j]*H.Vc[j,i]/(-p.W_in +H.E[i]-H.E[j]+1.0im*p.eta))*(f(H.E[i], p.T)-f(H.E[j], p.T))
             PV_bc2 = (H.Vca[i,j]*H.Vb[j,i]/(-p.W_in +H.E[i]-H.E[j]+1.0im*p.eta))*(f(H.E[i], p.T)-f(H.E[j], p.T))
@@ -603,13 +544,13 @@ function Velocity_PV_BI(p::Parm, H::Hamiltonian)
             end
             for k in 1:p.H_size
                 #PVbc1 = H.Va[i,j] * H.Vb[j,k] * H.Vc[k,i]* (f(H.E[i], p.T)/(H.E[i]-H.E[j]+2.0im*p.eta)*(1.0/(p.W_in+H.E[i]-H.E[k]+1.0im*p.eta)) + f(H.E[k],p.T)*(1.0/((-p.W_in-H.E[j]+H.E[k]+1.0im*p.eta)*(-p.W_in-H.E[i]+H.E[k]-1.0im*p.eta))+1.0/((p.W_in-H.E[j]+H.E[k]+1.0im*p.eta)*(p.W_in-H.E[i]+H.E[k]-1.0im*p.eta))) + f(H.E[j],p.T)/(H.E[i]-H.E[j]+2.0im*p.eta)*(1.0/(-p.W_in+H.E[k]-H.E[j]+1.0im*p.eta)))
-                PVbc1 = H.Va[i,j] * H.Vb[j,k] * H.Vc[k,i]* (f(H.E[i], p.T)/(H.E[i]-H.E[j]+2.0im*p.eta)*(1.0/(p.W_in+H.E[i]-H.E[k]+1.0im*p.eta)) + f(H.E[k],p.T)*(1.0/((-p.W_in-H.E[j]+H.E[k]+1.0im*p.eta)*(-p.W_in-H.E[i]+H.E[k]-1.0im*p.eta))) + f(H.E[j],p.T)/(H.E[i]-H.E[j]+2.0im*p.eta)*(1.0/(-p.W_in+H.E[k]-H.E[j]+1.0im*p.eta)))
+                PVbc1 = H.Va[i,j] * H.Vb[j,k] * H.Vc[k,i]* (f(H.E[i], p.T)/(H.E[i]-H.E[j]+2.0im*p.eta)*(1.0/(p.W_in+H.E[i]-H.E[k]+1.0im*p.eta)) + f(H.E[k],p.T)*(1.0/((-p.W_in-H.E[j]+H.E[k]+1.0im*p.eta)*(-p.W_in-(H.E[i]-H.E[k])'-1.0im*p.eta))) + f(H.E[j],p.T)/((H.E[i]-H.E[j])'+2.0im*p.eta)*(1.0/(-p.W_in+(H.E[k]-H.E[j])'+1.0im*p.eta)))
 
-                PVbc2 = H.Va[i,j] * H.Vc[j,k] * H.Vb[k,i]* (f(H.E[i], p.T)/(H.E[i]-H.E[j]+2.0im*p.eta)*(1.0/(-p.W_in+H.E[i]-H.E[k]+1.0im*p.eta)) + f(H.E[k],p.T)*(1.0/((p.W_in-H.E[j]+H.E[k]+1.0im*p.eta)*(p.W_in-H.E[i]+H.E[k]-1.0im*p.eta))) + f(H.E[j],p.T)/(H.E[i]-H.E[j]+2.0im*p.eta)*(1.0/(p.W_in+H.E[k]-H.E[j]+1.0im*p.eta)) )
+                PVbc2 = H.Va[i,j] * H.Vc[j,k] * H.Vb[k,i]* (f(H.E[i], p.T)/(H.E[i]-H.E[j]+2.0im*p.eta)*(1.0/(-p.W_in+H.E[i]-H.E[k]+1.0im*p.eta)) + f(H.E[k],p.T)*(1.0/((p.W_in-H.E[j]+H.E[k]+1.0im*p.eta)*(p.W_in-(H.E[i]-H.E[k])'-1.0im*p.eta))) + f(H.E[j],p.T)/((H.E[i]-H.E[j])'+2.0im*p.eta)*(1.0/(p.W_in+(H.E[k]-H.E[j])'+1.0im*p.eta)) )
 
-                PVcb1 = H.Va[i,j] * H.Vb[j,k] * H.Vc[k,i]* (f(H.E[i], p.T)/(H.E[i]-H.E[j]+2.0im*p.eta)*(1.0/(-p.W_in+H.E[i]-H.E[k]+1.0im*p.eta)) + f(H.E[k],p.T)*(1.0/((p.W_in-H.E[j]+H.E[k]+1.0im*p.eta)*(p.W_in-H.E[i]+H.E[k]-1.0im*p.eta))) + f(H.E[j],p.T)/(H.E[i]-H.E[j]+2.0im*p.eta)*(1.0/(p.W_in+H.E[k]-H.E[j]+1.0im*p.eta)) )
+                PVcb1 = H.Va[i,j] * H.Vb[j,k] * H.Vc[k,i]* (f(H.E[i], p.T)/(H.E[i]-H.E[j]+2.0im*p.eta)*(1.0/(-p.W_in+H.E[i]-H.E[k]+1.0im*p.eta)) + f(H.E[k],p.T)*(1.0/((p.W_in-H.E[j]+H.E[k]+1.0im*p.eta)*(p.W_in-(H.E[i]-H.E[k])'-1.0im*p.eta))) + f(H.E[j],p.T)/((H.E[i]-H.E[j])'+2.0im*p.eta)*(1.0/(p.W_in+(H.E[k]-H.E[j])'+1.0im*p.eta)) )
 
-                PVcb2 = H.Va[i,j] * H.Vc[j,k] * H.Vb[k,i]* (f(H.E[i], p.T)/(H.E[i]-H.E[j]+2.0im*p.eta)*(1.0/(p.W_in+H.E[i]-H.E[k]+1.0im*p.eta)) + f(H.E[k],p.T)*(1.0/((-p.W_in-H.E[j]+H.E[k]+1.0im*p.eta)*(-p.W_in-H.E[i]+H.E[k]-1.0im*p.eta))) + f(H.E[j],p.T)/(H.E[i]-H.E[j]+2.0im*p.eta)*(1.0/(-p.W_in+H.E[k]-H.E[j]+1.0im*p.eta)) )
+                PVcb2 = H.Va[i,j] * H.Vc[j,k] * H.Vb[k,i]* (f(H.E[i], p.T)/(H.E[i]-H.E[j]+2.0im*p.eta)*(1.0/(p.W_in+H.E[i]-H.E[k]+1.0im*p.eta)) + f(H.E[k],p.T)*(1.0/((-p.W_in-H.E[j]+H.E[k]+1.0im*p.eta)*(-p.W_in-(H.E[i]-H.E[k])'-1.0im*p.eta))) + f(H.E[j],p.T)/((H.E[i]-H.E[j])'+2.0im*p.eta)*(1.0/(-p.W_in+(H.E[k]-H.E[j])'+1.0im*p.eta)) )
 
                 if(i==j)
                     if(j==k)
@@ -652,14 +593,14 @@ function Green_PV_BI(p::Parm, H::Hamiltonian)
         G = PV_Green(set_PV_Gk(w,p,H)...)
         PV_bc = zeros(ComplexF64, 10)
         for i in 1:p.H_size
-            PV_bc[1] += H.Vabc[i,i]*G.GRmA[i,i]/2
-            PV_bc[2] += H.Vabc[i,i]*G.GRmA[i,i]/2
+            PV_bc[1] += H.Vabc[i,i]*G.GRmA[i,i]
+            PV_bc[2] += H.Vabc[i,i]*G.GRmA[i,i]
             for j in 1:p.H_size
-                pv1 = H.Va[i,j]*H.Vbc[j,i]*(G.GR[j,j]*G.GRmA[i,i]+ G.GRmA[j,j]*G.GA[i,i])/2
-                PV_bc1 = (H.Vab[i,j]*H.Vc[j,i])*(G.GRp[j,j]*G.GRmA[i,i]+G.GRmA[j,j]*G.GAm[i,i])
-                PV_cb1 = (H.Vab[i,j]*H.Vc[j,i])*(G.GRm[j,j]*G.GRmA[i,i]+G.GRmA[j,j]*G.GAp[i,i])
-                PV_bc2 = (H.Vca[i,j]*H.Vb[j,i])*(G.GRm[j,j]*G.GRmA[i,i]+G.GRmA[j,j]*G.GAp[i,i])
-                PV_cb2 = (H.Vca[i,j]*H.Vb[j,i])*(G.GRp[j,j]*G.GRmA[i,i]+G.GRmA[j,j]*G.GAm[i,i])
+                pv1 = H.Va[i,j]*H.Vbc[j,i]*(H.γ[i]*G.GR[j,j]*G.GRmA[i,i]+ H.γ[j]*G.GRmA[j,j]*G.GA[i,i])
+                PV_bc1 = (H.Vab[i,j]*H.Vc[j,i])*(H.γ[i]*G.GRp[j,j]*G.GRmA[i,i]+H.γ[j]*G.GRmA[j,j]*G.GAm[i,i])
+                PV_cb1 = (H.Vab[i,j]*H.Vc[j,i])*(H.γ[i]*G.GRm[j,j]*G.GRmA[i,i]+H.γ[j]*G.GRmA[j,j]*G.GAp[i,i])
+                PV_bc2 = (H.Vca[i,j]*H.Vb[j,i])*(H.γ[i]*G.GRm[j,j]*G.GRmA[i,i]+H.γ[j]*G.GRmA[j,j]*G.GAp[i,i])
+                PV_cb2 = (H.Vca[i,j]*H.Vb[j,i])*(H.γ[i]*G.GRp[j,j]*G.GRmA[i,i]+H.γ[j]*G.GRmA[j,j]*G.GAm[i,i])
                 if(i==j)
                     PV_bc[7] += pv1
                     PV_bc[8] += pv1
@@ -672,10 +613,10 @@ function Green_PV_BI(p::Parm, H::Hamiltonian)
                     PV_bc[10] += pv1 + PV_cb1 + PV_cb2
                 end
                 for k in 1:p.H_size
-                    PVbc1 = H.Va[i,j]*H.Vb[j,k]*H.Vc[k,i]*(G.GR[j,j]*G.GRp[k,k]*G.GRmA[i,i] + G.GRm[j,j]*G.GRmA[k,k]*G.GAm[i,i] + G.GRmA[j,j]*G.GAp[k,k]*G.GA[i,i])
-                    PVcb1 = H.Va[i,j]*H.Vb[j,k]*H.Vc[k,i]*(G.GR[j,j]*G.GRm[k,k]*G.GRmA[i,i] + G.GRp[j,j]*G.GRmA[k,k]*G.GAp[i,i] + G.GRmA[j,j]*G.GAm[k,k]*G.GA[i,i])
-                    PVbc2 = H.Va[i,j]*H.Vc[j,k]*H.Vb[k,i]*(G.GR[j,j]*G.GRm[k,k]*G.GRmA[i,i] + G.GRp[j,j]*G.GRmA[k,k]*G.GAp[i,i] + G.GRmA[j,j]*G.GAm[k,k]*G.GA[i,i])
-                    PVcb2 = H.Va[i,j]*H.Vc[j,k]*H.Vb[k,i]*(G.GR[j,j]*G.GRp[k,k]*G.GRmA[i,i] + G.GRm[j,j]*G.GRmA[k,k]*G.GAm[i,i] + G.GRmA[j,j]*G.GAp[k,k]*G.GA[i,i])
+                    PVbc1 = H.Va[i,j]*H.Vb[j,k]*H.Vc[k,i]*(H.γ[i]*G.GR[j,j]*G.GRp[k,k]*G.GRmA[i,i] + H.γ[k]*G.GRm[j,j]*G.GRmA[k,k]*G.GAm[i,i] + H.γ[j]*G.GRmA[j,j]*G.GAp[k,k]*G.GA[i,i])
+                    PVcb1 = H.Va[i,j]*H.Vb[j,k]*H.Vc[k,i]*(H.γ[i]*G.GR[j,j]*G.GRm[k,k]*G.GRmA[i,i] + H.γ[k]*G.GRp[j,j]*G.GRmA[k,k]*G.GAp[i,i] + H.γ[j]*G.GRmA[j,j]*G.GAm[k,k]*G.GA[i,i])
+                    PVbc2 = H.Va[i,j]*H.Vc[j,k]*H.Vb[k,i]*(H.γ[i]*G.GR[j,j]*G.GRm[k,k]*G.GRmA[i,i] + H.γ[k]*G.GRp[j,j]*G.GRmA[k,k]*G.GAp[i,i] + H.γ[j]*G.GRmA[j,j]*G.GAm[k,k]*G.GA[i,i])
+                    PVcb2 = H.Va[i,j]*H.Vc[j,k]*H.Vb[k,i]*(H.γ[i]*G.GR[j,j]*G.GRp[k,k]*G.GRmA[i,i] + H.γ[k]*G.GRm[j,j]*G.GRmA[k,k]*G.GAm[i,i] + H.γ[j]*G.GRmA[j,j]*G.GAp[k,k]*G.GA[i,i])
                     if(i==j)
                         if(j==k)
                             PV_bc[1] += PVbc1+ PVbc2
@@ -705,6 +646,31 @@ function Green_PV_BI(p::Parm, H::Hamiltonian)
     for i in 1:5
         G_PV[11] += G_PV[2i-1]
         G_PV[12] += G_PV[2i]
+    end
+    return G_PV
+end
+
+function Green_PV(p::Parm, H::Hamiltonian)
+    G_PV = zeros(Float64, 2)
+    #mi = minimum([p.W_MAX,10p.T])
+    dw::Float64 = (2p.W_MAX)/p.W_SIZE/(2.0pi)
+    
+    for w in collect(-p.W_MAX:2pi*dw:10p.T)
+        G = PV_Green(set_PV_Gk(w,p,H)...)
+        PV_bc = zeros(ComplexF64, 2)
+        PV_bc[1] += tr(H.Vabc*G.GRmA)
+        PV_bc[2] += tr(H.Vabc*G.GRmA)
+
+        PV_bc[1] += (tr(H.Va*G.GR*H.Vbc*G.GRmA)+tr(H.Va*G.GRmA*H.Vbc*G.GA))
+        PV_bc[2] += (tr(H.Va*G.GR*H.Vbc*G.GRmA)+tr(H.Va*G.GRmA*H.Vbc*G.GA))
+        PV_bc[1] += tr(H.Vab*G.GRp*H.Vc*G.GRmA+H.Vca*G.GRm*H.Vb*G.GRmA)+tr(H.Vab*G.GRmA*H.Vc*G.GAm+H.Vca*G.GRmA*H.Vb*G.GAp)
+        PV_bc[2] += tr(H.Vab*G.GRm*H.Vc*G.GRmA+H.Vca*G.GRp*H.Vb*G.GRmA)+tr(H.Vab*G.GRmA*H.Vc*G.GAp+H.Vca*G.GRmA*H.Vb*G.GAm)
+
+        PV_bc[1] += tr(H.Va*G.GR*H.Vb*G.GRp*H.Vc*G.GRmA)+tr(H.Va*G.GR*H.Vc*G.GRm*H.Vb*G.GRmA)+tr(H.Va*G.GRm*H.Vb*G.GRmA*H.Vc*G.GAm)+tr(H.Va*G.GRp*H.Vc*G.GRmA*H.Vb*G.GAp)+tr(H.Va*G.GRmA*H.Vb*G.GAp*H.Vc*G.GA)+tr(H.Va*G.GRmA*H.Vc*G.GAm*H.Vb*G.GA)
+        PV_bc[2] += tr(H.Va*G.GR*H.Vc*G.GRp*H.Vb*G.GRmA)+tr(H.Va*G.GR*H.Vb*G.GRm*H.Vc*G.GRmA)+tr(H.Va*G.GRm*H.Vc*G.GRmA*H.Vb*G.GAm)+tr(H.Va*G.GRp*H.Vb*G.GRmA*H.Vc*G.GAp)+tr(H.Va*G.GRmA*H.Vc*G.GAp*H.Vb*G.GA)+tr(H.Va*G.GRmA*H.Vb*G.GAm*H.Vc*G.GA)
+
+        G_PV[1] += dw*imag(PV_bc[1] + PV_bc[2])*f(w,p.T)/(2*p.W_in^2)
+        G_PV[2] += dw*real(PV_bc[1] - PV_bc[2])*f(w,p.T)/p.W_in^2
     end
     return G_PV
 end

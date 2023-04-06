@@ -640,10 +640,15 @@ function show_formula(state::Vector{Int})
                 print("*")
             end
         else
-            if(st==10)
-                print("ψ^†")
-            elseif(st==20)
-                print("ψ")
+            #if(st==10)
+            #    print("ψ^†")
+            #elseif(st==20)
+            #    print("ψ")
+            #end
+            if(st%20==0)
+                print("ψ_$(div(st,20))")
+            elseif(st%20==10)
+                print("ψ^†_$(div(st+10,20))")
             end
         end
     end
@@ -719,8 +724,8 @@ function main(arg::Array{String,1})
     println("==============================")
     println(size(ag.ex_table))
     println(ag.ex_table[1,1,:])
-    println(ag.ex_table[6,4,:])
-    println(ag.ex_table[30+2,1,:])
+    println(ag.ex_table[(en.num_tot+1),(en.num_br+1),:])
+    println(ag.ex_table[en.num_tot*(en.num_tot+1)+2,1,:])
     loss_ave::Vector{Float64} = []
     for nn in 1:div(ll_MAX,100)
         if((100*(nn-1)+1000)<ll_MAX)
@@ -735,7 +740,7 @@ function main(arg::Array{String,1})
     @save "mymodel.bson" model
 
     sample = Sample(get_Sample(en)...)
-    for i in 1:20
+    for i in 1:10
         r, pol = RandPolitics(en, dq, sample, ag, model)
         
         show_formula(pol)

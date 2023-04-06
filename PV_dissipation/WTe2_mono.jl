@@ -1,6 +1,6 @@
 using Distributed
 addprocs(32)
-@everywhere include("./Watanabe_PT_parm.jl")
+@everywhere include("./WTe2_mono_parm.jl")
 @everywhere include("./transport.jl")
 
 using DataFrames
@@ -9,13 +9,13 @@ using Plots
 
 function main(arg::Array{String,1})
 
-    K_SIZE = parse(Int,arg[10])
+    K_SIZE = parse(Int,arg[11])
     kk = get_kk(K_SIZE)
     dk2 = (2pi)^2/(K_SIZE^2)
-    η = parse(Float64,arg[6])
-    st = parse(Float64,arg[17])
-    ed = parse(Float64,arg[18])
-    sw = parse(Int,arg[19])
+    η = parse(Float64,arg[9])
+    st = parse(Float64,arg[18])
+    ed = parse(Float64,arg[19])
+    sw = parse(Int,arg[20])
     
 
     Win0 = collect(st:0.1:ed)
@@ -39,7 +39,7 @@ function main(arg::Array{String,1})
         
         
         if j == 1
-            println("Parm(t, tl, ar, ad, mu, eta, T, hx, dz, K_size, Wmax, Win, Wsize, abc)")
+            println("Parm(td, tp, td_AB, tp_AB, t0_aB, μd, μp, μf, eta, T, K_size, Wmax, Win, Wsize, abc)")
             println(p)
         end
         if(sw>0)
