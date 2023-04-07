@@ -429,8 +429,10 @@ function Length_PV_BI(p::Parm, H::Hamiltonian)
                 PV_bc[4] += -((H.Va[i,j]*H.Vb[j,i]-H.Vb[i,j]*H.Va[j,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2)*H.Vc[i,i]-(H.Va[i,j]*H.Vc[j,i]-H.Vc[i,j]*H.Va[j,i])/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2)*H.Vb[i,i])*df(H.E[i],p.T)/p.W_in
                 
                 #Injection
-                PV_bc[7] += 2*2p.eta*(H.Va[i,i]-H.Va[j,j])*H.Vb[i,j]*H.Vc[j,i]*(f(H.E[i],p.T)-f(H.E[j],p.T))/((p.W_in+H.E[i]-H.E[j])'*(p.W_in+H.E[i]-H.E[j])+(2p.eta)^2)
-                PV_bc[8] += 2*2p.eta*(H.Va[i,i]-H.Va[j,j])*H.Vb[i,j]*H.Vc[j,i]*(f(H.E[i],p.T)-f(H.E[j],p.T))/((-p.W_in+H.E[i]-H.E[j])'*(-p.W_in+H.E[i]-H.E[j])+(2p.eta)^2)
+                #PV_bc[7] += 2*2p.eta*(H.Va[i,i]-H.Va[j,j])*H.Vb[i,j]*H.Vc[j,i]*(f(H.E[i],p.T)-f(H.E[j],p.T))/((p.W_in+H.E[i]-H.E[j])'*(p.W_in+H.E[i]-H.E[j])+(2p.eta)^2)
+                #PV_bc[8] += 2*2p.eta*(H.Va[i,i]-H.Va[j,j])*H.Vb[i,j]*H.Vc[j,i]*(f(H.E[i],p.T)-f(H.E[j],p.T))/((-p.W_in+H.E[i]-H.E[j])'*(-p.W_in+H.E[i]-H.E[j])+(2p.eta)^2)
+                PV_bc[7] += 2*(H.Va[i,i]-H.Va[j,j])*H.Vb[i,j]*H.Vc[j,i]*(f(H.E[i],p.T)-f(H.E[j],p.T))/((p.W_in+H.E[i]-H.E[j])'*(p.W_in+H.E[i]-H.E[j])+(2p.eta)^2)^2
+                PV_bc[8] += 2*(H.Va[i,i]-H.Va[j,j])*H.Vb[i,j]*H.Vc[j,i]*(f(H.E[i],p.T)-f(H.E[j],p.T))/((-p.W_in+H.E[i]-H.E[j])'*(-p.W_in+H.E[i]-H.E[j])+(2p.eta)^2)^2
 
                 #eie
                 PV_bc[5] += (H.Va[i,j]*(H.Vb[j,j]-H.Va[i,i])/((H.E[i]-H.E[j])^2+(2p.eta)^2) + H.Vab[i,j]*(H.E[i]-H.E[j])/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2))*H.Vc[j,i]*(f(H.E[j],p.T)-f(H.E[i],p.T))/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2)/(p.W_in+H.E[i]-H.E[j]+2.0im*p.eta) + (H.Va[i,j]*(H.Vc[j,j]-H.Va[i,i])/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2) + H.Vca[i,j]*(H.E[i]-H.E[j])/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2))*H.Vb[j,i]*(f(H.E[j],p.T)-f(H.E[i],p.T))/((H.E[i]-H.E[j])'*(H.E[i]-H.E[j])+(2p.eta)^2)/(-p.W_in+H.E[i]-H.E[j]+2.0im*p.eta)
