@@ -65,7 +65,7 @@ function main(arg::Array{String,1})
         Length_W[j,:] = @distributed (+) for i in 1:size(kk)[1]
             Hamk = Hamiltonian(HandV_fd(kk[i],p)...)
             HV_BI!(Hamk)
-            dk2*Length_PV_BI2(p, Hamk)
+            dk2*Length_PV_BI(p, Hamk)
         end
 
         print("#")
