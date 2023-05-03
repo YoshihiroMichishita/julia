@@ -179,7 +179,11 @@ function UCT(q_t::Vector{Float32}, ρ::Float64, en::Env, ag::Agt)
 end
 
 function action_vec(q_t::Vector{Float32}, en::Env, ag::Agt)
-    ac_prob = softmax(UCT(q_t,sqrt(2.0)*maximum(abs.(q_t)), en, ag))
+    if(en.γ==1.0)
+        ac_prob = softmax(UCT(q_t,20.0*maximum(abs.(q_t)), en, ag))
+    else
+        ac_prob = softmax(UCT(q_t,maximum(abs.(q_t))/(1.0-en.γ), en, ag))
+    end
     act = rand(Categorical(ac_prob))
     return onehot(Int, 1:en.num_tot, act)
 end
@@ -438,7 +442,7 @@ function reward(en::Env, sample::Sample, ag::Agt)
     #gauge_sample = 2pi*rand(Float64, n_batch, Ns)
     #st_copy = copy(ag.state)
     l = Fn_Gauge!(en, sample, ag.state, nothing, nothing, nothing, T)
-    return -l + 1.0
+    return -l + length(ag.state)
 end
 
 function q_update!(en::Env, ag::Agt, r::Float64)
@@ -663,7 +667,7 @@ function main(arg::Array{String,1})
     ag = Agt(init_agt(en, dq)...)
 
     #model = Chain(Dense(dq.act_MAX, dq.width, relu), Dense(dq.width, dq.width, relu), Dense(dq.width, dq.width, relu) , Dense(dq.width, dq.width, relu), Dense(dq.width, dq.width, relu), Dense(dq.width, en.num_tot))
-    model = Chain(Dense(dq.act_MAX, dq.width, relu, init=Flux.randn32), Dense(dq.width, dq.width, relu, init=Flux.randn32), Dense(dq.width, dq.width, relu, init=Flux.randn32) , Dense(dq.width, dq.width, relu, init=Flux.randn32), Dense(dq.width, dq.width, relu, init=Flux.randn32), Dense(dq.width, en.num_tot, init=Flux.randn32))
+    model = Chain(Dense(dq.act_MAX, dq.width, relu, init=Flux.randn32), Dense(dq.width, dq.width, relu, init=Flux.randn32), Dense(dq.width, dq.width, relu, init=Flux.randn32) , Dense(dq.width, dq.width, relu, init=Flux.randn32),Dense(dq.width, dq.width, relu, init=Flux.randn32), Dense(dq.width, dq.width, relu, init=Flux.randn32) , Dense(dq.width, dq.width, relu, init=Flux.randn32), Dense(dq.width, dq.width, relu, init=Flux.randn32), Dense(dq.width, en.num_tot, init=Flux.randn32))
     #model = Chain(Dense(dq.act_MAX, dq.width), Dense(dq.width, dq.width) , Dense(dq.width, dq.width), Dense(dq.width, en.num_tot))
     #, Dense(dq.width, dq.width, relu) , Dense(dq.width, dq.width, relu),
 
