@@ -1,0 +1,40 @@
+┌ Warning: Layer with Float32 parameters got Float64 input.
+│   The input will be converted, but any earlier layers may be very slow.
+│   layer = GRUv3Cell(20 => 16)
+│   summary(x) = "20-element Vector{Float64}"
+└ @ Flux ~/.julia/packages/Flux/uCLgc/src/layers/stateless.jl:50
+start!
+HF_calc Finish!
+First Learning Finish!
+Learning Finish!
+Drawing Finish!
+Drawing Finish!
+36363.798864 seconds (177.16 G allocations: 8.269 TiB, 17.16% gc time, 0.11% compilation time: 14% of which was recompilation)
+┌ Warning: Layer with Float32 parameters got Float64 input.
+│   The input will be converted, but any earlier layers may be very slow.
+│   layer = Dense(20 => 16, tanh)  # 336 parameters
+│   summary(x) = "20-element Vector{Float64}"
+└ @ Flux ~/.julia/packages/Flux/uCLgc/src/layers/stateless.jl:50
+start!
+HF_calc Finish!
+First Learning Finish!
+##Drawing Finish!
+##Drawing Finish!
+##Drawing Finish!
+##Drawing Finish!
+##Drawing Finish!
+:Learning Finish!
+Drawing Finish!
+45486.001581 seconds (221.27 G allocations: 10.297 TiB, 17.13% gc time, 0.08% compilation time: 15% of which was recompilation)
+┌ Warning: Layer with Float32 parameters got Float64 input.
+│   The input will be converted, but any earlier layers may be very slow.
+│   layer = GRUv3Cell(20 => 16)
+│   summary(x) = "20-element Vector{Float64}"
+└ @ Flux ~/.julia/packages/Flux/uCLgc/src/layers/stateless.jl:50
+start!
+HF_calc Finish!
+First Learning Finish!
+Learning Finish!
+Drawing Finish!
+Drawing Finish!
+71726.481298 seconds (354.22 G allocations: 16.534 TiB, 17.27% gc time, 0.06% compilation time: 13% of which was recompilation)

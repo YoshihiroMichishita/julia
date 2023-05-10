@@ -250,7 +250,7 @@ function main(arg::Array{String,1})
     st::Int = 0
     if(arg[12]=="init")
         #model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
-        model = Chain(Dense(ag.in_size, ag.n_dense, tanh), Dense(ag.n_dense, ag.n_dense, tanh), Dense(ag.n_dense, ag.out_size))
+        model = Chain(GRUv3(ag.in_size, ag.n_dense), GRUv3(ag.n_dense, ag.n_dense))
         ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
     else
         @load arg[12] model
@@ -258,7 +258,11 @@ function main(arg::Array{String,1})
         st = parse(Int,arg[14])
     end
     #model = Chain(Dense(zeros(Float64, ag.n_dense, ag.in_size), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.n_dense, ag.n_dense), zeros(Float64, ag.n_dense), tanh), Dense(zeros(Float64, ag.out_size, ag.n_dense), zeros(Float64, ag.out_size)))
-    
+    min_it::Int = 0
+    min_loss = 100000.0
+    min_Kt = zeros(Float64, en.t_size, 16)
+    min_HF = zeros(Float64, en.t_size, 16)
+
     for it in 1:it_MAX
         HF_it = zeros(Float64, en.HS_size^2) 
         if(it==1)
@@ -319,46 +323,45 @@ function main(arg::Array{String,1})
         end
 
         ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
+        Flux.reset!(model)
         ll_it[it], Kp_av = loss_calc_hyb!(model,en, ag, HF_it)
-        if(it%(div(it_MAX, 10))==0)
-            print("#")
-        end
-        if(it%1000 == 0 && it!=0)
-            E = zeros(Float64, en.t_size, en.HS_size)
-            for t_step in 1:en.t_size
-                E[t_step,:], v = eigen(VtoM(ag.HF_TL[t_step,:],en))
-            end
-
-            p1 = plot(E[:,1].-E[1,1], xlabel="t_step", ylabel="E of HF_t", width=3.0)
-            p1 = plot!(E[:,2].-E[1,2], width=3.0)
-            p1 = plot!(E[:,3].-E[1,3], width=3.0)
-            p1 = plot!(E[:,4].-E[1,4], width=3.0)
-            savefig(p1,"./HF_t$(st+it).png")
-            println("Drawing Finish!")
-            #println(E[:,4])
-            p2 = plot(ag.K_TL[:,1], xlabel="t_step", ylabel="E of K_t", width=2.0)
-            for i in 2:en.HS_size^2
-                p2 = plot!(ag.K_TL[:,i], width=2.0)
-            end
-            save_data1 = DataFrame(ag.K_TL, :auto)
-            CSV.write("./K_TL$(st+it).csv", save_data1)
-            savefig(p2,"./K_t$(st+it).png")
-            p4 = plot(ag.Kp_TL[:,1], xlabel="t_step", ylabel="E of Kp_t", width=2.0)
-            for i in 2:en.HS_size^2
-                p4 = plot!(ag.Kp_TL[:,i], width=2.0)
-            end
-            savefig(p4,"./Kp_t$(st+it).png")
-            @save "mymodel$(st+it).bson" model
+        Flux.reset!(model)
+        if(ll_it[it]<min_loss)
+            min_loss = ll_it[it]
+            min_Kt = ag.K_TL
+            min_HF = ag.HF_TL
+            min_it = it
         end
 
     end
-    println(":Learning Finish!")
+    println("Learning Finish!")
 
     p3 = plot(ll_it, xlabel="it_step", ylabel="loss", yaxis=:log, width=3.0)
-    savefig(p3,"./loss_iterate.png")
+    savefig(p3,"./loss_iterate_GRU.png")
     save_data_l = DataFrame(loss = ll_it)
-    CSV.write("./loss.csv", save_data_l)
+    CSV.write("./loss_GRU.csv", save_data_l)
     println("Drawing Finish!")
+
+    E = zeros(Float64, en.t_size, en.HS_size)
+    for t_step in 1:en.t_size
+        E[t_step,:], v = eigen(VtoM(min_HF[t_step,:],en))
+    end
+
+    p1 = plot(E[:,1].-E[1,1], xlabel="t_step", ylabel="E of HF_t", width=3.0)
+    p1 = plot!(E[:,2].-E[1,2], width=3.0)
+    p1 = plot!(E[:,3].-E[1,3], width=3.0)
+    p1 = plot!(E[:,4].-E[1,4], width=3.0)
+    savefig(p1,"./HF_GRU_$(min_it).png")
+    println("Drawing Finish!")
+    #println(E[:,4])
+    p2 = plot(min_Kt[:,1], xlabel="t_step", ylabel="E of K_t", width=2.0)
+    for i in 2:en.HS_size^2
+        p2 = plot!(min_Kt[:,i], width=2.0)
+    end
+    save_data1 = DataFrame(ag.K_TL, :auto)
+    CSV.write("./K_TL_GRU$(min_it).csv", save_data1)
+    savefig(p2,"./Kt_GRU$(min_it).png")
+    @save "mymodel$(min_it)_GRU.bson" model
     
 end
 
