@@ -135,6 +135,7 @@ function AABCC()
     println(count)
 end
 
+#=
 function ModInt(m,n)
     L = 998244353
     for i in 1:n-1
@@ -151,7 +152,7 @@ function PrimeDiv(N)
     divpow = zeros(Int, 3)
     m= [2,3,5]
     for it in 1:3
-        while(N%m==0)
+        while(N%m[it]==0)
             N = div(N, m[it])
             divpow[it]+=1
         end
@@ -162,25 +163,155 @@ end
 function DP3()
     N = parse(Int, readline())
     pd = PrimeDiv(N)
+    #println(pd)
     if(sum(pd)==0)
+        println(0)
         return 0
     end
-    dic = Dict()
+    dict = Dict{Int, Rational{Int64}}()
     for a2 in 0:pd[1]
         for a3 in 0:pd[2]
             for a5 in 0:pd[3]
                 A = 2^a2*3^a3*5^a5
-                dict["$(A)"] = 0
+                dict[A] = 0
             end
         end
     end
-    dict["1"] = 1
-    S = sum(pd)
+    dict[1] = 1
     que = [1]
-    while(isempty(que)) 
-        s = pop!(first)
+    while(!isempty(que)) 
+        s = popfirst!(que)
+        for x in 2:6
+            p = s*x
+            if(haskey(dict, p))
+                if(dict[p]==0)
+                    push!(que, p)
+                end
+                dict[p] += dict[s]//5
+                if(denominator(dict[p])>998244353)
+                    dict[p] = numerator(dict[p])//(denominator(dict[p])%998244353)
+                end
+                if(numerator(dict[p])>998244353)
+                    dict[p] = (numerator(dict[p])%998244353)//denominator(dict[p])
+                end
+            end
+        end
+    end
+    ans = ModInt(numerator(dict[N]), denominator(dict[N]))
+    println(ans)
+end
+=#
+function modinv(a, m)
+    # aとmが互いに素であることを前提とする
+    b = BigInt(a)
+    e = BigInt(m-2)
+    r = 1
+    while e > 0
+        if isodd(e)
+            r = (r * b) % m
+        end
+        b = (b * b) % m
+        e = e ÷ 2
+    end
+    return r
+end
+
+function ModInt(m,n)
+    L = 998244353
+    r = modinv(n,L)
+    x = (r*m)%L
+    return x
+end
+
+function PrimeDiv(N)
+    #2~6
+    divpow = zeros(Int, 3)
+    m= [2,3,5]
+    for it in 1:3
+        while N % m[it] == 0
+            N = N ÷ m[it]
+            divpow[it] += 1
+        end
+    end
+    ans = false
+    if(N>1)
+        ans = true
+    end
+    return divpow, ans
+end
+
+function DP3()
+    N = parse(Int, readline())
+    pd, sw = PrimeDiv(N)
+    if(sw)
+        println(0)
+        return 0
+    end
+    dict = Dict{Int, Rational{Int64}}()
+    for a2 in 0:pd[1], a3 in 0:pd[2], a5 in 0:pd[3]
+        A = 2^a2 * 3^a3 * 5^a5
+        dict[A] = 0
+    end
+    dict[1] = 1
+    que = [1]
+    qstart = 1
+    qend = 1
+    while qstart <= qend
+        s = que[qstart]
+        qstart += 1
+        for x in 2:6
+            p = s * x
+            if(!haskey(dict, p))
+                continue
+            end
+            if dict[p] == 0
+                qend += 1
+                push!(que,p)
+            end
+            dict[p] += dict[s] // 5
+            if(dict[p].den>998244353)
+                dict[p] = dict[p].num//(dict[p].den%998244353)
+            end
+            if(dict[p].num>998244353)
+                dict[p] = (dict[p].num%998244353)//dict[p].den
+            end
+            #=
+            if dict[p].den > 998244353
+                dict[p].num, dict[p].den = dict[p].num ÷ (dict[p].den mod 998244353), 998244353
+            end
+            if dict[p].num > 998244353
+                dict[p].num = dict[p].num mod 998244353
+            end=#
+        end
+    end
+    ans = ModInt(dict[N].num, dict[N].den)
+    println(ans)
+end
+
+#dpでk個xをoに変えた時の最長連続数を記録、端を跨いだらc=1
+function find_max(S)
+    L = length(S)
+    K=0
+    for it in 1:L
+        if(S[it]=='x')
+            K +=1
+        end
+    end
+    max_len_k = zeros(Int, K)
+    max_len_per = zeros(Int, K)
+    test = zeros(Int, K)
+    k_it=0
+    for it in 1:L
+        if(S[it]=='x')
+            k_it
+        end
     end
 end
 
+function MH()
+    N, M, K = parse.(Int, split(readline()))
+    S = readline()
+    c = min(N, K)
+end
 
-AABCC()
+DP3()

@@ -213,8 +213,10 @@ using Plots
 ENV["GKSwstype"]="nul"
 
 function main(arg::Array{String,1})
-
+    #t=100, Ω0=10.0, ξ0=0.2, Jz0=1.0, Jx0=0.7, hz0=0.5
     en = TS_env(init_env(parse(Int,arg[1]), parse(Float64,arg[2]), parse(Float64,arg[3]), parse(Float64,arg[4]), parse(Float64,arg[5]), parse(Float64,arg[6]))...)
+
+    #en::TS_env, n=32, γ0=0.9, ϵ0=1.0
     ag = agtQ(init_nQ(en,parse(Int,arg[7]),parse(Float64,arg[8]),parse(Float64,arg[9]))...)
 
     ag.K_TL[en.t_size,:] = zeros(Float64, en.HS_size^2)
@@ -309,7 +311,8 @@ function main(arg::Array{String,1})
         end
 
         grads = Flux.gradient(Flux.params(model)) do
-            loss_calc_hyb(model, en, ag, HF_it)
+            #loss_calc_hyb(model, en, ag, HF_it)
+            log(loss_calc_hyb(model, en, ag, HF_it))
         end
         Flux.Optimise.update!(opt, Flux.params(model), grads)
 
