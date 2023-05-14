@@ -307,11 +307,3 @@ function find_max(S)
         end
     end
 end
-
-function MH()
-    N, M, K = parse.(Int, split(readline()))
-    S = readline()
-    c = min(N, K)
-end
-
-DP3()
