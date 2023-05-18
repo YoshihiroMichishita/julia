@@ -1,4 +1,4 @@
-#include("MCTS-RF_env.jl")
+include("MCTS-RF_env.jl")
 include("MCTS-RF_agt.jl")
 
 #1局1局の情報をストックする
@@ -91,8 +91,20 @@ function AlphaZero_ForPhysics(env::Env)
     return latest_model(storage)
 end
 
-function main()
-    args = ARGS
+function main(args::Vector{String})
+    #args = ARGS
     env = init_Env(args)
     model = AlphaZero_ForPhysics(env)
 end
+
+function test()
+    env = init_Env(ARGS)
+    storage = init_storage(env)
+    replay_buffer = init_buffer(100, 32)
+
+    run_selfplay(env, replay_buffer, storage)
+
+    @show replay_buffer.buffer[end].history
+end
+
+test()

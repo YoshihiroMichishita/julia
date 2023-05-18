@@ -124,7 +124,9 @@ function select_action(root::Node)
 end
 
 function evaluate!(env::Env, agt::Agent,node::Node, model)
-    value, pol_log = model(make_image(env, agt, length(agt.history)))
+    Y = model(make_image(env, agt, length(agt.history)))
+    value = Y[end] 
+    pol_log = Y[1:end-1]
     policy = softmax(pol_log[a] for a in legal_action(env, agt))
     A = legal_action(env, agt)
     for it in 1:length(A)
@@ -134,7 +136,7 @@ function evaluate!(env::Env, agt::Agent,node::Node, model)
 end
 
 function run_MCTS(env::Env, agt::Agent, model)
-    root = init_node(0.0)
+    root = init_node(Float32(0.0))
     value = evaluate!(env, agt, root, model)
     add_exploration_noise!(env, root)
     for it in 1:env.num_simulation

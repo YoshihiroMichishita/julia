@@ -1,6 +1,6 @@
 using LinearAlgebra
 using Flux
-using ParameterSchedulers: Scheduler
+using ParameterSchedulers
 using SymPy
 
 
@@ -43,13 +43,13 @@ struct Env
     C::Float32 #L2 norm weight
 end
 
-#max_turn, t_step, HS_size, Ω, ξ, Jz, Jx, hz, Cb, Ci, C
+#max_turn, num_player, num_simulation, a, frac, t_step, HS_size, Ω, ξ, Jz, Jx, hz, Cb, Ci, C
 function init_Env(args::Vector{String})
     max_turn = parse(Int, args[1])
     num_player = parse(Int, args[2])
     val_num::Int = 2
     br_num::Int = 3
-    fn_num::Int = 2
+    fn_num::Int = 1
     act_ind = val_num+br_num+fn_num
     input_dim = act_ind*max_turn
     middle_dim = 128
@@ -58,10 +58,10 @@ function init_Env(args::Vector{String})
     #training parameter
     training_step = 100000
     checkpoint_interval = 1000
-    batch_size = 1024
+    batch_size = 128
     η = 1f-4
     momentum = 0.9
-    scheduler = Step(2f-1, 0.1, 20000)
+    scheduler = Step(2f-1, Float32(0.1), 20000)
 
 
     num_simulation = parse(Int, args[3])
@@ -164,4 +164,15 @@ function calc_score(history::Vector{Int}, env::Env)
     score = calc_loss(Hr, env)
     return score
 end
+#=
+function test()
+    env = init_Env(ARGS)
+    history = [3, 6, 2, 1]
+    Kt_test = calc_Kt(history, env)
+    @show Kt_test
+    #score = calc_score(history, env)
+    #println(score)
+end
+
+test()=#
 
