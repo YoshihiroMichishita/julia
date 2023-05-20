@@ -56,12 +56,12 @@ function init_Env(args::Vector{String})
     output =  act_ind + 1
 
     #training parameter
-    training_step = 100000
-    checkpoint_interval = 1000
+    training_step = 100
+    checkpoint_interval = 10
     batch_size = 128
     η = 1f-4
     momentum = 0.9
-    scheduler = Step(2f-1, Float32(0.1), 20000)
+    scheduler = Step(2f-1, Float32(0.1), 20)
 
 
     num_simulation = parse(Int, args[3])
@@ -107,7 +107,7 @@ function calc_Kt(history::Vector{Int}, env::Env)
         elseif(sw==4)
             A = pop!(MV)
             B = pop!(MV)
-            C = -1.0im*(A*B - B*A)
+            C = -1im*(A*B - B*A)
             push!(MV, C)
         elseif(sw==5)
             A = pop!(MV)
@@ -116,18 +116,28 @@ function calc_Kt(history::Vector{Int}, env::Env)
             push!(MV, C)
         elseif(sw==6)
             A = pop!(MV)
-            B = A.integrate((x, 0, x))
+            try
+                B = A.integrate((x, 0, x))/env.Ω
+            catch
+                B = A
+            end
             push!(MV, B)
         end
         #@show MV
     end
-    t = collect(0:env.dt:2pi)
+    t = collect(0:env.Ω*env.dt:2pi)
 
     Ks = MV[end]
     #println(Ks)
-    Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(N(Ks.subs(x,t[i]))) for i in 1:env.t_step]
+    if(typeof(Ks)==Matrix{Sym})
+        Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(N(Ks.subs(x,t[i]))) for i in 1:env.t_step]
+        return Kt
+    else
+        Kh::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(Ks) for i in 1:env.t_step]
+        return Kh
+    end
     #Kt = [Hermitian(N(Ks.subs(x,t[i]))) for i in 1:env.t_step]
-    return Kt
+    
 end
 
 function calc_Hr(Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}, env::Env)
@@ -141,7 +151,8 @@ function calc_Hr(Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}, env::Env
         if(imm<1)
             imm = env.t_step
         end
-        Hr0 = expm(1im*Kt[i]*env.dt)*(env.H_0 + env.V_t*sin(env.Ω*i*env.dt)) * expm(-1im*Kt[i]*env.dt) - 1im* expm(1im*Kt[i]*env.dt)*(expm(-1im*Kt[ip]*env.dt)-expm(-1im*Kt[imm]*env.dt))/2env.dt
+        U = exp(1im*Kt[i])
+        Hr0 = Hermitian(U*(env.H_0 + env.V_t*sin(env.Ω*i*env.dt)) * U' - 1im* U*(exp(-1im*Kt[ip])-exp(-1im*Kt[imm]))/2env.dt)
         push!(Hr, Hr0)
     end
     return Hr
@@ -153,7 +164,7 @@ function calc_loss(Hr::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}, env::E
         if(i==1)
             continue
         end
-        score -= real(tr((Hr[i]-Hr[i-1])^2))
+        score -= real(tr((Hr[i]-Hr[i-1])^2))/(env.t_step^2)
     end
     return score/env.t_step + Float32(1.0)
 end

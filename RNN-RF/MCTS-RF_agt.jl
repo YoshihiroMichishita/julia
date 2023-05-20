@@ -42,12 +42,18 @@ end
 #finishの判定
 function is_finish(env::Env, agt::Agent)
     #max_turnに達したか、branchがなくなって最後のstateがval_numに達したか
-    return env.max_turn == length(agt.history) || (length(agt.branch_left) == 0 && agt.history[end]<=env.val_num)
+    #return env.max_turn == length(agt.history) || (length(agt.branch_left) == 0 && agt.history[end]<=env.val_num)
+    return (env.max_turn == length(agt.history) || length(agt.branch_left) == 0)
 end
 
-#未完
+
+#行動可能なactionのリストを返す
 function legal_action(env::Env, agt::Agent)
-    if(agt.history[end]>env.val_num && agt.history[end]<=env.val_num+env.br_num)
+    if(isempty(agt.history))
+        return [i for i in 1:env.act_ind]
+    elseif(env.max_turn-length(agt.history)<=length(agt.branch_left)+1)
+        return [i for i in 1:env.val_num]
+    elseif(agt.history[end]>env.val_num && agt.history[end]<=env.val_num+env.br_num)
         return [i for i in 1:env.act_ind if(i!=agt.history[end])]
     else
         return [i for i in 1:env.act_ind]
@@ -55,20 +61,24 @@ function legal_action(env::Env, agt::Agent)
 end
 
 #historyにactionを追加し、branch_leftを更新
-function apply!(agt::Agent, act::Int)
+function apply!(env::Env, agt::Agent, act::Int)
     push!(agt.history, act)
     if act <= env.val_num
         pop!(agt.branch_left)
+    elseif(act <= env.val_num+env.br_num)
+        push!(agt.branch_left, act)
     end
 end
 
 #child_visit_piの計算
-function store_search_statistics!(root::Node, agt::Agent)
-    agt.child_visit_pi = zeros(Float32, env.act_ind)
-    sum_visits = sum([child.visit_count for child in root.children])
-    for child in root.children
-        agt.child_visit_pi[child.action] = child.visit_count/sum_visits
+function store_search_statistics!(env::Env, root::Node, agt::Agent)
+    visit_pi = zeros(Float32, env.act_ind)
+    actions = Int.(keys(root.children))
+    sum_visits = sum([root.children[a].visit_count for a in actions])
+    for a in actions
+        visit_pi[a] = root.children[a].visit_count/sum_visits
     end
+    push!(agt.child_visit_pi, visit_pi)
 end
 
 function make_image(env::Env, agt::Agent, turn::Int)
@@ -89,7 +99,7 @@ end
 
 function add_exploration_noise!(env::Env, node::Node)
     actions = Int.(keys(node.children))
-    noise = Dirichlet(env.α * ones(Float32, length(actions)))
+    noise = rand(Dirichlet(env.α * ones(Float32, length(actions))))
     for it in 1:length(actions)
         node.children[actions[it]].prior = node.children[actions[it]].prior * (1-env.frac) + noise[it] * env.frac
     end
@@ -106,7 +116,8 @@ end
 function select_child(env::Env, node::Node)
     actions = Int.(keys(node.children))
     children = [node.children[a] for a in actions]
-    it = findmax([ucb_score(env, node, child) for child in children])
+    score_v = [ucb_score(env, node, child) for child in children]
+    it = rand(findall(x -> x==maximum(score_v), score_v))
     return actions[it], children[it]
 end
 
@@ -119,7 +130,8 @@ end
 
 function select_action(root::Node)
     actions = Int.(keys(root.children))
-    visits = [child.visit_count for child in root.children]
+    #visits = [child.visit_count for child in root.children]
+    visits = [root.children[a].visit_count for a in actions]
     return actions[argmax(visits)]
 end
 
@@ -127,8 +139,9 @@ function evaluate!(env::Env, agt::Agent,node::Node, model)
     Y = model(make_image(env, agt, length(agt.history)))
     value = Y[end] 
     pol_log = Y[1:end-1]
-    policy = softmax(pol_log[a] for a in legal_action(env, agt))
     A = legal_action(env, agt)
+    policy = softmax([pol_log[a] for a in A])
+    
     for it in 1:length(A)
         node.children[A[it]] = init_node(policy[it])
     end
@@ -143,9 +156,9 @@ function run_MCTS(env::Env, agt::Agent, model)
         node = root
         scratch = deepcopy(agt)
         search_path = [node]
-        while has_children(node)
+        while(!is_finish(env, scratch) && has_children(node))#has_children(node)
             action, node = select_child(env, node)
-            apply!(scratch, action)
+            apply!(env, scratch, action)
             push!(search_path, node)
         end
         value = evaluate!(env, scratch, node, model)
@@ -158,10 +171,18 @@ function play_physics!(env::Env, model)
     agt = init_agt()
     while(!is_finish(env, agt))
         action, root = run_MCTS(env, agt, model)
-        apply!(agt, action)
-        store_search_statistics!(root, agt)
+        apply!(env, agt, action)
+        store_search_statistics!(env, root, agt)
     end
     return agt
 end
 
+#=
+function test()
+    env = init_Env(ARGS)
+    model = Chain(Dense(zeros(Float32, env.output,env.input_dim)))
+    agt = play_physics!(env, model)
+    println(agt.history)
+end
 
+test()=#

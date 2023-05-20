@@ -24,7 +24,7 @@ function sample_batch(env::Env, buffer::ReplayBuffer)
     games = sample(buffer.buffer, weights([length(agt.history) for agt in buffer.buffer]), buffer.batch_size, replace=false)
     g_turn = [(g, rand(1:length(g.history))) for g in games]
     imag = zeros(Int, env.input_dim, buffer.batch_size)
-    target = zeros(Int, env.output, buffer.batch_size)
+    target = zeros(Float32, env.output, buffer.batch_size)
     for it in 1:buffer.batch_size
         g, turn = g_turn[it]
         imag[:,it] = make_image(env, g, turn)
@@ -41,7 +41,7 @@ mutable struct Storage
 end
 
 function init_storage(env)
-    return Storage(Dict(), Chain(zeros(Float32, env.input_dim, env.output)))
+    return Storage(Dict(), Chain(Dense(zeros(Float32, env.output,env.input_dim))))
 end
 
 function latest_model(Storage)
@@ -62,31 +62,39 @@ end
 
 function loss(image::Matrix{Int}, target::Matrix{Float32}, env::Env, model)
     y1 = model(image)
-    return sum([((y1[end,i]-target[end,i])^2 - target[1:end-1,i]' * log(y1[1:end-1,i])) for i in 1:length(image)])/length(image) +  + env.C * sum(Flux.params(model)^2)
+    return sum([((y1[end,i]-target[end,i])^2 - target[1:end-1,i]' * log.(softmax(y1[1:end-1,i]))) for i in 1:env.batch_size])/env.batch_size + env.C * sum(Flux.params(model)[1].^2)
 end
 
-#modelのinitializationは未完
 function train_model(env::Env, buffer::ReplayBuffer, storage::Storage)
     model = Chain(Dense(env.input_dim=>env.middle_dim, relu), BatchNorm(env.middle_dim), Dense(env.middle_dim=>env.middle_dim, relu), BatchNorm(env.middle_dim), Dense(env.middle_dim=>env.output, relu))
-    opt = Scheduler(env.scheduler, Momentum())
+    opt = ParameterSchedulers.Scheduler(env.scheduler, Momentum())
+    for it in 1:env.training_step
+        image_batch, target_batch = sample_batch(env, buffer)
+        Flux.train!(loss, Flux.params(model), [(image_batch, target_batch, env, model)], opt)
+    end
+    storage.storage[env.training_step] = model
+end
+#=
+function train_model(env::Env, buffer::ReplayBuffer, storage::Storage)
+    model = Chain(Dense(env.input_dim=>env.middle_dim, relu), BatchNorm(env.middle_dim), Dense(env.middle_dim=>env.middle_dim, relu), BatchNorm(env.middle_dim), Dense(env.middle_dim=>env.output, relu))
+    opt = ParameterSchedulers.Scheduler(env.scheduler, Momentum())
     for it in 1:env.training_step
         if(it%env.checkpoint_interval==0)
             storage.storage[it] = model
         end
-        #batch = sample_batch(env, buffer)
         image_batch, target_batch = sample_batch(env, buffer)
-        Flux.train!(loss, Flux.params(model), (image_batch, target_batch, env, model), opt)
+        Flux.train!(loss, Flux.params(model), [(image_batch, target_batch, env, model)], opt)
     end
     Storage.storage[env.training_step] = model
-end
+end=#
 
 function AlphaZero_ForPhysics(env::Env)
     storage = init_storage(env)
-    replay_buffer = init_buffer(100, 32)
+    replay_buffer = init_buffer(1000, env.batch_size)
 
-    run_selfplay(env, replay_buffer, storage)
+    @time run_selfplay(env, replay_buffer, storage)
 
-    train_model(env, replay_buffer, storage)
+    @time train_model(env, replay_buffer, storage)
 
     return latest_model(storage)
 end
@@ -95,8 +103,11 @@ function main(args::Vector{String})
     #args = ARGS
     env = init_Env(args)
     model = AlphaZero_ForPhysics(env)
+    @show model
 end
 
+main(ARGS)
+#=
 function test()
     env = init_Env(ARGS)
     storage = init_storage(env)
@@ -104,7 +115,10 @@ function test()
 
     run_selfplay(env, replay_buffer, storage)
 
-    @show replay_buffer.buffer[end].history
+    for i in 1:10
+        @show replay_buffer.buffer[end-i].history
+    end
+    
 end
 
-test()
+test()=#
