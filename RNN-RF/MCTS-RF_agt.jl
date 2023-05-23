@@ -82,11 +82,11 @@ function store_search_statistics!(env::Env, root::Node, agt::Agent)
 end
 
 function make_image(env::Env, agt::Agent, turn::Int)
-    input_data = zeros(Int, env.input_dim)
+    input_data = zeros(Int, env.input_dim, 1)
     for act_ind in 1:env.act_ind
         ind = findall(x->x==act_ind, agt.history[1:turn])
         for it in ind
-            input_data[(act_ind-1)*env.max_turn+it] = 1
+            input_data[(act_ind-1)*env.max_turn+it,1] = 1
         end
     end
     return input_data
@@ -177,6 +177,14 @@ function play_physics!(env::Env, model)
     return agt
 end
 
+function play_physics!(env::Env,agt::Agent, model)
+    #agt = init_agt()
+    while(!is_finish(env, agt))
+        action, root = run_MCTS(env, agt, model)
+        apply!(env, agt, action)
+        store_search_statistics!(env, root, agt)
+    end
+end
 #=
 function test()
     env = init_Env(ARGS)
