@@ -44,11 +44,11 @@ function init_storage(env)
     return Storage(Dict(), Chain(Dense(zeros(Float32, env.output,env.input_dim))))
 end
 
-function latest_model(Storage)
-    if(isempty(Storage.storage))
-        return Storage.random_out
+function latest_model(storage::Storage)
+    if(isempty(storage.storage))
+        return storage.random_out
     else
-        return storage[maximum(keys(storage))]
+        return storage.storage[maximum(keys(storage.storage))]
     end
 end
 
@@ -93,7 +93,6 @@ function AlphaZero_ForPhysics(env::Env)
     replay_buffer = init_buffer(1000, env.batch_size)
 
     @time run_selfplay(env, replay_buffer, storage)
-
     @time train_model(env, replay_buffer, storage)
 
     return latest_model(storage)
