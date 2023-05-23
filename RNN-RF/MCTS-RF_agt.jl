@@ -185,6 +185,20 @@ function play_physics!(env::Env,agt::Agent, model)
         store_search_statistics!(env, root, agt)
     end
 end
+
+#using BSON: @save
+using BSON: @load
+
+function check_RL()
+    env = init_Env(ARGS)
+    @load arg[16] model
+    for it in 1:10
+        game = play_physics!(env, model)
+        println(game.history)
+    end
+end
+
+#check_RL()
 #=
 function test()
     env = init_Env(ARGS)
