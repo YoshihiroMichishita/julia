@@ -20,6 +20,7 @@ function save_game!(buffer::ReplayBuffer, agt::Agent)
     push!(buffer.buffer, agt)
 end
 
+#cpu並列化予定
 function sample_batch(env::Env, buffer::ReplayBuffer)
     games = sample(buffer.buffer, weights([length(agt.history) for agt in buffer.buffer]), buffer.batch_size, replace=false)
     g_turn = [(g, rand(1:length(g.history))) for g in games]
@@ -52,6 +53,7 @@ function latest_model(Storage)
     end
 end
 
+#cpu並列化予定
 function run_selfplay(env::Env, buffer::ReplayBuffer, storage::Storage)
     for it in 1:env.num_player
         model = latest_model(storage)
@@ -60,13 +62,15 @@ function run_selfplay(env::Env, buffer::ReplayBuffer, storage::Storage)
     end
 end
 
+#gpu並列化予定
 function loss(image::Matrix{Int}, target::Matrix{Float32}, env::Env, model)
     y1 = model(image)
     return sum([((y1[end,i]-target[end,i])^2 - target[1:end-1,i]' * log.(softmax(y1[1:end-1,i]))) for i in 1:env.batch_size])/env.batch_size + env.C * sum(Flux.params(model)[1].^2)
 end
 
+#gpu並列化予定
 function train_model(env::Env, buffer::ReplayBuffer, storage::Storage)
-    model = Chain(Dense(env.input_dim=>env.middle_dim, relu), BatchNorm(env.middle_dim), Dense(env.middle_dim=>env.middle_dim, relu), BatchNorm(env.middle_dim), Dense(env.middle_dim=>env.output, relu))
+    model = Chain(Dense(env.input_dim=>env.middle_dim), BatchNorm(env.middle_dim), Dense(env.middle_dim=>env.middle_dim, relu), BatchNorm(env.middle_dim), Dense(env.middle_dim=>env.middle_dim, relu), Flux.Parallel(vcat, Chain(Dense(env.middle_dim, env.output, tanh), Dense(env.output, env.act_ind)), Dense(env.middle_dim, 1)))
     opt = ParameterSchedulers.Scheduler(env.scheduler, Momentum())
     for it in 1:env.training_step
         image_batch, target_batch = sample_batch(env, buffer)

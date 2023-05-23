@@ -52,7 +52,7 @@ function init_Env(args::Vector{String})
     fn_num::Int = 1
     act_ind = val_num+br_num+fn_num
     input_dim = act_ind*max_turn
-    middle_dim = 128
+    middle_dim = 64
     output =  act_ind + 1
 
     #training parameter
@@ -164,9 +164,9 @@ function calc_loss(Hr::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}, env::E
         if(i==1)
             continue
         end
-        score -= real(tr((Hr[i]-Hr[i-1])^2))/(env.t_step^2)
+        score = real(tr((Hr[i]-Hr[i-1])^2))/(env.t_step^2)
     end
-    return score/env.t_step + Float32(1.0)
+    return -score/env.t_step+Float32(1.0)
 end
 
 function calc_score(history::Vector{Int}, env::Env)

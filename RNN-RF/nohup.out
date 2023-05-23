@@ -38,3 +38,118 @@ Learning Finish!
 Drawing Finish!
 Drawing Finish!
 71726.481298 seconds (354.22 G allocations: 16.534 TiB, 17.27% gc time, 0.06% compilation time: 13% of which was recompilation)
+ERROR: LoadError: UndefVarError: `storage` not defined
+Stacktrace:
+ [1] latest_model(Storage::Storage)
+   @ Main ~/Documents/Codes/julia/RNN-RF/MCTS-RF_DNN_parallel.jl:64
+ [2] AlphaZero_ForPhysics(env::Env)
+   @ Main ~/Documents/Codes/julia/RNN-RF/MCTS-RF_DNN_parallel.jl:116
+ [3] main(args::Vector{String})
+   @ Main ~/Documents/Codes/julia/RNN-RF/MCTS-RF_DNN_parallel.jl:122
+ [4] top-level scope
+   @ ~/Documents/Codes/julia/RNN-RF/MCTS-RF_DNN_parallel.jl:126
+in expression starting at /home/yoshihiro/Documents/Codes/julia/RNN-RF/MCTS-RF_DNN_parallel.jl:126
+  1.791359 seconds (11.45 M allocations: 1.008 GiB, 9.98% gc time, 70.55% compilation time)
+1481.632962 seconds (63.16 M allocations: 4.313 GiB, 0.12% gc time, 1.68% compilation time: <1% of which was recompilation)
+ERROR: LoadError: MethodError: no method matching getindex(::Storage, ::Int64)
+Stacktrace:
+ [1] latest_model(Storage::Storage)
+   @ Main ~/Documents/Codes/julia/RNN-RF/MCTS-RF_DNN_parallel.jl:64
+ [2] run_selfplay(env::Env, buffer::ReplayBuffer, storage::Storage)
+   @ Main ~/Documents/Codes/julia/RNN-RF/MCTS-RF_DNN_parallel.jl:71
+ [3] AlphaZero_ForPhysics(env::Env)
+   @ Main ~/Documents/Codes/julia/RNN-RF/MCTS-RF_DNN_parallel.jl:113
+ [4] main(args::Vector{String})
+   @ Main ~/Documents/Codes/julia/RNN-RF/MCTS-RF_DNN_parallel.jl:126
+ [5] top-level scope
+   @ ~/Documents/Codes/julia/RNN-RF/MCTS-RF_DNN_parallel.jl:132
+in expression starting at /home/yoshihiro/Documents/Codes/julia/RNN-RF/MCTS-RF_DNN_parallel.jl:132
+Worker 3 terminated.
+UNHANDLED TASK ERROR: EOFError: read end of file
+Stacktrace:
+ [1] (::Base.var"#wait_locked#715")(s::Sockets.TCPSocket, buf::IOBuffer, nb::Int64)
+   @ Base ./stream.jl:947
+ [2] unsafe_read(s::Sockets.TCPSocket, p::Ptr{UInt8}, nb::UInt64)
+   @ Base ./stream.jl:955
+ [3] unsafe_read
+   @ ./io.jl:761 [inlined]
+ [4] unsafe_read(s::Sockets.TCPSocket, p::Base.RefValue{NTuple{4, Int64}}, n::Int64)
+   @ Base ./io.jl:760
+ [5] read!
+   @ ./io.jl:762 [inlined]
+ [6] deserialize_hdr_raw
+   @ ~/.julia/juliaup/julia-1.9.0+0.x64.linux.gnu/share/julia/stdlib/v1.9/Distributed/src/messages.jl:167 [inlined]
+ [7] message_handler_loop(r_stream::Sockets.TCPSocket, w_stream::Sockets.TCPSocket, incoming::Bool)
+   @ Distributed ~/.julia/juliaup/julia-1.9.0+0.x64.linux.gnu/share/julia/stdlib/v1.9/Distributed/src/process_messages.jl:172
+ [8] process_tcp_streams(r_stream::Sockets.TCPSocket, w_stream::Sockets.TCPSocket, incoming::Bool)
+   @ Distributed ~/.julia/juliaup/julia-1.9.0+0.x64.linux.gnu/share/julia/stdlib/v1.9/Distributed/src/process_messages.jl:133
+ [9] (::Distributed.var"#103#104"{Sockets.TCPSocket, Sockets.TCPSocket, Bool})()
+   @ Distributed ./task.jl:514
+UNHANDLED TASK ERROR: ProcessExitedException(3)
+Stacktrace:
+ [1] sync_end(c::Channel{Any})
+   @ Base ./task.jl:445
+ [2] (::Distributed.var"#177#179"{var"#29#32"{Env, SharedMatrix{Float32}, SharedMatrix{Int64}, Vector{Tuple{Agent, Int64}}}, UnitRange{Int64}})()
+   @ Distributed ./task.jl:477
+ERROR: LoadError: TaskFailedException
+
+    nested task error: ProcessExitedException(3)
+    Stacktrace:
+     [1] sync_end(c::Channel{Any})
+       @ Base ./task.jl:445
+     [2] (::Distributed.var"#177#179"{var"#29#32"{Env, SharedMatrix{Float32}, SharedMatrix{Int64}, Vector{Tuple{Agent, Int64}}}, UnitRange{Int64}})()
+       @ Distributed ./task.jl:477
+Stacktrace:
+ [1] sync_end(c::Channel{Any})
+   @ Base ./task.jl:445
+ [2] macro expansion
+   @ ./task.jl:477 [inlined]
+ [3] sample_batch(env::Env, buffer::ReplayBuffer)
+   @ Main ~/Documents/Codes/julia/RNN-RF/MCTS-RF_DNN_parallel.jl:41
+ [4] train_model!(env::Env, buffer::ReplayBuffer, storage::Storage)
+   @ Main ~/Documents/Codes/julia/RNN-RF/MCTS-RF_DNN_parallel.jl:89
+ [5] macro expansion
+   @ ./timing.jl:273 [inlined]
+ [6] AlphaZero_ForPhysics(env::Env)
+   @ Main ~/Documents/Codes/julia/RNN-RF/MCTS-RF_DNN_parallel.jl:114
+ [7] main(args::Vector{String})
+   @ Main ~/Documents/Codes/julia/RNN-RF/MCTS-RF_DNN_parallel.jl:126
+ [8] top-level scope
+   @ ~/Documents/Codes/julia/RNN-RF/MCTS-RF_DNN_parallel.jl:132
+in expression starting at /home/yoshihiro/Documents/Codes/julia/RNN-RF/MCTS-RF_DNN_parallel.jl:132
+┌ Warning: Forcibly interrupting busy workers
+│   exception = rmprocs: pids [2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33] not terminated after 5.0 seconds.
+└ @ Distributed ~/.julia/juliaup/julia-1.9.0+0.x64.linux.gnu/share/julia/stdlib/v1.9/Distributed/src/cluster.jl:1253
+┌ Warning: rmprocs: process 1 not removed
+└ @ Distributed ~/.julia/juliaup/julia-1.9.0+0.x64.linux.gnu/share/julia/stdlib/v1.9/Distributed/src/cluster.jl:1049
+  2.584446 seconds (14.75 M allocations: 1.285 GiB, 11.50% gc time, 67.74% compilation time)
+1231.109493 seconds (61.91 M allocations: 4.224 GiB, 0.15% gc time, 1.99% compilation time: <1% of which was recompilation)
+  2.376213 seconds (16.59 M allocations: 1.745 GiB, 13.91% gc time, 22.46% compilation time)
+1208.356014 seconds (7.19 M allocations: 999.323 MiB, 0.02% gc time)
+  1.671245 seconds (13.98 M allocations: 1.500 GiB, 14.92% gc time)
+1122.695693 seconds (7.17 M allocations: 998.601 MiB, 0.02% gc time)
+  1.768314 seconds (14.84 M allocations: 1.587 GiB, 14.89% gc time)
+2615.662000 seconds (7.18 M allocations: 999.147 MiB, 0.01% gc time)
+  1.767970 seconds (14.70 M allocations: 1.570 GiB, 15.32% gc time)
+2169.279195 seconds (7.17 M allocations: 998.835 MiB, 0.01% gc time)
+  1.741822 seconds (14.55 M allocations: 1.557 GiB, 15.40% gc time)
+2076.788109 seconds (7.11 M allocations: 996.169 MiB, 0.01% gc time)
+  1.822057 seconds (15.02 M allocations: 1.610 GiB, 15.80% gc time)
+3080.766400 seconds (7.10 M allocations: 995.388 MiB, 0.01% gc time)
+  1.738825 seconds (14.55 M allocations: 1.560 GiB, 16.48% gc time)
+3449.545661 seconds (7.09 M allocations: 995.173 MiB, 0.01% gc time)
+  1.779310 seconds (14.70 M allocations: 1.568 GiB, 16.17% gc time)
+2689.394605 seconds (7.09 M allocations: 994.869 MiB, 0.01% gc time)
+  1.743114 seconds (14.44 M allocations: 1.549 GiB, 16.79% gc time)
+5264.505354 seconds (7.07 M allocations: 993.962 MiB, 0.01% gc time)
+  1.714054 seconds (13.93 M allocations: 1.492 GiB, 17.52% gc time)
+12616.566604 seconds (7.04 M allocations: 992.620 MiB, 0.00% gc time)
+  1.696785 seconds (13.77 M allocations: 1.475 GiB, 16.91% gc time)
+1240.344910 seconds (6.98 M allocations: 989.305 MiB, 0.02% gc time)
+  1.878840 seconds (15.17 M allocations: 1.626 GiB, 17.21% gc time)
+2458.119061 seconds (7.01 M allocations: 990.879 MiB, 0.06% gc time, 0.00% compilation time)
+  1.937142 seconds (15.58 M allocations: 1.672 GiB, 17.94% gc time)
+5135.236627 seconds (7.02 M allocations: 991.494 MiB, 0.00% gc time)
+  1.683397 seconds (13.58 M allocations: 1.453 GiB, 18.03% gc time)
+10607.456954 seconds (7.05 M allocations: 992.862 MiB, 0.00% gc time)
+  1.784471 seconds (14.25 M allocations: 1.521 GiB, 18.38% gc time)
