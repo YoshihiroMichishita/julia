@@ -56,12 +56,12 @@ function init_Env(args::Vector{String})
     output =  act_ind + 1
 
     #training parameter
-    training_step = 100
-    checkpoint_interval = 10
+    training_step = 4000
+    checkpoint_interval = 500
     batch_size = 128
     η = 1f-4
     momentum = 0.9
-    scheduler = Step(2f-1, Float32(0.1), 20)
+    scheduler = Step(2f-1, Float32(0.1), 500)
 
 
     num_simulation = parse(Int, args[3])

@@ -1,4 +1,5 @@
 using Distributed
+using Dates
 using SharedArrays
 addprocs(32)
 
@@ -85,9 +86,17 @@ function train_model!(env::Env, buffer::ReplayBuffer, storage::Storage)
     model = Chain(Dense(env.input_dim=>env.middle_dim), BatchNorm(env.middle_dim), Dense(env.middle_dim=>env.middle_dim, relu), BatchNorm(env.middle_dim), Dense(env.middle_dim=>env.middle_dim, relu), Flux.Parallel(vcat, Chain(Dense(env.middle_dim, env.output, tanh), Dense(env.output, env.act_ind)), Dense(env.middle_dim, 1)))
     opt = ADAM()
     #ParameterSchedulers.Scheduler(env.scheduler, Momentum())
-    for it in 1:env.training_step
+    iv_batch = []
+    tv_batch = []
+    for b_num in 1:10
         image_batch, target_batch = sample_batch(env, buffer)
-        Flux.train!(loss, Flux.params(model), [(image_batch, target_batch, env, model)], opt)
+        push!(iv_batch, image_batch)
+        push!(tv_batch, target_batch)
+    end
+    for it in 1:env.training_step
+        for b_num in 1:10
+            Flux.train!(loss, Flux.params(model), [(iv_batch[b_num], tv_batch[b_num], env, model)], opt)
+        end
     end
     storage.storage[env.training_step] = model
 end
@@ -122,9 +131,16 @@ using BSON: @load
 
 function main(args::Vector{String})
     #args = ARGS
+    println("Start! at $(now())")
     env = init_Env(args)
     model = AlphaZero_ForPhysics(env)
-    @save "AlphaZero_ForPhysics.bson" model
+    println("AlphaZero Finish!")
+    @save "/home/yoshihiro/Documents/Codes/julia/RNN-RF/AlphaZero_ForPhysics_20.bson" model
+    for it in 1:10
+        game = play_physics!(env, model)
+        score = calc_score(game.history, env)
+        println("$(game.history), score:$(score)")
+    end
 end
 
 
