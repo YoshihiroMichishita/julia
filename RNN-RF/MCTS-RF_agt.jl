@@ -186,7 +186,6 @@ function play_physics!(env::Env,agt::Agent, model)
     end
 end
 
-
 #using BSON: @save
 using BSON: @load
 
@@ -198,6 +197,8 @@ function check_RL()
         println(game.history)
     end
 end
+
+#check_RL()
 #=
 function test()
     env = init_Env(ARGS)
