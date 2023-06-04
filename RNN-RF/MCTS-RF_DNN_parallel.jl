@@ -1,7 +1,7 @@
 using Distributed
 using Dates
 using SharedArrays
-addprocs(32)
+addprocs(24)
 
 @everywhere include("MCTS-RF_env.jl")
 @everywhere include("MCTS-RF_agt.jl")
@@ -83,7 +83,8 @@ end
 
 #gpu並列化予定
 function train_model!(env::Env, buffer::ReplayBuffer, storage::Storage)
-    model = Chain(Dense(env.input_dim=>env.middle_dim), BatchNorm(env.middle_dim), Dense(env.middle_dim=>env.middle_dim, relu), BatchNorm(env.middle_dim), Dense(env.middle_dim=>env.middle_dim, relu), Flux.Parallel(vcat, Chain(Dense(env.middle_dim, env.output, tanh), Dense(env.output, env.act_ind)), Dense(env.middle_dim, 1)))
+    model = Chain(Dense(env.input_dim=>env.middle_dim), BatchNorm(env.middle_dim), Dense(env.middle_dim=>env.middle_dim, relu), BatchNorm(env.middle_dim), Dense(env.middle_dim=>env.middle_dim, relu), Flux.Parallel(vcat, Chain(Dense(env.middle_dim, env.output, tanh), Dense(env.output, env.act_ind)), Chain(Dense(env.middle_dim, env.middle_dim, tanh),Dense(env.middle_dim, 1))))
+    #model = Chain(Dense(env.input_dim=>env.middle_dim), BatchNorm(env.middle_dim), Dense(env.middle_dim=>Int(env.middle_dim/2), relu), BatchNorm(Int(env.middle_dim/2)), Dense(Int(env.middle_dim/2)=>Int(env.middle_dim/4), relu), Flux.Parallel(vcat, Chain(Dense(Int(env.middle_dim/4), env.output, tanh), Dense(env.output, env.act_ind)), Chain(Dense(Int(env.middle_dim/4), Int(env.middle_dim/4), tanh),Dense(Int(env.middle_dim/4), 1))))
     opt = ADAM()
     #ParameterSchedulers.Scheduler(env.scheduler, Momentum())
     iv_batch = []
@@ -93,12 +94,20 @@ function train_model!(env::Env, buffer::ReplayBuffer, storage::Storage)
         push!(iv_batch, image_batch)
         push!(tv_batch, target_batch)
     end
+    l = 0.0
     for it in 1:env.training_step
         for b_num in 1:10
-            Flux.train!(loss, Flux.params(model), [(iv_batch[b_num], tv_batch[b_num], env, model)], opt)
+            #Flux.train!(loss, Flux.params(model), [(iv_batch[b_num], tv_batch[b_num], env, model)], opt)
+            val, grads = Flux.withgradient(Flux.params(model)) do
+                loss(iv_batch[b_num],tv_batch[b_num],env,model)
+            end
+            Flux.Optimise.update!(opt, Flux.params(model), grads)
+            l+=val/(10env.training_step)
         end
     end
     storage.storage[env.training_step] = model
+
+    return l
 end
 #=
 function train_model(env::Env, buffer::ReplayBuffer, storage::Storage)
@@ -116,14 +125,28 @@ end=#
 
 function AlphaZero_ForPhysics(env::Env)
     storage = init_storage(env)
-    replay_buffer = init_buffer(1000, env.batch_size)
 
-    for it in 1:20
-        @time run_selfplay(env, replay_buffer, storage)
-        @time train_model!(env, replay_buffer, storage)
+    ld = []
+    
+
+    for it in 1:100
+        println("=============")
+        println("it=$(it);")
+        replay_buffer = init_buffer(1000, env.batch_size)
+        run_selfplay(env, replay_buffer, storage)
+        ll = train_model!(env, replay_buffer, storage)
+        println("loss_average: $(ll)")
+        push!(ld,ll)
+        if(it%20==0)
+            for tes in 1:5
+                game = play_physics!(env, latest_model(storage))
+                score = calc_score(game.history, env)
+                println("$(game.history), score:$(score)")
+            end
+        end
     end
     
-    return latest_model(storage)
+    return ld, latest_model(storage)
 end
 
 using BSON: @save
@@ -133,9 +156,10 @@ function main(args::Vector{String})
     #args = ARGS
     println("Start! at $(now())")
     env = init_Env(args)
-    model = AlphaZero_ForPhysics(env)
+    ld, model = AlphaZero_ForPhysics(env)
     println("AlphaZero Finish!")
-    @save "/home/yoshihiro/Documents/Codes/julia/RNN-RF/AlphaZero_ForPhysics_20.bson" model
+    println("loss-dynamics: $(ld)")
+    @save "/home/yoshihiro/Documents/Codes/julia/RNN-RF/AlphaZero_ForPhysics.bson" model
     for it in 1:10
         game = play_physics!(env, model)
         score = calc_score(game.history, env)
@@ -145,7 +169,7 @@ end
 
 
 
-main(ARGS)
+@time main(ARGS)
 #=
 function test()
     env = init_Env(ARGS)

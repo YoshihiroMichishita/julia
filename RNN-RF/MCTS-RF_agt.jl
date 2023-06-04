@@ -55,6 +55,8 @@ function legal_action(env::Env, agt::Agent)
         return [i for i in 1:env.val_num]
     elseif(agt.history[end]>env.val_num && agt.history[end]<=env.val_num+env.br_num)
         return [i for i in 1:env.act_ind if(i!=agt.history[end])]
+    elseif(agt.history[end]==6)
+        return [i for i in 2:env.act_ind-1]
     else
         return [i for i in 1:env.act_ind]
     end
@@ -191,10 +193,11 @@ using BSON: @load
 
 function check_RL()
     env = init_Env(ARGS)
-    @load arg[16] model
+    @load ARGS[16] model
     for it in 1:10
         game = play_physics!(env, model)
-        println(game.history)
+        score = calc_score(game.history, env)
+        println("$(game.history), score:$(score)")
     end
 end
 

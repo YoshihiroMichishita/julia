@@ -52,7 +52,7 @@ function init_Env(args::Vector{String})
     fn_num::Int = 1
     act_ind = val_num+br_num+fn_num
     input_dim = act_ind*max_turn
-    middle_dim = 64
+    middle_dim = 128
     output =  act_ind + 1
 
     #training parameter
@@ -117,7 +117,8 @@ function calc_Kt(history::Vector{Int}, env::Env)
         elseif(sw==6)
             A = pop!(MV)
             try
-                B = A.integrate((x, 0, x))/env.Ω
+                #B = A.integrate((x, 0, x))/env.Ω
+                B = A.integrate(x)/env.Ω
             catch
                 B = A
             end
@@ -128,9 +129,12 @@ function calc_Kt(history::Vector{Int}, env::Env)
     t = collect(0:env.Ω*env.dt:2pi)
 
     Ks = MV[end]
+    
     #println(Ks)
     if(typeof(Ks)==Matrix{Sym})
-        Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(N(Ks.subs(x,t[i]))) for i in 1:env.t_step]
+        K0 = N(Ks.subs(x,t[1]))
+        #Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(N(Ks.subs(x,t[i]))) for i in 1:env.t_step]
+        Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(N(Ks.subs(x,t[i]))-K0) for i in 1:env.t_step]
         return Kt
     else
         Kh::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(Ks) for i in 1:env.t_step]
@@ -164,10 +168,20 @@ function calc_loss(Hr::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}, env::E
         if(i==1)
             continue
         end
-        score = real(tr((Hr[i]-Hr[i-1])^2))/(env.t_step^2)
+        score += real(tr((Hr[i]-Hr[i-1])^2))
     end
-    return -score/env.t_step+Float32(1.0)
+    return -log(score/env.t_step+Float32(1.0/env.t_step^2))
 end
+#=
+function calc_loss(Hr::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}, env::Env)
+    score::Float32 = 0.0
+    for i in 1:env.t_step
+        for j in 1:env.t_step
+            score += real(tr((Hr[i]-Hr[j])^2))/env.t_step
+        end
+    end
+    return -score+Float32(1.0)
+end=#
 
 function calc_score(history::Vector{Int}, env::Env)
     Kt = calc_Kt(history, env)
@@ -175,15 +189,16 @@ function calc_score(history::Vector{Int}, env::Env)
     score = calc_loss(Hr, env)
     return score
 end
-#=
-function test()
+
+function score_test()
     env = init_Env(ARGS)
-    history = [3, 6, 2, 1]
-    Kt_test = calc_Kt(history, env)
-    @show Kt_test
-    #score = calc_score(history, env)
-    #println(score)
+    history = [6, 2]
+    println(calc_score(history, env))
+    history = [3, 6, 2, 4, 1, 6, 6, 2]
+    println(calc_score(history, env))
+    history = [3, 6, 2, 4, 6, 6, 2, 1]
+    println(calc_score(history, env))
 end
 
-test()=#
+#score_test()
 
