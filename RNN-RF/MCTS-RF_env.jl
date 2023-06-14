@@ -14,11 +14,13 @@ struct Env
     input_dim::Int
     middle_dim::Int
     output::Int
+    depth::Int
 
     #training parameter
     training_step::Int
     checkpoint_interval::Int
     batch_size::Int
+    batch_num::Int
     η::Float32
     momentum::Float32
     scheduler
@@ -52,38 +54,40 @@ function init_Env(args::Vector{String})
     fn_num::Int = 1
     act_ind = val_num+br_num+fn_num
     input_dim = act_ind*max_turn
-    middle_dim = 128
+    middle_dim = parse(Int, args[3])
     output =  act_ind + 1
+    depth = parse(Int, args[4])
 
     #training parameter
-    training_step = 4000
+    training_step = parse(Int, args[5])
     checkpoint_interval = 500
-    batch_size = 128
+    batch_size = parse(Int, args[6])
+    batch_num = parse(Int, args[7])
     η = 1f-4
     momentum = 0.9
     scheduler = Step(2f-1, Float32(0.1), 500)
 
 
-    num_simulation = parse(Int, args[3])
-    α = parse(Float32, args[4])
-    frac = parse(Float32, args[5])
+    num_simulation = parse(Int, args[8])
+    α = parse(Float32, args[9])
+    frac = parse(Float32, args[10])
 
-    t_step = parse(Int, args[6])
-    HS_size = parse(Int, args[7])
-    Ω = parse(Float32, args[8])
-    ξ = parse(Float32, args[9])
-    Jz = parse(Float32, args[10])
-    Jx = parse(Float32, args[11])
-    hz = parse(Float32, args[12])
+    t_step = parse(Int, args[11])
+    HS_size = parse(Int, args[12])
+    Ω = parse(Float32, args[13])
+    ξ = parse(Float32, args[14])
+    Jz = parse(Float32, args[15])
+    Jx = parse(Float32, args[16])
+    hz = parse(Float32, args[17])
     H_0 = Hermitian([ -Jz-2hz 0 0 -Jx; 0 Jz -Jx 0; 0 -Jx Jz 0; -Jx 0 0 -Jz+2hz])
     V_t = Hermitian([ 0 -ξ -ξ 0; -ξ 0 0 -ξ; -ξ 0 0 -ξ; 0 -ξ -ξ 0])
     dt = 2pi/t_step/Ω
 
-    Cb = parse(Int, args[13])
-    Ci = parse(Float32, args[14])
-    C = parse(Float32, args[15])
+    Cb = parse(Int, args[18])
+    Ci = parse(Float32, args[19])
+    C = parse(Float32, args[20])
 
-    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, training_step, checkpoint_interval, batch_size, η, momentum, scheduler, num_simulation, α, frac, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt, Cb, Ci, C)
+    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, scheduler, num_simulation, α, frac, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt, Cb, Ci, C)
 end
 
 x = symbols("x")
@@ -170,7 +174,7 @@ function calc_loss(Hr::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}, env::E
         end
         score += real(tr((Hr[i]-Hr[i-1])^2))
     end
-    return -log(score/env.t_step+Float32(1.0/env.t_step^2))
+    return -log(score/env.t_step+1f-10)
 end
 #=
 function calc_loss(Hr::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}, env::Env)
@@ -194,9 +198,9 @@ function score_test()
     env = init_Env(ARGS)
     history = [6, 2]
     println(calc_score(history, env))
-    history = [3, 6, 2, 4, 1, 6, 6, 2]
+    history = [6, 3, 2, 4, 1, 6, 2]
     println(calc_score(history, env))
-    history = [3, 6, 2, 4, 6, 6, 2, 1]
+    history = [6, 3, 2, 4, 6, 2, 1]
     println(calc_score(history, env))
 end
 

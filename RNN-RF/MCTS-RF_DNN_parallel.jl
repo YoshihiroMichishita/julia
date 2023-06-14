@@ -83,26 +83,26 @@ end
 
 #gpu並列化予定
 function train_model!(env::Env, buffer::ReplayBuffer, storage::Storage)
-    model = Chain(Dense(env.input_dim=>env.middle_dim), BatchNorm(env.middle_dim), Dense(env.middle_dim=>env.middle_dim, relu), BatchNorm(env.middle_dim), Dense(env.middle_dim=>env.middle_dim, relu), Flux.Parallel(vcat, Chain(Dense(env.middle_dim, env.output, tanh), Dense(env.output, env.act_ind)), Chain(Dense(env.middle_dim, env.middle_dim, tanh),Dense(env.middle_dim, 1))))
+    model = Chain(Dense(env.input_dim, env.middle_dim), Tuple(Chain(Parallel(+, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, env.middle_dim, relu)),Dense(env.middle_dim, env.middle_dim, relu)), identity) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Dense(env.middle_dim, env.act_ind, tanh), Chain(Dense(env.middle_dim, env.middle_dim, tanh),Dense(env.middle_dim, 1))))
     #model = Chain(Dense(env.input_dim=>env.middle_dim), BatchNorm(env.middle_dim), Dense(env.middle_dim=>Int(env.middle_dim/2), relu), BatchNorm(Int(env.middle_dim/2)), Dense(Int(env.middle_dim/2)=>Int(env.middle_dim/4), relu), Flux.Parallel(vcat, Chain(Dense(Int(env.middle_dim/4), env.output, tanh), Dense(env.output, env.act_ind)), Chain(Dense(Int(env.middle_dim/4), Int(env.middle_dim/4), tanh),Dense(Int(env.middle_dim/4), 1))))
     opt = ADAM()
     #ParameterSchedulers.Scheduler(env.scheduler, Momentum())
     iv_batch = []
     tv_batch = []
-    for b_num in 1:10
+    for b_num in 1:env.batch_num
         image_batch, target_batch = sample_batch(env, buffer)
         push!(iv_batch, image_batch)
         push!(tv_batch, target_batch)
     end
     l = 0.0
     for it in 1:env.training_step
-        for b_num in 1:10
+        for b_num in 1:env.batch_num
             #Flux.train!(loss, Flux.params(model), [(iv_batch[b_num], tv_batch[b_num], env, model)], opt)
             val, grads = Flux.withgradient(Flux.params(model)) do
                 loss(iv_batch[b_num],tv_batch[b_num],env,model)
             end
             Flux.Optimise.update!(opt, Flux.params(model), grads)
-            l+=val/(10env.training_step)
+            l+=val/(env.batch_num*env.training_step)
         end
     end
     storage.storage[env.training_step] = model
@@ -123,15 +123,14 @@ function train_model(env::Env, buffer::ReplayBuffer, storage::Storage)
     Storage.storage[env.training_step] = model
 end=#
 
-function AlphaZero_ForPhysics(env::Env)
-    storage = init_storage(env)
-
+function AlphaZero_ForPhysics(env::Env, storage::Storage)
     ld = []
     
 
-    for it in 1:100
+    for it in 1:40
         println("=============")
         println("it=$(it);")
+
         replay_buffer = init_buffer(1000, env.batch_size)
         run_selfplay(env, replay_buffer, storage)
         ll = train_model!(env, replay_buffer, storage)
@@ -156,10 +155,16 @@ function main(args::Vector{String})
     #args = ARGS
     println("Start! at $(now())")
     env = init_Env(args)
-    ld, model = AlphaZero_ForPhysics(env)
+    storage = init_storage(env)
+    if(args[21]!="0")
+        @load "/home/yoshihiro/Documents/Codes/julia/RNN-RF/AlphaZero_ForPhysics_new40_0612.bson" model
+        storage.storage[env.training_step] = model
+        println("load model!")
+    end
+    ld, model = AlphaZero_ForPhysics(env, storage)
     println("AlphaZero Finish!")
     println("loss-dynamics: $(ld)")
-    @save "/home/yoshihiro/Documents/Codes/julia/RNN-RF/AlphaZero_ForPhysics.bson" model
+    @save "/home/yoshihiro/Documents/Codes/julia/RNN-RF/AlphaZero_ForPhysics_new_0614.bson" model
     for it in 1:10
         game = play_physics!(env, model)
         score = calc_score(game.history, env)

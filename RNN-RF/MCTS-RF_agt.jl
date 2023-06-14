@@ -129,13 +129,25 @@ function backpropagate!(search_path::Vector{Node}, value::Float32)
         node.visit_count += 1
     end
 end
-
+#=
 function select_action(root::Node)
     actions = Int.(keys(root.children))
     #visits = [child.visit_count for child in root.children]
     visits = [root.children[a].visit_count for a in actions]
     return actions[argmax(visits)]
 end
+=#
+
+function select_action(root::Node, agt::Agent)
+    actions = Int.(keys(root.children))
+    visits = [root.children[a].visit_count for a in actions]
+    if(length(agt.history)<env.max_turn/2)
+        return actions[rand(softmax(visits))]
+    else
+        return actions[argmax(visits)]
+    end
+end
+
 
 function evaluate!(env::Env, agt::Agent,node::Node, model)
     Y = model(make_image(env, agt, length(agt.history)))
@@ -166,7 +178,8 @@ function run_MCTS(env::Env, agt::Agent, model)
         value = evaluate!(env, scratch, node, model)
         backpropagate!(search_path, value)
     end
-    return select_action(root), root
+    #return select_action(root), root
+    return select_action(root, agt), root
 end
 
 function play_physics!(env::Env, model)
