@@ -30,11 +30,20 @@ function legal_action_vec(env::Env, state::Vector{Int})
         return [i for i in 1:env.act_ind]
     end
 end
-
+tanh10(x) = Float32(10)*tanh(x)
+tanh2(x) = Float32(2)*tanh(x)
 function main(args::Vector{String})
     println("Start! at $(now())")
     env = init_Env(args)
-    @load "/home/yoshihiro/Documents/Codes/julia/RNN-RF/AlphaZero_ForPhysics_new.bson" model
+    @load "/home/yoshihiro/Documents/Codes/julia/RNN-RF/BadModel.bson" model
+
+    pp = Flux.params(model)
+    count = 0
+    for ppx in pp
+        if(any(isnan.(ppx)))
+            println("Namaste!")
+        end
+    end
     for it in 1:env.max_turn
         state::Vector{Int} = parse.(Int, split(readline()))
         if(isempty(state))

@@ -45,7 +45,7 @@ struct Env
     C::Float32 #L2 norm weight
 end
 
-#max_turn, num_player, num_simulation, a, frac, t_step, HS_size, Ω, ξ, Jz, Jx, hz, Cb, Ci, C
+#max_turn, num_player, middle=dim, depth, training_step, batch_size, batch_num, num_simulation, a, frac, t_step, HS_size, Ω, ξ, Jz, Jx, hz, Cb, Ci, C
 function init_Env(args::Vector{String})
     max_turn = parse(Int, args[1])
     num_player = parse(Int, args[2])
@@ -87,7 +87,7 @@ function init_Env(args::Vector{String})
     Ci = parse(Float32, args[19])
     C = parse(Float32, args[20])
 
-    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, scheduler, num_simulation, α, frac, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt, Cb, Ci, C)
+    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, scheduler, num_simulation, α, frac, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt, Cb, Ci, C)
 end
 
 x = symbols("x")
@@ -191,6 +191,11 @@ function calc_score(history::Vector{Int}, env::Env)
     Kt = calc_Kt(history, env)
     Hr = calc_Hr(Kt, env)
     score = calc_loss(Hr, env)
+    if(isnan(score))
+        println("score: nan")
+        println(history)
+        score = Float32(-10.0)
+    end
     return score
 end
 

@@ -79,6 +79,11 @@ function store_search_statistics!(env::Env, root::Node, agt::Agent)
     sum_visits = sum([root.children[a].visit_count for a in actions])
     for a in actions
         visit_pi[a] = root.children[a].visit_count/sum_visits
+        if(isnan(visit_pi[a]))
+            println("root.children[a].visit_count: $(root.children[a].visit_count)")
+            println("sum_visits: $(sum_visits)")
+            visit_pi[a] = 1f-6
+        end
     end
     push!(agt.child_visit_pi, visit_pi)
 end
@@ -99,11 +104,39 @@ function make_target(env::Env,agt::Agent, turn::Int)
     return [agt.child_visit_pi[turn]; calc_score(agt.history, env)]
 end
 
+function calc_score_his(history::Vector{Int}, env::Env, scores::Dict{Vector{Int}, Float32})
+    if haskey(scores, history)
+        return scores[history]
+    else
+        score = calc_score(history, env)
+        #scores[history] = score
+        return score
+    end
+end
+
+function make_target(env::Env,agt::Agent, scores::Dict{Vector{Int}, Float32}, turn::Int)
+    return [agt.child_visit_pi[turn]; calc_score_his(agt.history, env, scores)]
+end
+
 function add_exploration_noise!(env::Env, node::Node)
     actions = Int.(keys(node.children))
     noise = rand(Dirichlet(env.α * ones(Float32, length(actions))))
-    for it in 1:length(actions)
+    for it in 1:size(actions)[1]
         node.children[actions[it]].prior = node.children[actions[it]].prior * (1-env.frac) + noise[it] * env.frac
+        if(isnan(node.children[actions[it]].prior))
+            println("noise: $(noise)")
+        end
+    end
+end
+
+function add_exploration_noise!(env::Env, node::Node, ratio::Float32)
+    actions = Int.(keys(node.children))
+    noise = rand(Dirichlet(env.α * ones(Float32, length(actions))))
+    for it in 1:size(actions)[1]
+        node.children[actions[it]].prior = node.children[actions[it]].prior * (1-ratio*env.frac) + noise[it] * ratio* env.frac
+        if(isnan(node.children[actions[it]].prior))
+            println("noise: $(noise)")
+        end
     end
 end
 
@@ -112,20 +145,69 @@ function ucb_score(env::Env, parent::Node, child::Node)
     pb_c *= sqrt(parent.visit_count) / (child.visit_count + 1)
     prior_score = pb_c * child.prior
     value_score = child.value_sum / (child.visit_count + 1)
-    return prior_score + value_score
+    ans = prior_score + value_score
+    if(isnan(ans))
+        println("prior_score: $(prior_score)")
+        println("value_score: $(value_score)")
+        println("child.visit_count: $(child.visit_count)")
+        println("child.value_sum: $(child.value_sum)")
+    end
+    return ans
+    #return prior_score + value_score
 end
 
-function select_child(env::Env, node::Node)
+function ucb_score(env::Env, parent::Node, child::Node, ratio::Float32)
+    pb_c = log((parent.visit_count + env.Cb + 1) / env.Cb) + env.Ci
+    pb_c *= sqrt(parent.visit_count) / (child.visit_count + 1)
+    prior_score = pb_c * child.prior
+    value_score = child.value_sum / (child.visit_count + 1)
+    ans = ratio*prior_score + value_score
+    if(isnan(ans))
+        println("prior_score: $(prior_score)")
+        println("value_score: $(value_score)")
+        println("child.visit_count: $(child.visit_count)")
+        println("child.value_sum: $(child.value_sum)")
+    end
+    return ans
+    #return prior_score + value_score
+end
+using BSON: @save
+function select_child(env::Env, node::Node, model::Chain)
     actions = Int.(keys(node.children))
     children = [node.children[a] for a in actions]
     score_v = [ucb_score(env, node, child) for child in children]
-    it = rand(findall(x -> x==maximum(score_v), score_v))
+    its = findall(x -> x==maximum(score_v), score_v)
+    if(isempty(its))
+        println("score_v: $(score_v)")
+        @save "BadModel.bson" model
+    end
+    it = rand(its)
+    #it = rand(findall(x -> x==maximum(score_v), score_v))
+    return actions[it], children[it]
+end
+
+function select_child(env::Env, node::Node, model::Chain, ratio::Float32)
+    actions = Int.(keys(node.children))
+    children = [node.children[a] for a in actions]
+    score_v = [ucb_score(env, node, child, ratio) for child in children]
+    its = findall(x -> x==maximum(score_v), score_v)
+    if(isempty(its))
+        println("score_v: $(score_v)")
+        @save "BadModel.bson" model
+    end
+    it = rand(its)
+    #it = rand(findall(x -> x==maximum(score_v), score_v))
     return actions[it], children[it]
 end
 
 function backpropagate!(search_path::Vector{Node}, value::Float32)
     for node in search_path
         node.value_sum += value
+        if(isnan(node.value_sum))
+            println("value Nan!!!!!!!!")
+            println("value: $(value)")
+            println(node)
+        end
         node.visit_count += 1
     end
 end
@@ -138,31 +220,37 @@ function select_action(root::Node)
 end
 =#
 
-function select_action(root::Node, agt::Agent)
+function select_action(env::Env, root::Node, agt::Agent)
     actions = Int.(keys(root.children))
     visits = [root.children[a].visit_count for a in actions]
     if(length(agt.history)<env.max_turn/2)
-        return actions[rand(softmax(visits))]
+        return actions[rand(Categorical(softmax(visits)))]
     else
         return actions[argmax(visits)]
     end
 end
 
 
-function evaluate!(env::Env, agt::Agent,node::Node, model)
+function evaluate!(env::Env, agt::Agent,node::Node, model::Chain)
     Y = model(make_image(env, agt, length(agt.history)))
-    value = Y[end] 
-    pol_log = Y[1:end-1]
+    value = Y[end,1] 
+    pol_log = Y[1:end-1,1]
     A = legal_action(env, agt)
     policy = softmax([pol_log[a] for a in A])
     
-    for it in 1:length(A)
+    for it in 1:size(A)[1]
+        if(isnan(policy[it]))
+            println("input: $(make_image(env, agt, length(agt.history)))")
+            println("Y: $(Y)")
+            println("policy: $(policy)")
+            println("pol_log: $(pol_log)")
+        end
         node.children[A[it]] = init_node(policy[it])
     end
     return value
 end
 
-function run_MCTS(env::Env, agt::Agent, model)
+function run_MCTS(env::Env, agt::Agent, model::Chain)
     root = init_node(Float32(0.0))
     value = evaluate!(env, agt, root, model)
     add_exploration_noise!(env, root)
@@ -171,7 +259,7 @@ function run_MCTS(env::Env, agt::Agent, model)
         scratch = deepcopy(agt)
         search_path = [node]
         while(!is_finish(env, scratch) && has_children(node))#has_children(node)
-            action, node = select_child(env, node)
+            action, node = select_child(env, node, model)
             apply!(env, scratch, action)
             push!(search_path, node)
         end
@@ -179,10 +267,31 @@ function run_MCTS(env::Env, agt::Agent, model)
         backpropagate!(search_path, value)
     end
     #return select_action(root), root
-    return select_action(root, agt), root
+    return select_action(env, root, agt), root
 end
 
-function play_physics!(env::Env, model)
+function run_MCTS(env::Env, agt::Agent, model::Chain, ratio::Float32)
+    root = init_node(Float32(0.0))
+    value = evaluate!(env, agt, root, model)
+    add_exploration_noise!(env, root)
+    for it in 1:env.num_simulation
+        node = root
+        scratch = deepcopy(agt)
+        search_path = [node]
+        while(!is_finish(env, scratch) && has_children(node))#has_children(node)
+            action, node = select_child(env, node, model, ratio)
+            apply!(env, scratch, action)
+            push!(search_path, node)
+        end
+        value = evaluate!(env, scratch, node, model)
+        backpropagate!(search_path, value)
+    end
+    #return select_action(root), root
+    return select_action(env, root, agt), root
+end
+
+
+function play_physics!(env::Env, model::Chain)
     agt = init_agt()
     while(!is_finish(env, agt))
         action, root = run_MCTS(env, agt, model)
@@ -192,10 +301,29 @@ function play_physics!(env::Env, model)
     return agt
 end
 
-function play_physics!(env::Env,agt::Agent, model)
+function play_physics!(env::Env, model::Chain, ratio::Float32)
+    agt = init_agt()
+    while(!is_finish(env, agt))
+        action, root = run_MCTS(env, agt, model, ratio)
+        apply!(env, agt, action)
+        store_search_statistics!(env, root, agt)
+    end
+    return agt
+end
+
+function play_physics!(env::Env,agt::Agent, model::Chain)
     #agt = init_agt()
     while(!is_finish(env, agt))
         action, root = run_MCTS(env, agt, model)
+        apply!(env, agt, action)
+        store_search_statistics!(env, root, agt)
+    end
+end
+
+function play_physics!(env::Env,agt::Agent, model::Chain, ratio::Float32)
+    #agt = init_agt()
+    while(!is_finish(env, agt))
+        action, root = run_MCTS(env, agt, model, ratio)
         apply!(env, agt, action)
         store_search_statistics!(env, root, agt)
     end
@@ -206,7 +334,7 @@ using BSON: @load
 
 function check_RL()
     env = init_Env(ARGS)
-    @load ARGS[16] model
+    @load ARGS[21] model
     for it in 1:10
         game = play_physics!(env, model)
         score = calc_score(game.history, env)

@@ -115,6 +115,8 @@ function init_env(t::Int=100, Ω0::Float64 = 10.0, ξ0::Float64 = 0.2, Jz0::Floa
     return t_size, HS_size, num_parm, Ω, ξ, Jz, Jx, hz, H_0, V_t, σ_vec, σ_vec2, dt
 end
 
+
+
 function VtoM(V::Vector{Float64},en::TS_env)
     M = V' * en.σ_vec2
     return M
