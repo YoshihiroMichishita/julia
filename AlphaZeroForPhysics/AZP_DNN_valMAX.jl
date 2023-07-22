@@ -196,7 +196,7 @@ function loss_check(image::CuArray{Int, 2}, target::Matrix{Float32}, env::Env, m
 end
 
 
-@everywhere tanh10(x) = Float32(10)*tanh(x/10)
+@everywhere tanh10(x) = Float32(12)*tanh(x/10)
 @everywhere tanh2(x) = Float32(4)*tanh(x/4)
 
 #gpu並列化予定
@@ -208,7 +208,7 @@ function train_model!(env::Env, buffer::ReplayBuffer, storage::Storage)
             model = storage.storage[b_num] |> gpu
         else
             #model = Chain(Dense(env.input_dim, env.middle_dim), Tuple(Chain(Parallel(+, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, env.middle_dim, relu)),Dense(env.middle_dim, env.middle_dim, relu)), identity) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Chain(Dense(env.middle_dim, div(env.middle_dim,4), relu), Dense(div(env.middle_dim,4), env.act_ind, tanh2)), Chain(Dense(env.middle_dim, div(env.middle_dim,4), relu), Dense(div(env.middle_dim,4), 1, tanh10)))) |> gpu
-            model = Chain(Dense(env.input_dim, env.middle_dim), BatchNorm(env.middle_dim), Tuple(Chain(Parallel(+, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, env.middle_dim, relu),Dense(env.middle_dim, env.middle_dim, relu)), identity)) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(env.middle_dim, env.act_ind, tanh2)), Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), 1, tanh10)))) |> gpu
+            model = Chain(Dense(env.input_dim, env.middle_dim), BatchNorm(env.middle_dim), Tuple(Chain(Parallel(+, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, env.middle_dim, relu),Dense(env.middle_dim, env.middle_dim, relu)), identity)) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), env.act_ind, tanh2)), Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), 1, tanh10)))) |> gpu
             #model = Chain(Dense(env.input_dim, env.middle_dim), Tuple(Chain(Parallel(+, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, env.middle_dim, relu)),Dense(env.middle_dim, env.middle_dim, relu)), identity) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Chain(Dense(env.middle_dim, env.middle_dim, relu), Dense(env.middle_dim, env.act_ind, tanh2)), Chain(Dense(env.middle_dim, env.middle_dim, relu), Dense(env.middle_dim, 1, tanh10)))) |> gpu
         end
         opt = Flux.Optimiser(WeightDecay(env.C), Adam(1f-5))
@@ -336,6 +336,15 @@ function main(args::Vector{String})
     for i in inds
         println("$(k[i]), $(string_score[k[i]])")
     end
+    println("check")
+    h = [3, 6, 2, 6, 4, 6, 2, 1]
+    println("$(h), $(calc_score(h, env_fc))")
+    h = [3, 6, 2, 6, 4, 1, 6, 2]
+    println("$(h), $(calc_score(h, env_fc))")
+    h = [6, 3, 2, 6, 4, 2, 1]
+    println("$(h), $(calc_score(h, env_fc))")
+    h = [6, 3, 6, 4, 5, 2, 1, 1, 2]
+    println("$(h), $(calc_score(h, env_fc))")
 
     save("/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/scores.jld2", string_score)
 end
