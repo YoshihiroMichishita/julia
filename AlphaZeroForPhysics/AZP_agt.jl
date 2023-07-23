@@ -7,12 +7,13 @@ include("AZP_env.jl")
 mutable struct Agent
     #counts
     history::Vector{Int}
+    surprise::Vector{Float32}
     branch_left::Vector{Int}
     child_visit_pi::Vector{Vector{Float32}}
 end
 
 function init_agt()
-    return Agent([], [-1], [])
+    return Agent([], [], [-1], [])
 end
 
 function make_image(env::Env, agt::Agent, turn::Int)

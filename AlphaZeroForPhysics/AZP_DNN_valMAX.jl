@@ -55,7 +55,14 @@ end=#
 
 function WeightSample(hist::Vector{Int})
     s = [i for i in 1:length(hist)]
-    ww = s/sum(s)
+    w = [2^i for i in 1:length(hist)]
+    ww = w/sum(w)
+    return sample(s, ProbabilityWeights(ww))
+end
+function WeightSample(agt::Agent)
+    s = [i for i in 1:length(agt.history)]
+    w = agt.surprise
+    ww = w/sum(w)
     return sample(s, ProbabilityWeights(ww))
 end
 
@@ -109,6 +116,54 @@ function sample_batch!(env::Env, buffer::ReplayBuffer, scores::Dict{Vector{Int},
     return sdata(imag), tar_data
 end
 
+function sample_batch_s!(env::Env, buffer::ReplayBuffer, scores::Dict{Vector{Int}, Float32})
+    games = sample(buffer.buffer, weights([length(agt.history) for agt in buffer.buffer]), env.batch_size, replace=true)
+    g_turn = [(g, WeightSample(g)) for g in games]
+    #g_turn = [(g, rand(1:length(g.history))) for g in games]
+
+    #imag = SharedArray(zeros(Int, env.input_dim, buffer.batch_size))
+    #target = SharedArray(zeros(Float32, env.output, buffer.batch_size))
+    if(isempty(scores))
+        imag = SharedArray(zeros(Int, env.input_dim, env.batch_size))
+        target = SharedArray(zeros(Float32, env.output, env.batch_size))
+        @sync @distributed for it in 1:env.batch_size
+            g, turn = g_turn[it]
+            imag[:,it] = make_image(env, g, turn)
+            target[:,it] = make_target(env, g, scores, turn)
+        end
+    else
+        imag = SharedArray(zeros(Int, env.input_dim, 4env.batch_size))
+        target = SharedArray(zeros(Float32, env.output, 4env.batch_size))
+        @sync @distributed for it in 1:env.batch_size
+            g, turn = g_turn[it]
+            imag[:,it] = make_image(env, g, turn)
+            target[:,it] = make_target(env, g, scores, turn)
+        end
+        @sync @distributed for it in 1:3env.batch_size
+            hist = rand(keys(scores))
+            imag[:,env.batch_size+it] = make_image(env, hist)
+            target[end,env.batch_size+it] = scores[hist]
+        end
+    end
+
+    tar_data = sdata(target)
+    for it in 1:env.batch_size
+        g, turn = g_turn[it]
+        for l in 1:length(g.history)
+            his = g.history[1:l]
+            if(haskey(scores, his))
+                if(scores[his] < tar_data[end,it])
+                    #println("score_data:$(scores[his]), tar_data:$(tar_data[end,it]), max:$(max(scores[his], tar_data[end,it]))")
+                    scores[his] = tar_data[end,it]
+                end
+                #max(scores[his], tar_data[end,it])
+            else
+                scores[his] = tar_data[end,it]
+            end
+        end
+    end
+    return sdata(imag), tar_data
+end
 
 #cpu並列化予定
 function run_selfplay(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32)
@@ -153,6 +208,15 @@ end
     return games
 end
 
+@everywhere function run_selfplay_worker_withS(env::Env, model::Chain, ratio::Float32, noise_r::Float32, scores::Dict{Vector{Int}, Float32})
+    games = Agent[]
+    for it in 1:div(env.num_player, nworkers())
+        game = play_physics_s!(env, model, ratio, noise_r, scores)
+        push!(games, game)
+    end
+    return games
+end
+
 function run_selfplay_pal(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32, noise_r::Float32)
     model = latest_model(storage) |> gpu
     futures = Future[]
@@ -172,6 +236,20 @@ function run_selfplay_pals(env::Env, buffer::ReplayBuffer, storage::Storage, rat
     futures = Future[]
     for i in workers()
         push!(futures, remotecall(run_selfplay_worker, i, env, model, ratio, noise_r, storage.scores))
+    end
+    for f in futures
+        games = fetch(f)
+        for g in games
+            save_game!(buffer, g)
+        end
+    end
+end
+
+function run_selfplay_palss(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32, noise_r::Float32)
+    model = latest_model(storage) |> gpu
+    futures = Future[]
+    for i in workers()
+        push!(futures, remotecall(run_selfplay_worker_withS, i, env, model, ratio, noise_r, storage.scores))
     end
     for f in futures
         games = fetch(f)
@@ -235,23 +313,29 @@ end
 
 function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
     ld = []
+    max_val = []
     
-    
-    for it in 1:5
+    ratio = env.ratio
+    randr = env.ratio_r
+    for it in 1:4
         println("=============")
         println("it=$(it);")
 
         replay_buffer = init_buffer(1000, env.batch_size)
-        ratio = Float32(12.0)
-        if(it<4)
-            #@time run_selfplay(env, replay_buffer, storage, ratio, 1.0f0)
-            @time run_selfplay_pal(env, replay_buffer, storage, ratio, 1.0f0)
+        
+        if(it<5)
+            ratio -= Float32(1.0)
+            randr -= Float32(5.0f-2)
+            #@time run_selfplay_palss(env, replay_buffer, storage, ratio, randr)
+            @time run_selfplay_pals(env, replay_buffer, storage, ratio, randr)
             #@time run_selfplay_pals(env, replay_buffer, storage, ratio, 1.0f0)
             @time ll = train_model!(env, replay_buffer, storage)
         else
-            ratio = Float32(12.0)
-            @time run_selfplay_pal(env, replay_buffer, storage, ratio, 5.0f-1)
-            #@time run_selfplay_pals(env, replay_buffer, storage, ratio, 0.5f-1)
+            ratio -= Float32(2.0)
+            randr -= Float32(1.0f-1)
+            #ratio = Float32(6.0)
+            #@time run_selfplay_palss(env, replay_buffer, storage, ratio, randr)
+            @time run_selfplay_pals(env, replay_buffer, storage, ratio, randr)
             @time ll = train_model!(env, replay_buffer, storage)
         end
         #@report_call run_selfplay(env, replay_buffer, storage)
@@ -272,10 +356,13 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
                 println("$(game.history), score:$(score), val(NN):$(val)")
             end
         end
+        val = findmax(storage.scores)[1]
+        println("max score: $(val)")
+        push!(max_val, val)
         #end
     end
     
-    return ld, latest_model(storage)
+    return ld, max_val, latest_model(storage)
 end
 
 function dict_copy(orig::Dict{Vector{Int}, Float32})
@@ -300,29 +387,34 @@ function main(args::Vector{String})
     env = init_Env(args)
     env_fc = init_Env_forcheck(args)
     storage = init_storage(env)
-    st = parse(Int, args[21])
+    st = parse(Int, args[23])
     if(st!=0)
-        @load "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/AZP_valMAX_head$(st).bson" model0
+        @load "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/AZP_valMAX_t_head$(st).bson" model0
         storage.storage[1] = gpu(model0)
+        s_old = load("/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/scores.jld2")
+        for k in keys(s_old)
+            storage.scores[parse.(Int, split(k[2:end-1], ","))] = Float32(s_old[k])
+        end
         println("load model!")
+        println("score length: $(length(storage.scores))")
     end
     
-    ld, model = AlphaZero_ForPhysics(env, env_fc, storage)
+    ld, max_val, model = AlphaZero_ForPhysics(env, env_fc, storage)
 
     p = plot((ld[1])[1,:], yaxis=:log, linewidth=3.0)
     for i in 2:length(ld)
         plot!((ld[i])[1,:], yaxis=:log, linewidth=3.0)
     end
-    savefig(p, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/loss_valMAX.png")
+    savefig(p, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/loss_valMAX_s1.png")
     println("AlphaZero Finish!")
     #println("loss-dynamics: $(ld)")
     
     for head in 1:env.batch_num
         model0 = storage.storage[head] |> cpu
-        @save "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/AZP_valMAX_s_head$(st+head).bson" model0
+        @save "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/AZP_valMAX_s1_head$(st+head).bson" model0
     end
-    #model2 = cpu(model)
-    #@save "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/AZP.bson" model2
+
+
     for it in 1:10
         game = play_physics!(env_fc, model)
         score = calc_score(game.history, env_fc)
@@ -332,6 +424,7 @@ function main(args::Vector{String})
     string_score = dict_copy(storage.scores)
     k = [keys(string_score)...]
     inds = findall(s -> string_score[s] == findmax(string_score)[1], k)
+    println("max_process: $(max_val)")
     println("max score:")
     for i in inds
         println("$(k[i]), $(string_score[k[i]])")
@@ -345,8 +438,11 @@ function main(args::Vector{String})
     println("$(h), $(calc_score(h, env_fc))")
     h = [6, 3, 6, 4, 5, 2, 1, 1, 2]
     println("$(h), $(calc_score(h, env_fc))")
-
-    save("/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/scores.jld2", string_score)
+    if(st == 0)
+        save("/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/scores_s1.jld2", string_score)
+    else
+        save("/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/scores_new.jld2", string_score)
+    end
 end
 
 

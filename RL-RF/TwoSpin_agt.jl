@@ -195,7 +195,7 @@ function loss_calc_hyb(model0, input_parm::Matrix{Float32}, Kt_data::Array{Float
         #l += loss_fn_hybrid(en,ag, HF_given, HF_calc,t)
     end
     l += diff_norm(kp_sum)/ag.t_size
-    return l 
+    return l /bs
 end
 
 #calculate the loss function in a single cycle & update K(t)&H_r(t)
@@ -264,11 +264,18 @@ function init_HF(en::TS_env)
     return init
 end
 
+function inp2string(input::Vector{Float32})
+    s = "Ω$(input[1])_Jz$(input[2])_Jx1$(input[3])_hz1$(input[4])_ξ1$(input[5])"
+    return s
+end
+
 using DataFrames
 using CSV
 using BSON: @save
 using BSON: @load
 using Plots
+using StatsBase
+
 ENV["GKSwstype"]="nul"
 
 function main(arg::Array{String,1})
@@ -277,50 +284,30 @@ function main(arg::Array{String,1})
     Jx = parse(Float32, arg[3])
     hz = parse(Float32, arg[4]) 
     ξ = parse(Float32, arg[5])
-    # t::Int, t_size::Int
-    #t=100, Ω0=10.0, ξ0=0.2, Jz0=1f0, Jx0=0.7, hz0=0.5
-    #en = TS_env(init_env(parse(Int,arg[1]), parse(Float32,arg[2]), parse(Float32,arg[3]), parse(Float32,arg[4]), parse(Float32,arg[5]), parse(Float32,arg[6]))...)
 
-    #en::TS_env, n=32, γ0=0.9, ϵ0=1f0
     ag = agtQ(init_nQ(arg[6:9])...)
 
-    
+    opt = Flux.Optimiser(WeightDecay(1f-6), Adam(1f-4))
 
-    if(arg[10]=="clip1")
-        opt = Flux.Optimise.Optimiser(ClipValue(1e-1),Adam(1e-1))
-    elseif(arg[10]=="clip2")
-        opt = Flux.Optimise.Optimiser(ClipValue(1e-2),Adam(1e-2))
-    elseif(arg[10]=="clip3")
-        opt = Flux.Optimise.Optimiser(ClipValue(1e-3),Adam(1e-3))
-    elseif(arg[10]=="rms")
-        opt = RMSProp()
-    elseif(arg[10]=="gd")
-        opt = Descent(parse(Float32, arg[15]))
-    elseif(arg[10]=="adab")
-        opt = AdaBelief()
-    else
-        opt = ADAM()
-    end
-
-    it_MAX = parse(Int,arg[11])
+    it_MAX = parse(Int,arg[10])
     ll_it = zeros(Float32, it_MAX)
     println("start!")
 
     st::Int = 0
     if(arg[12]=="init")
-        model = Chain(Dense(ag.in_size, ag.n_dense, relu), Dense(ag.n_dense, ag.n_dense, relu), Dense(ag.n_dense, ag.n_dense, relu), Dense(ag.n_dense, ag.n_dense, relu), Dense(ag.n_dense, ag.out_size))
-        ag.K_TL[en.t_size,:] = zeros(Float32, en.HS_size^2)
+        model = Chain(Dense(ag.in_size, ag.n_dense), BatchNorm(ag.n_dense), Dense(ag.in_size, ag.n_dense, relu), Dense(ag.n_dense, ag.n_dense, relu), Dense(ag.n_dense, ag.n_dense, relu), Dense(ag.n_dense, ag.n_dense, relu), Dense(ag.n_dense, ag.out_size))
     else
         @load arg[12] model
-        ag.K_TL = Matrix(CSV.read(arg[13], DataFrame))
-        st = parse(Int,arg[14])
     end
 
-    batch_num = parse(Int,arg[13])
+    batch_num = parse(Int,arg[11])
     input = zeros(Float32, 5, batch_num)
     for i in 1:batch_num
         input[:,i] = generate_parmv(Ω, Jz, Jx, hz, ξ)
     end
+
+    Kt = zeros(Float32, ag.t_size, 4^2, batch_num)
+    HF = zeros(Float32, ag.t_size, 4^2, batch_num)
     
     for it in 1:it_MAX
         HF_it = zeros(Float32, en.HS_size^2) 
@@ -340,7 +327,9 @@ function main(arg::Array{String,1})
 
                 HF_it += ag.HF_TL[t_step,:]/en.t_size
             end=#
-            Kt, HF = check_dynamics(model, input, ag)
+            @sync @threads for b in 1:batch_num
+                Kt[:,:,b], HF[:,:,b] = check_dynamics(model, input[:,b], ag)
+            end
             println("HF_calc Finish!")
         end
 
@@ -373,46 +362,48 @@ function main(arg::Array{String,1})
             break
         end
 
-        grads = Flux.gradient(Flux.params(model)) do
+        ll_it[it], grads = Flux.withgradient(Flux.params(model)) do
             #loss_calc_hyb(model, en, ag, HF_it)
-            loss_calc_hyb(model, input, Kt[1,:,:], HF[1,:], ag)
+            loss_calc_hyb(model, input, Kt, HF, ag)
         end
         Flux.Optimise.update!(opt, Flux.params(model), grads)
 
         if(it==1) 
             println("First Learning Finish!")
         end
+        @sync @threads for b in 1:batch_num
+            Kt[:,:,b], HF[:,:,b] = check_dynamics(model, input[:,b], ag)
+        end
 
-        ag.K_TL[en.t_size,:] = zeros(Float32, en.HS_size^2)
-        ll_it[it], Kp_av = loss_calc_hyb!(model,en, ag, HF_it)
+        
         if(it%(div(it_MAX, 10))==0)
             print("#")
         end
-        if(it%1000 == 0 && it!=0)
-            E = zeros(Float32, en.t_size, en.HS_size)
-            for t_step in 1:en.t_size
-                E[t_step,:], v = eigen(VtoM(ag.HF_TL[t_step,:],en))
-            end
+        if(it%1000 == 0)
+            opt = Flux.Optimiser(WeightDecay(1f-6), Adam(1f-4))
+            s = 3
+            ss = sample(1:batch_num, s, replace=false, ordered=true)
+            for b in 1:ss
+                E = zeros(Float32, en.t_size, en.HS_size)
+                for t_step in 1:en.t_size
+                    E[t_step,:], v = eigen(VtoM(HF[t_step,:,b]))
+                end
 
-            p1 = plot(E[:,1].-E[1,1], xlabel="t_step", ylabel="E of HF_t", width=3.0)
-            p1 = plot!(E[:,2].-E[1,2], width=3.0)
-            p1 = plot!(E[:,3].-E[1,3], width=3.0)
-            p1 = plot!(E[:,4].-E[1,4], width=3.0)
-            savefig(p1,"./HF_t$(st+it).png")
-            println("Drawing Finish!")
-            #println(E[:,4])
-            p2 = plot(ag.K_TL[:,1], xlabel="t_step", ylabel="E of K_t", width=2.0)
-            for i in 2:en.HS_size^2
-                p2 = plot!(ag.K_TL[:,i], width=2.0)
+                p1 = plot(E[:,1].-E[1,1], xlabel="t_step", ylabel="E of HF_t", width=3.0)
+                p1 = plot!(E[:,2].-E[1,2], width=3.0)
+                p1 = plot!(E[:,3].-E[1,3], width=3.0)
+                p1 = plot!(E[:,4].-E[1,4], width=3.0)
+                savefig(p1,"./HF_t$(it)_"*inp2string(input[:,b])*".png")
+                println("Drawing Finish!")
+                #println(E[:,4])
+                p2 = plot(Kt[:,1], xlabel="t_step", ylabel="E of K_t", width=2.0)
+                for i in 2:en.HS_size^2
+                    p2 = plot!(Kt[:,i], width=2.0)
+                end
+                savefig(p2,"./K_t$(it)_"*inp2string(input[:,b])*".png")
+                save_data1 = DataFrame(ag.K_TL, :auto)
+                CSV.write("./K_TL$(it)_"*inp2string(input[:,b])*".csv", save_data1)
             end
-            save_data1 = DataFrame(ag.K_TL, :auto)
-            CSV.write("./K_TL$(st+it).csv", save_data1)
-            savefig(p2,"./K_t$(st+it).png")
-            p4 = plot(ag.Kp_TL[:,1], xlabel="t_step", ylabel="E of Kp_t", width=2.0)
-            for i in 2:en.HS_size^2
-                p4 = plot!(ag.Kp_TL[:,i], width=2.0)
-            end
-            savefig(p4,"./Kp_t$(st+it).png")
             @save "mymodel$(st+it).bson" model
         end
 

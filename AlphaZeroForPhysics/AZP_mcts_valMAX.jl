@@ -34,7 +34,7 @@ end
 function is_finish(env::Env, agt::Agent)
     #max_turnに達したか、branchがなくなって最後のstateがval_numに達したか
     #return env.max_turn == length(agt.history) || (length(agt.branch_left) == 0 && agt.history[end]<=env.val_num)
-    return (env.max_turn == length(agt.history) || length(agt.branch_left) == 0)
+    return (env.max_turn == length(agt.history) || isempty(agt.branch_left))
 end
 
 
@@ -56,6 +56,16 @@ end
 #historyにactionを追加し、branch_leftを更新
 function apply!(env::Env, agt::Agent, act::Int)
     push!(agt.history, act)
+    if act <= env.val_num
+        pop!(agt.branch_left)
+    elseif(act <= env.val_num+env.br_num)
+        push!(agt.branch_left, act)
+    end
+end
+
+function apply!(env::Env, agt::Agent, act::Int, surprise::Float32)
+    push!(agt.history, act)
+    push!(agt.surprise, surprise)
     if act <= env.val_num
         pop!(agt.branch_left)
     elseif(act <= env.val_num+env.br_num)
@@ -310,15 +320,56 @@ function run_MCTS(env::Env, agt::Agent, model::Chain, ratio::Float32, noise_r::F
             push!(search_path, node)
         end
         if(haskey(scores, scratch.history))
+            value = evaluate!(env, scratch, node, model)
             value = scores[scratch.history]
         else
-            value = eval_t!(env, scratch, scores)
+            if(is_finish(env, scratch))
+                value = eval_t!(env, scratch, scores)
+            else
+                value = evaluate!(env, scratch, node, model)
+            end
         end
         #value = evaluate!(env, scratch, node, model)
         backpropagate!(search_path, value)
     end
     #return select_action(root), root
     return select_action(env, root, agt), root
+end
+
+function run_MCTS_withS(env::Env, agt::Agent, model::Chain, ratio::Float32, noise_r::Float32, scores::Dict{Vector{Int}, Float32})
+    root = init_node(Float32(0.0))
+    value_nn = evaluate!(env, agt, root, model)
+    add_exploration_noise!(env, root, noise_r)
+    for it in 1:env.num_simulation
+        node = root
+        scratch = deepcopy(agt)
+        search_path = [node]
+        while(!is_finish(env, scratch) && has_children(node))
+            action, node = select_child(env, node, model, ratio)
+            apply!(env, scratch, action)
+            push!(search_path, node)
+        end
+        #println("isfinish?: $(is_finish(env, scratch))")
+        #println("has_children?: $(has_children(node))")
+        #println
+        value = Float32(0.0)
+        if(haskey(scores, scratch.history))
+            value = evaluate!(env, scratch, node, model)
+            value = scores[scratch.history]
+        else
+            if(is_finish(env, scratch))
+                value = eval_t!(env, scratch, scores)
+            else
+                value = evaluate!(env, scratch, node, model)
+            end
+        end
+        #value = evaluate!(env, scratch, node, model)
+        backpropagate!(search_path, value)
+    end
+    act = select_action(env, root, agt)
+    surp::Float32 = sqrt(abs(value_nn - root.value_sum))
+    #return select_action(root), ro
+    return act, root, surp
 end
 
 
@@ -356,6 +407,16 @@ function play_physics!(env::Env, model::Chain, ratio::Float32, noise_r::Float32,
     while(!is_finish(env, agt))
         action, root = run_MCTS(env, agt, model, ratio, noise_r, scores)
         apply!(env, agt, action)
+        store_search_statistics!(env, root, agt)
+    end
+    return agt
+end
+
+function play_physics_s!(env::Env, model::Chain, ratio::Float32, noise_r::Float32, scores::Dict{Vector{Int}, Float32})
+    agt = init_agt()
+    while(!is_finish(env, agt))
+        action, root, surp = run_MCTS_withS(env, agt, model, ratio, noise_r, scores)
+        apply!(env, agt, action, surp)
         store_search_statistics!(env, root, agt)
     end
     return agt

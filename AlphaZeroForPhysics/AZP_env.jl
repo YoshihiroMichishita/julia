@@ -26,6 +26,8 @@ struct Env
     num_simulation::Int
     α::Float32
     frac::Float32
+    ratio::Float32
+    ratio_r::Float32
 
     t_step::Int
     HS_size::Int
@@ -68,7 +70,7 @@ function init_Env(args::Vector{String})
     println("batch_size:  $(batch_size)")
     batch_num = parse(Int, args[7])
     println("batch_num:  $(batch_num)")
-    η = 1f-4
+    η = 1f-5
     momentum = 0.9
 
 
@@ -78,6 +80,11 @@ function init_Env(args::Vector{String})
     println("α:  $(α)")
     frac = parse(Float32, args[10])
     println("frac:  $(frac)")
+    ratio = parse(Float32, args[21])
+    println("ratio:  $(ratio)")
+    ratio_r = parse(Float32, args[22])
+    println("ratio_r:  $(ratio_r)")
+
 
     t_step = parse(Int, args[11])
     HS_size = parse(Int, args[12])
@@ -94,7 +101,7 @@ function init_Env(args::Vector{String})
     Ci = parse(Float32, args[19])
     C = parse(Float32, args[20])
 
-    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt, Cb, Ci, C)
+    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, ratio, ratio_r, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt, Cb, Ci, C)
 end
 
 function init_Env_forcheck(args::Vector{String})
@@ -121,7 +128,7 @@ function init_Env_forcheck(args::Vector{String})
     println("batch_size:  $(batch_size)")
     batch_num = parse(Int, args[7])
     println("batch_num:  $(batch_num)")
-    η = 1f-4
+    η = 1f-5
     momentum = 0.9
 
 
@@ -131,6 +138,10 @@ function init_Env_forcheck(args::Vector{String})
     println("α:  $(α)")
     frac = Float32(0.0)
     println("frac:  $(frac)")
+    ratio = parse(Float32, args[21])
+    println("ratio:  $(ratio)")
+    ratio_r = parse(Float32, args[22])
+    println("ratio_r:  $(ratio_r)")
 
     t_step = parse(Int, args[11])
     HS_size = parse(Int, args[12])
@@ -147,7 +158,7 @@ function init_Env_forcheck(args::Vector{String})
     Ci = parse(Float32, args[19])
     C = parse(Float32, args[20])
 
-    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt, Cb, Ci, C)
+    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, ratio, ratio_r, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt, Cb, Ci, C)
 end
 
 x = symbols("x")
