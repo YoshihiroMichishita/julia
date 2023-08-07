@@ -1,0 +1,48 @@
+start!
+start!
+start!
+start!
+start!
+start!
+start!
+start!
+start!
+start!
+start!
+start!
+start!
+start!
+start!
+start!
+start!
+start!
+start!
+start!
+start!
+start!
+start!
+start!
+ 33.022209 seconds (22.93 M allocations: 1.191 GiB, 1.50% gc time, 39.21% compilation time: 69% of which was recompilation)
+ 32.200000 seconds (22.93 M allocations: 1.191 GiB, 1.38% gc time, 37.22% compilation time: 67% of which was recompilation)
+ 32.782066 seconds (22.93 M allocations: 1.191 GiB, 1.24% gc time, 36.87% compilation time: 58% of which was recompilation)
+ 34.427227 seconds (22.93 M allocations: 1.191 GiB, 1.09% gc time, 37.49% compilation time: 59% of which was recompilation)
+ 34.260904 seconds (22.93 M allocations: 1.191 GiB, 1.14% gc time, 34.61% compilation time: 58% of which was recompilation)
+ 35.413942 seconds (22.93 M allocations: 1.191 GiB, 1.10% gc time, 33.44% compilation time: 64% of which was recompilation)
+ 35.364070 seconds (22.93 M allocations: 1.191 GiB, 1.10% gc time, 32.25% compilation time: 58% of which was recompilation)
+ 35.456646 seconds (22.93 M allocations: 1.191 GiB, 1.37% gc time, 33.69% compilation time: 60% of which was recompilation)
+ 35.807932 seconds (22.93 M allocations: 1.191 GiB, 1.18% gc time, 32.49% compilation time: 62% of which was recompilation)
+ 35.325040 seconds (22.93 M allocations: 1.191 GiB, 1.22% gc time, 33.73% compilation time: 62% of which was recompilation)
+ 35.886480 seconds (22.93 M allocations: 1.191 GiB, 1.27% gc time, 33.34% compilation time: 65% of which was recompilation)
+ 35.846065 seconds (22.93 M allocations: 1.191 GiB, 1.10% gc time, 32.93% compilation time: 64% of which was recompilation)
+ 36.024970 seconds (22.93 M allocations: 1.191 GiB, 1.21% gc time, 33.43% compilation time: 63% of which was recompilation)
+ 36.078894 seconds (22.93 M allocations: 1.191 GiB, 1.08% gc time, 32.68% compilation time: 63% of which was recompilation)
+ 35.625574 seconds (22.93 M allocations: 1.191 GiB, 1.08% gc time, 33.36% compilation time: 63% of which was recompilation)
+ 36.499200 seconds (22.93 M allocations: 1.191 GiB, 1.08% gc time, 33.13% compilation time: 63% of which was recompilation)
+ 36.286406 seconds (22.93 M allocations: 1.191 GiB, 1.12% gc time, 33.56% compilation time: 64% of which was recompilation)
+ 36.445437 seconds (22.93 M allocations: 1.191 GiB, 1.35% gc time, 33.90% compilation time: 62% of which was recompilation)
+ 36.583828 seconds (22.93 M allocations: 1.191 GiB, 1.07% gc time, 33.35% compilation time: 60% of which was recompilation)
+ 36.288398 seconds (22.93 M allocations: 1.191 GiB, 1.09% gc time, 34.11% compilation time: 64% of which was recompilation)
+ 36.248968 seconds (22.93 M allocations: 1.191 GiB, 1.21% gc time, 34.08% compilation time: 63% of which was recompilation)
+ 36.877481 seconds (22.93 M allocations: 1.191 GiB, 1.10% gc time, 33.06% compilation time: 64% of which was recompilation)
+ 36.436001 seconds (22.93 M allocations: 1.191 GiB, 1.37% gc time, 35.06% compilation time: 63% of which was recompilation)
+ 36.693953 seconds (22.93 M allocations: 1.191 GiB, 1.11% gc time, 33.54% compilation time: 63% of which was recompilation)
