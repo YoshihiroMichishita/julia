@@ -10,10 +10,11 @@ mutable struct Agent
     surprise::Vector{Float32}
     branch_left::Vector{Int}
     child_visit_pi::Vector{Vector{Float32}}
+    num_calc::Int
 end
 
 function init_agt()
-    return Agent([], [], [-1], [])
+    return Agent([], [], [-1], [], 0)
 end
 
 function make_image(env::Env, agt::Agent, turn::Int)

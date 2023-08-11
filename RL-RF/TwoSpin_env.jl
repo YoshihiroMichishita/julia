@@ -1,6 +1,6 @@
 using LinearAlgebra
-
-
+using Distributions
+#=
 struct TS_env
     t_size::Int
     HS_size::Int
@@ -17,7 +17,7 @@ struct TS_env
     #σ_vec::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}
     #σ_vec2::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}
     dt::Float32
-end
+end=#
 
 #Hermite行列をベクトルに変換するためのベクトルを生成
 function generate_M(H_size::Int)
@@ -105,7 +105,8 @@ function init_env(t::Int=100, Ω0::Float32 = 10.0, ξ0::Float32 = 0.2, Jz0::Floa
 end
 
 #ランダムに周期駆動系のパラメータを生成(とりあえず正規分布としておく)
-function init_env_randn(t::Int=100, Ω0::Tuple{Float32, Float32}, ξ0::Tuple{Float32, Float32}, Jz0Tuple{Float32, Float32}, Jx0::Tuple{Float32, Float32}, hz0::Tuple{Float32, Float32})
+#=
+function init_env_randn(t::Int=100, Ω0::Float32, ξ0::Float32, Jz0::Float32, Jx0::Float32, hz0::Float32)
     t_size::Int=t
     HS_size::Int = 4
     num_parm::Int = 5
@@ -131,31 +132,43 @@ function init_env_randn(t::Int=100, Ω0::Tuple{Float32, Float32}, ξ0::Tuple{Flo
     dt = Float32(2pi/t_size/Ω)
 
     return t_size, HS_size, num_parm, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt
-end
+
+end=#
 
 function generate_parmv(Ω::Float32, Jz::Float32, Jx::Float32, hz::Float32, ξ::Float32)
-    Ω1::Float32 = Ω + 5randn(Float32)
-    ξ1::Float32 = ξ*randn(Float32)
-    Jz1::Float32 = Jz*randn(Float32)
-    Jx1::Float32 = Jx*randn(Float32)
-    hz1::Float32 = hz*randn(Float32)
+    Ω1::Float32 = Ω + 5*Float32(rand(Uniform(-1.0f0, 1.0f0)))
+    ξ1::Float32 = ξ + Float32(0.3rand(Uniform(-1.0f0, 1.0f0)))
+    Jz1::Float32 = Jz + Float32(rand(Uniform(-1.0f0, 1.0f0)))
+    Jx1::Float32 = Jx + Float32(rand(Uniform(-1.0f0, 1.0f0)))
+    hz1::Float32 = hz + Float32(rand(Uniform(-1.0f0, 1.0f0)))
     parm_v = [Ω1, Jz1, Jx1, hz1, ξ1]
     return parm_v
 end
+#structにすればいける？
 
 
-σ1 = generate_M(4)
-σ2 = generate_M2(4)
+struct Env
+    σ1::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}
+    σ2::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}
+end
+
+function set_Env(HS_size::Int)
+    σ_vec = generate_M(HS_size)
+    σ_vec2 = generate_M2(HS_size)
+    return Env(σ_vec, σ_vec2)
+end
+
 
 #Translate Hermite Matrix to Vector
-function MtoV(M::Hermitian{ComplexF32, Matrix{ComplexF32}})
-    V = real.(tr.(σ1 .* (M,)))
+function MtoV(M::Hermitian{ComplexF32, Matrix{ComplexF32}}, en::Env)
+    #V = [real(tr(σ1[i] * M)) for i in 1:16]
+    V = real.(tr.(en.σ1 .* (M,)))
     return V
 end
 
 #Translate Vector to Hermite Matrix
-function VtoM(V::Vector{Float32})
-    M = V' * σ2
+function VtoM(V::Vector{Float32}, en::Env)
+    M = V' * en.σ2
     return M
 end
     
