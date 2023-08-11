@@ -201,11 +201,13 @@ end
 
 @everywhere function run_selfplay_worker(env::Env, model::Chain, ratio::Float32, noise_r::Float32, scores::Dict{Vector{Int}, Float32})
     games = Agent[]
+    max_scores = []
     for it in 1:div(env.num_player, nworkers())
         game = play_physics!(env, model, ratio, noise_r, scores)
         push!(games, game)
+        push!(max_scores, findmax(scores)[1])
     end
-    return games
+    return games, max_scores
 end
 
 @everywhere function run_selfplay_worker_withS(env::Env, model::Chain, ratio::Float32, noise_r::Float32, scores::Dict{Vector{Int}, Float32})
@@ -234,15 +236,21 @@ end
 function run_selfplay_pals(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32, noise_r::Float32)
     model = latest_model(storage) |> gpu
     futures = Future[]
+    num_calc = zeros(Int,div(env.num_player,nworkers()))
+    max_itr = zeros(Float32,div(env.num_player,nworkers()))
     for i in workers()
         push!(futures, remotecall(run_selfplay_worker, i, env, model, ratio, noise_r, storage.scores))
     end
     for f in futures
-        games = fetch(f)
-        for g in games
-            save_game!(buffer, g)
+        games, max_scores = fetch(f)
+        #for g in games
+        for it in 1:length(games)
+            save_game!(buffer, games[it])
+            num_calc[it] += div(games[it].num_calc,nworkers())
+            max_itr[it] = max(max_itr[it], max_scores[it])
         end
     end
+    return num_calc, max_itr
 end
 
 function run_selfplay_palss(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32, noise_r::Float32)
@@ -311,13 +319,33 @@ function train_model!(env::Env, buffer::ReplayBuffer, storage::Storage)
     return ll
 end
 
+struct ppo_parm
+    vf_coef::Float32
+    ent_coef::Float32
+    max_grad_norm::Float32
+    lr::Float32
+    γ::Float32
+    λ::Float32
+    log_interval::Int
+    num_steps::Int
+    cliprange::Float32
+end
+
+
+function train_model_PPO!()
+end
+
+
 function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
     ld = []
     max_val = []
-    
+    itn = 3
+    num_calcs = zeros(Int, itn*div(env.num_player, nworkers()))
+    max_itrs = zeros(Float32, itn*div(env.num_player, nworkers()))
+    lastit = 0
     ratio = env.ratio
     randr = env.ratio_r
-    for it in 1:4
+    for it in 1:itn
         println("=============")
         println("it=$(it);")
 
@@ -325,18 +353,24 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
         
         if(it<5)
             ratio -= Float32(1.0)
-            randr -= Float32(5.0f-2)
+            randr -= Float32(1.0f-1)
             #@time run_selfplay_palss(env, replay_buffer, storage, ratio, randr)
-            @time run_selfplay_pals(env, replay_buffer, storage, ratio, randr)
+            @time num_calc, max_itr = run_selfplay_pals(env, replay_buffer, storage, ratio, randr)
             #@time run_selfplay_pals(env, replay_buffer, storage, ratio, 1.0f0)
             @time ll = train_model!(env, replay_buffer, storage)
+            num_calcs[(it-1)*div(env.num_player, nworkers())+1:it*div(env.num_player, nworkers())] = num_calc .+ lastit
+            max_itrs[(it-1)*div(env.num_player, nworkers())+1:it*div(env.num_player, nworkers())] = max_itr
+            lastit = num_calcs[it*div(env.num_player, nworkers())]
         else
             ratio -= Float32(2.0)
             randr -= Float32(1.0f-1)
             #ratio = Float32(6.0)
             #@time run_selfplay_palss(env, replay_buffer, storage, ratio, randr)
-            @time run_selfplay_pals(env, replay_buffer, storage, ratio, randr)
+            @time num_calc, max_itr = run_selfplay_pals(env, replay_buffer, storage, ratio, randr)
             @time ll = train_model!(env, replay_buffer, storage)
+            num_calcs[(it-1)*div(env.num_player, nworkers())+1:it*div(env.num_player, nworkers())] = num_calc .+ lastit
+            max_itrs[(it-1)*div(env.num_player, nworkers())+1:it*div(env.num_player, nworkers())] = max_itr
+            lastit = num_calcs[it*div(env.num_player, nworkers())]
         end
         #@report_call run_selfplay(env, replay_buffer, storage)
         #ll = @report_call train_model!(env, replay_buffer, storage)
@@ -362,7 +396,7 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
         #end
     end
     
-    return ld, max_val, latest_model(storage)
+    return ld, max_val, latest_model(storage), num_calcs, max_itrs
 end
 
 function dict_copy(orig::Dict{Vector{Int}, Float32})
@@ -381,6 +415,8 @@ ENV["GKSwstype"]="nul"
 using JLD2
 using FileIO
 
+date = 803
+
 function main(args::Vector{String})
     #args = ARGS
     println("Start! at $(now())")
@@ -389,7 +425,7 @@ function main(args::Vector{String})
     storage = init_storage(env)
     st = parse(Int, args[23])
     if(st!=0)
-        @load "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/AZP_valMAX_t_head$(st).bson" model0
+        @load "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/AZP_valMAX_$(date)_head$(st).bson" model0
         storage.storage[1] = gpu(model0)
         s_old = load("/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/scores.jld2")
         for k in keys(s_old)
@@ -399,19 +435,22 @@ function main(args::Vector{String})
         println("score length: $(length(storage.scores))")
     end
     
-    ld, max_val, model = AlphaZero_ForPhysics(env, env_fc, storage)
+    ld, max_val, model, num_calcs, max_itr = AlphaZero_ForPhysics(env, env_fc, storage)
+
+    p0 = plot(num_calcs, max_itr, linewidth=3.0, marker=:circle)
+    savefig(p0, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/valMAX_itr_mt$(env.max_turn)_$(date).png")
 
     p = plot((ld[1])[1,:], yaxis=:log, linewidth=3.0)
     for i in 2:length(ld)
         plot!((ld[i])[1,:], yaxis=:log, linewidth=3.0)
     end
-    savefig(p, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/loss_valMAX_s1.png")
+    savefig(p, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/loss_valMAX_mt$(env.max_turn)_$(date).png")
     println("AlphaZero Finish!")
     #println("loss-dynamics: $(ld)")
     
     for head in 1:env.batch_num
         model0 = storage.storage[head] |> cpu
-        @save "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/AZP_valMAX_s1_head$(st+head).bson" model0
+        @save "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/AZP_valMAX_mt$(env.max_turn)_$(date)_head$(st+head).bson" model0
     end
 
 
@@ -439,7 +478,7 @@ function main(args::Vector{String})
     h = [6, 3, 6, 4, 5, 2, 1, 1, 2]
     println("$(h), $(calc_score(h, env_fc))")
     if(st == 0)
-        save("/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/scores_s1.jld2", string_score)
+        save("/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/scores_mt$(env.max_turn)_$(date).jld2", string_score)
     else
         save("/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/scores_new.jld2", string_score)
     end

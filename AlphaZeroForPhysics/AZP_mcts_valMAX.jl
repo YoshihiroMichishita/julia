@@ -325,6 +325,7 @@ function run_MCTS(env::Env, agt::Agent, model::Chain, ratio::Float32, noise_r::F
         else
             if(is_finish(env, scratch))
                 value = eval_t!(env, scratch, scores)
+                agt.num_calc += 1
             else
                 value = evaluate!(env, scratch, node, model)
             end
