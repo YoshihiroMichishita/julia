@@ -47,7 +47,7 @@ function legal_action(env::Env, agt::Agent)
     elseif(agt.history[end]>env.val_num && agt.history[end]<=env.val_num+env.br_num)
         return [i for i in 1:env.act_ind if(i!=agt.history[end])]
     elseif(agt.history[end]==6)
-        return [i for i in 2:env.act_ind-1]
+        return [i for i in 2:env.val_num+env.br_num]
     else
         return [i for i in 1:env.act_ind]
     end
