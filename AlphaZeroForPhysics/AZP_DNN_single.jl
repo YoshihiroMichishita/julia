@@ -1,6 +1,7 @@
 using Dates
 
-include("AZP_env.jl")
+#include("AZP_env.jl")
+include("AZP_env_manychoice.jl")
 include("AZP_agt.jl")
 include("AZP_mcts_single.jl")
 
@@ -261,7 +262,7 @@ ENV["GKSwstype"]="nul"
 using JLD2
 using FileIO
 
-date = 805
+date = 818
 
 function main(args::Vector{String})
     #args = ARGS

@@ -53,7 +53,7 @@ function init_Env(args::Vector{String})
     println("num_player:  $(num_player)")
     val_num::Int = 2
     br_num::Int = 3
-    fn_num::Int = 1
+    fn_num::Int = 5
     act_ind = val_num+br_num+fn_num
     input_dim = act_ind*max_turn
     middle_dim = parse(Int, args[3])
@@ -111,7 +111,7 @@ function init_Env_forcheck(args::Vector{String})
     println("num_player:  $(num_player)")
     val_num::Int = 2
     br_num::Int = 3
-    fn_num::Int = 1
+    fn_num::Int = 5
     act_ind = val_num+br_num+fn_num
     input_dim = act_ind*max_turn
     middle_dim = parse(Int, args[3])
@@ -198,6 +198,27 @@ function calc_Kt(history::Vector{Int}, env::Env)
                 B = A
             end
             push!(MV, B)
+        elseif(sw==7) #derivative
+            A = pop!(MV)
+            try
+                #B = A.integrate((x, 0, x))/env.Ω
+                B = env.Ω*A.diff(x)
+            catch
+                B = 0
+            end
+            push!(MV, B)
+        elseif(sw==8) #exp
+            A = pop!(MV)
+            B = exp(A)
+            push!(MV, B)
+        elseif(sw==9) #log
+            A = pop!(MV)
+            B = log(A)
+            push!(MV, B)
+        elseif(sw==10) #minus
+            A = pop!(MV)
+            B = -A
+            push!(MV, B)
         end
         #@show MV
     end
@@ -212,11 +233,16 @@ function calc_Kt(history::Vector{Int}, env::Env)
         Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(N(Ks.subs(x,t[i]))-K0) for i in 1:env.t_step]
         return Kt
     else
-        Kh::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(Ks) for i in 1:env.t_step]
-        return Kh
+        try
+            Kh::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(Ks) for i in 1:env.t_step]
+            return Kh
+        catch
+            println("Ks: $(Ks)")
+            Kh::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [N(Ks)*Hermitian(Matirix{ComplexF32}(I, env.HS_size, env.HS_size)) for i in 1:env.t_step]
+            return Kh
+        end
     end
     #Kt = [Hermitian(N(Ks.subs(x,t[i]))) for i in 1:env.t_step]
-    
 end
 
 function legal_action(env::Env, history::Vector{Int}, branch_left::Vector{Int})
@@ -227,7 +253,15 @@ function legal_action(env::Env, history::Vector{Int}, branch_left::Vector{Int})
     elseif(history[end]>env.val_num && history[end]<=env.val_num+env.br_num)
         return [i for i in 1:env.act_ind if(i!=history[end])]
     elseif(history[end]==6)
-        return [i for i in 2:env.act_ind-1]
+        return [i for i in 2:env.act_ind if(i!=6)]
+    elseif(history[end]==7)
+        return [i for i in 2:env.act_ind if(i!=6 && i!=7)]
+    elseif(history[end]==8)
+        return [i for i in 1:env.act_ind if(i!=8 && i!=9)]
+    elseif(history[end]==9)
+        return [i for i in 1:env.act_ind if(i<8)]
+    elseif(history[end]==10)
+        return [i for i in 1:env.act_ind if(i!=10)]
     else
         return [i for i in 1:env.act_ind]
     end
@@ -293,6 +327,3 @@ function score_test()
     history = [6, 3, 2, 4, 6, 2, 1]
     println(calc_score(history, env))
 end
-
-#score_test()
-

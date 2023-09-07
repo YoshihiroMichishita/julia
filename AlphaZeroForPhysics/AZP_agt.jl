@@ -1,6 +1,6 @@
 
 
-include("AZP_env.jl")
+#include("AZP_env.jl")
 
 
 #it stores sigle game history and child visit pi

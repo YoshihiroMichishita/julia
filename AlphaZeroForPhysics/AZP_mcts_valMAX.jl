@@ -216,7 +216,8 @@ function evaluate!(env::Env, agt::Agent,node::Node, model::Chain)
     Yc = cpu(Y)
     value = Yc[end,1] 
     pol_log = Yc[1:end-1,1]
-    A = legal_action(env, agt)
+    #A = legal_action(env, agt)
+    A = legal_action(env, agt.history, agt.branch_left)
     policy = softmax([pol_log[a] for a in A])
     
     for it in 1:size(A)[1]
