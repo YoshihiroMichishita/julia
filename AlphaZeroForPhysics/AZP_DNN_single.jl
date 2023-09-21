@@ -1,5 +1,6 @@
 using Dates
 
+#include("AZP_env.jl")
 include("AZP_env.jl")
 include("AZP_agt.jl")
 include("AZP_mcts_single.jl")
@@ -194,7 +195,7 @@ end
 function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
     ld = []
     max_hist::Vector{Float32} = [-12.0f0]
-    itn = 3
+    itn = 4
     lastit = 0
     ratio = env.ratio
     randr = env.ratio_r
@@ -202,7 +203,7 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
         println("=============")
         println("it=$(it);")
 
-        replay_buffer = init_buffer(1000, env.batch_size)
+        replay_buffer = init_buffer(1200, env.batch_size)
         
         if(it<5)
             ratio -= Float32(1.0)
@@ -263,7 +264,7 @@ ENV["GKSwstype"]="nul"
 using JLD2
 using FileIO
 
-date = 805
+date = 9081
 
 function main(args::Vector{String})
     #args = ARGS
@@ -272,7 +273,7 @@ function main(args::Vector{String})
     env_fc = init_Env_forcheck(args)
     
     max_hists = []
-    for dd in 1:5
+    for dd in 1:1
         storage = init_storage(env)
         ld, max_hist, model = AlphaZero_ForPhysics(env, env_fc, storage)
         push!(max_hists, max_hist)

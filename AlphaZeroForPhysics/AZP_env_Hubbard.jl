@@ -219,15 +219,6 @@ function calc_Kt(history::Vector{Int}, env::Env)
     
 end
 
-dict = Dict(1=>"H_0 ", 2=>"V(t) ", 3=>"+ ", 4=>"-i[,] ", 5=>"{,}/2 ", 6=>"∱dt ")
-
-function hist2eq(history::Vector{Int})
-    hist = copy(history)
-    S = ""
-    for i in hist
-        S *= dict[i]
-    end
-    return S
 function legal_action(env::Env, history::Vector{Int}, branch_left::Vector{Int})
     if(isempty(history))
         return [i for i in 1:env.act_ind]

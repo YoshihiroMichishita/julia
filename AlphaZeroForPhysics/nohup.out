@@ -103,3 +103,66 @@ frac:  0.0
 =============
 it=1;
 112.830388 seconds (3.44 M allocations: 212.690 MiB, 0.11% gc time, 1.41% compilation time)
+WARNING: using JLD2.@save in module Main conflicts with an existing identifier.
+WARNING: using JLD2.@load in module Main conflicts with an existing identifier.
+ERROR: LoadError: MethodError: no method matching schur!(::Matrix{Sym})
+
+Closest candidates are:
+  schur!(!Matched::StridedMatrix{var"#s971"} where var"#s971"<:Union{Float32, Float64, ComplexF32, ComplexF64})
+   @ LinearAlgebra ~/.julia/juliaup/julia-1.9.2+0.x64.linux.gnu/share/julia/stdlib/v1.9/LinearAlgebra/src/schur.jl:103
+  schur!(!Matched::StridedMatrix{T}, !Matched::StridedMatrix{T}) where T<:Union{Float32, Float64, ComplexF32, ComplexF64}
+   @ LinearAlgebra ~/.julia/juliaup/julia-1.9.2+0.x64.linux.gnu/share/julia/stdlib/v1.9/LinearAlgebra/src/schur.jl:345
+
+Stacktrace:
+  [1] schur(A::Matrix{Sym})
+    @ LinearAlgebra ~/.julia/juliaup/julia-1.9.2+0.x64.linux.gnu/share/julia/stdlib/v1.9/LinearAlgebra/src/schur.jl:155
+  [2] log(A::Matrix{Sym})
+    @ LinearAlgebra ~/.julia/juliaup/julia-1.9.2+0.x64.linux.gnu/share/julia/stdlib/v1.9/LinearAlgebra/src/dense.jl:821
+  [3] calc_Kt(history::Vector{Int64}, env::Env)
+    @ Main ~/Documents/Codes/julia/AlphaZeroForPhysics/AZP_env_manychoice.jl:216
+  [4] calc_score(history::Vector{Int64}, env::Env)
+    @ Main ~/Documents/Codes/julia/AlphaZeroForPhysics/AZP_env_manychoice.jl:310
+  [5] eval_t!
+    @ ~/Documents/Codes/julia/AlphaZeroForPhysics/AZP_mcts_single.jl:230 [inlined]
+  [6] run_MCTS!(env::Env, agt::Agent, model::Chain{Tuple{Dense{typeof(identity), CuArray{Float32, 2, CUDA.Mem.DeviceBuffer}, CuArray{Float32, 1, CUDA.Mem.DeviceBuffer}}}}, ratio::Float32, noise_r::Float32, scores::Dict{Vector{Int64}, Float32}, max_hist::Vector{Float32})
+    @ Main ~/Documents/Codes/julia/AlphaZeroForPhysics/AZP_mcts_single.jl:293
+  [7] play_physics!(env::Env, model::Chain{Tuple{Dense{typeof(identity), CuArray{Float32, 2, CUDA.Mem.DeviceBuffer}, CuArray{Float32, 1, CUDA.Mem.DeviceBuffer}}}}, ratio::Float32, noise_r::Float32, scores::Dict{Vector{Int64}, Float32}, max_hist::Vector{Float32})
+    @ Main ~/Documents/Codes/julia/AlphaZeroForPhysics/AZP_mcts_single.jl:330
+  [8] run_selfplay!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32, noise_r::Float32, max_hist::Vector{Float32})
+    @ Main ~/Documents/Codes/julia/AlphaZeroForPhysics/AZP_DNN_single.jl:134
+  [9] macro expansion
+    @ ./timing.jl:273 [inlined]
+ [10] AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
+    @ Main ~/Documents/Codes/julia/AlphaZeroForPhysics/AZP_DNN_single.jl:210
+ [11] main(args::Vector{String})
+    @ Main ~/Documents/Codes/julia/AlphaZeroForPhysics/AZP_DNN_single.jl:276
+ [12] top-level scope
+    @ ./timing.jl:273
+in expression starting at /home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/AZP_DNN_single.jl:340
+Start! at 2023-08-18T22:25:25.374
+max_turn:  8
+num_player:  120
+middle_dim:  256
+depth:  16
+training_step:  1000
+batch_size:  96
+batch_num:  1
+num_simulation:  200
+α:  0.2
+frac:  0.5
+ratio:  10.0
+ratio_r:  1.0
+max_turn:  8
+num_player:  120
+middle_dim:  256
+depth:  16
+training_step:  1000
+batch_size:  96
+batch_num:  1
+num_simulation:  200
+α:  0.2
+frac:  0.0
+ratio:  10.0
+ratio_r:  1.0
+=============
+it=1;

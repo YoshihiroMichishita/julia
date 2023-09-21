@@ -1,5 +1,6 @@
-include("AZP_env.jl")
-include("AZP_agt.jl")
+#include("AZP_env.jl")
+#include("AZP_env_manychoice.jl")
+#include("AZP_agt.jl")
 
 using CUDA
 using Distributions
@@ -39,6 +40,7 @@ end
 
 
 #行動可能なactionのリストを返す
+#=
 function legal_action(env::Env, agt::Agent)
     if(isempty(agt.history))
         return [i for i in 1:env.act_ind]
@@ -52,7 +54,7 @@ function legal_action(env::Env, agt::Agent)
         return [i for i in 1:env.act_ind]
     end
 end
-
+=#
 #historyにactionを追加し、branch_leftを更新
 function apply!(env::Env, agt::Agent, act::Int)
     push!(agt.history, act)
@@ -199,7 +201,8 @@ function evaluate!(env::Env, agt::Agent,node::Node, model::Chain)
     Yc = cpu(Y)
     value = Yc[end,1] 
     pol_log = Yc[1:end-1,1]
-    A = legal_action(env, agt)
+    #A = legal_action(env, agt)
+    A = legal_action(env, agt.history, agt.branch_left)
     policy = softmax([pol_log[a] for a in A])
     
     for it in 1:size(A)[1]
