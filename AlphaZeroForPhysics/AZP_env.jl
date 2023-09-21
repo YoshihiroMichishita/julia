@@ -219,6 +219,17 @@ function calc_Kt(history::Vector{Int}, env::Env)
     
 end
 
+dict = Dict(1=>"H_0 ", 2=>"V(t) ", 3=>"+ ", 4=>"-i[,] ", 5=>"{,}/2 ", 6=>"∱dt ")
+
+function hist2eq(history::Vector{Int})
+    hist = copy(history)
+    S = ""
+    for i in hist
+        S *= dict[i]
+    end
+    return S
+end
+
 function calc_Hr(Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}, env::Env)
     Hr::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = []
     for i in 1:env.t_step
