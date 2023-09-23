@@ -65,8 +65,8 @@ function init_Env(args::Vector{String})
     batch_size = parse(Int, args[6])
     println("batch_size:  $(batch_size)")
 
-    γ::Float32 = 0.98 #discount factor
-    λ::Float32 = 0.95 #GAE factor
+    γ::Float32 = 0.999 #discount factor
+    λ::Float32 = 0.98 #GAE factor
     ϵ::Float32 = 0.2 #CLIP VALUE
     E::Float32 = parse(Float32, args[7]) #entropy weight
     println("entropy weight:  $(E)")
@@ -84,6 +84,7 @@ function init_Env(args::Vector{String})
     Jz = parse(Float32, args[13])
     Jx = parse(Float32, args[14])
     hz = parse(Float32, args[15])
+    println("system parm: Ω=$(Ω), ξ=$(ξ), Jz=$(Jz), Jx=$(Jx), hz=$(hz), tstep=$(t_step)")
     H_0 = Hermitian([ -Jz-2hz 0 0 -Jx; 0 Jz -Jx 0; 0 -Jx Jz 0; -Jx 0 0 -Jz+2hz])
     V_t = Hermitian([ 0 -ξ -ξ 0; -ξ 0 0 -ξ; -ξ 0 0 -ξ; 0 -ξ -ξ 0])
     dt = 2pi/t_step/Ω
