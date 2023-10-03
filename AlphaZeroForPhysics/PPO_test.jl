@@ -229,17 +229,54 @@ function AlphaZero_ForPhysics(env::Env)
     return ld, max_hist, model, replay_buffer.scores
 end
 
+function AlphaZero_ForPhysics_hind(env::Env)
+    ld = []
+    max_hist::Vector{Float32} = [-12.0f0]
+
+    #model = Chain(Dense(env.input_dim, env.middle_dim), BatchNorm(env.middle_dim), Tuple(Chain(Parallel(+, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, env.middle_dim, relu),Dense(env.middle_dim, env.middle_dim, relu)), identity)) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), env.act_ind, tanh2)), Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), 1, tanh10)))) |> gpu
+    model = Chain(Dense(env.input_dim, env.middle_dim), Tuple(Chain(Parallel(+, Chain(Dense(env.middle_dim, env.middle_dim, relu),Dense(env.middle_dim, env.middle_dim, relu)), identity)) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Chain(Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), env.act_ind, tanh2)), Chain(Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), 1, tanh10)))) |> gpu
+    opt = Flux.Optimiser(WeightDecay(1f-6), Adam(env.η))
+
+    replay_buffer = init_buffer(200, env.batch_size)
+
+    old_model = deepcopy(model)
+
+    for it in 1:env.num_simulation
+        #=
+        if(it%(env.num_simulation/10)==0)
+            println("=============")
+            println("it=$(it);")
+            println("max score: $(max_hist[end])")
+            k = [keys(replay_buffer.scores)...]
+            inds = findall(s -> replay_buffer.scores[s] == max_hist[end], k)
+            for i in inds
+                println("$(k[i])")
+            end
+        end=#
+        
+        run_selfplay!(env, replay_buffer, model, max_hist)
+
+        
+        ll = train_model!(env, replay_buffer, model, old_model, opt)
+        push!(ld,ll)
+        old_model = deepcopy(model)
+    end
+    
+    return ld, max_hist, model, replay_buffer.scores
+end
+#=
 using BSON: @save
 using BSON: @load
 using Plots
 ENV["GKSwstype"]="nul"
 
+
 using JLD2
 using FileIO
+=#
+date = 930
 
-date = 923
-
-function main(args::Vector{String})
+function PPO(args::Vector{String})
     #args = ARGS
     println("Start! at $(now())")
     env = init_Env(args)
@@ -287,4 +324,4 @@ end
 
 
 
-@time main(ARGS)
+#@time PPO(ARGS)

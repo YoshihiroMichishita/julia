@@ -6,7 +6,6 @@ using SymPy
 struct Env
     max_turn::Int
     num_player::Int
-
     val_num::Int
     br_num::Int
     fn_num::Int
@@ -20,14 +19,15 @@ struct Env
     training_step::Int
     checkpoint_interval::Int
     batch_size::Int
+    batch_num::Int
+    η::Float32
+    momentum::Float32
 
-    γ::Float32 #discount factor
-    λ::Float32 #GAE factor
-    ϵ::Float32 #CLIP VALUE
-    E::Float32 #entropy weight
-
-    η::Float32 #learning rate
     num_simulation::Int
+    α::Float32
+    frac::Float32
+    ratio::Float32
+    ratio_r::Float32
 
     t_step::Int
     HS_size::Int
@@ -39,6 +39,10 @@ struct Env
     H_0::Hermitian{ComplexF32, Matrix{ComplexF32}}
     V_t::Hermitian{ComplexF32, Matrix{ComplexF32}}
     dt::Float32
+
+    Cb::Int
+    Ci::Float32
+    C::Float32 #L2 norm weight
 end
 
 #max_turn, num_player, middle=dim, depth, training_step, batch_size, batch_num, num_simulation, a, frac, t_step, HS_size, Ω, ξ, Jz, Jx, hz, Cb, Ci, C
@@ -64,36 +68,43 @@ function init_Env(args::Vector{String})
     checkpoint_interval = 200
     batch_size = parse(Int, args[6])
     println("batch_size:  $(batch_size)")
-
-    γ::Float32 = 0.98 #discount factor
-    λ::Float32 = 0.94 #GAE factor
-    ϵ::Float32 = 0.2 #CLIP VALUE
-    E::Float32 = parse(Float32, args[7]) #entropy weight
-    println("entropy weight:  $(E)")
-
-    η::Float32 = 2.0f-3#learning rate
+    batch_num = parse(Int, args[7])
+    println("batch_num:  $(batch_num)")
+    η = 1f-5
+    momentum = 0.9
 
 
     num_simulation = parse(Int, args[8])
     println("num_simulation:  $(num_simulation)")
+    α = parse(Float32, args[9])
+    println("α:  $(α)")
+    frac = parse(Float32, args[10])
+    println("frac:  $(frac)")
+    ratio = parse(Float32, args[21])
+    println("ratio:  $(ratio)")
+    ratio_r = parse(Float32, args[22])
+    println("ratio_r:  $(ratio_r)")
 
-    t_step = parse(Int, args[9])
-    HS_size = parse(Int, args[10])
-    Ω = parse(Float32, args[11])
-    ξ = parse(Float32, args[12])
-    Jz = parse(Float32, args[13])
-    Jx = parse(Float32, args[14])
-    hz = parse(Float32, args[15])
-    println("system parm: Ω=$(Ω), ξ=$(ξ), Jz=$(Jz), Jx=$(Jx), hz=$(hz), tstep=$(t_step)")
+
+    t_step = parse(Int, args[11])
+    HS_size = parse(Int, args[12])
+    Ω = parse(Float32, args[13])
+    ξ = parse(Float32, args[14])
+    Jz = parse(Float32, args[15])
+    Jx = parse(Float32, args[16])
+    hz = parse(Float32, args[17])
     H_0 = Hermitian([ -Jz-2hz 0 0 -Jx; 0 Jz -Jx 0; 0 -Jx Jz 0; -Jx 0 0 -Jz+2hz])
     V_t = Hermitian([ 0 -ξ -ξ 0; -ξ 0 0 -ξ; -ξ 0 0 -ξ; 0 -ξ -ξ 0])
     dt = 2pi/t_step/Ω
 
-    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, γ, λ, ϵ, E, η, num_simulation, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt)
+    Cb = parse(Int, args[18])
+    Ci = parse(Float32, args[19])
+    C = parse(Float32, args[20])
+
+    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, ratio, ratio_r, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt, Cb, Ci, C)
 end
 
-#max_turn, num_player, middle_dim, depth, training_step, batch_size, num_simulation
-function quick_init_Env(args::Vector{String})
+function init_Env_forcheck(args::Vector{String})
     max_turn = parse(Int, args[1])
     println("max_turn:  $(max_turn)")
     num_player = parse(Int, args[2])
@@ -115,78 +126,39 @@ function quick_init_Env(args::Vector{String})
     checkpoint_interval = 200
     batch_size = parse(Int, args[6])
     println("batch_size:  $(batch_size)")
-
-    γ::Float32 = 0.98 #discount factor
-    λ::Float32 = 0.95 #GAE factor
-    ϵ::Float32 = 0.2 #CLIP VALUE
-    E::Float32 = 0.01 #entropy weight
-
-    η::Float32 = 2.0f-3#learning rate
+    batch_num = parse(Int, args[7])
+    println("batch_num:  $(batch_num)")
+    η = 1f-5
+    momentum = 0.9
 
 
-    num_simulation = parse(Int, args[7])
+    num_simulation = parse(Int, args[8])
     println("num_simulation:  $(num_simulation)")
+    α = parse(Float32, args[9])
+    println("α:  $(α)")
+    frac = Float32(0.0)
+    println("frac:  $(frac)")
+    ratio = parse(Float32, args[21])
+    println("ratio:  $(ratio)")
+    ratio_r = parse(Float32, args[22])
+    println("ratio_r:  $(ratio_r)")
 
-    t_step = 100
-    HS_size = 4
-    Ω = 10.0f0
-    ξ = 0.4f0
-    Jz = 1.0f0
-    Jx = 0.7f0
-    hz = 0.5f0
+    t_step = parse(Int, args[11])
+    HS_size = parse(Int, args[12])
+    Ω = parse(Float32, args[13])
+    ξ = parse(Float32, args[14])
+    Jz = parse(Float32, args[15])
+    Jx = parse(Float32, args[16])
+    hz = parse(Float32, args[17])
     H_0 = Hermitian([ -Jz-2hz 0 0 -Jx; 0 Jz -Jx 0; 0 -Jx Jz 0; -Jx 0 0 -Jz+2hz])
     V_t = Hermitian([ 0 -ξ -ξ 0; -ξ 0 0 -ξ; -ξ 0 0 -ξ; 0 -ξ -ξ 0])
     dt = 2pi/t_step/Ω
 
-    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, γ, λ, ϵ, E, η, num_simulation, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt)
-end
+    Cb = parse(Int, args[18])
+    Ci = parse(Float32, args[19])
+    C = parse(Float32, args[20])
 
-function init_Env_quick(args::Vector{String}, hyperparams::Vector{Float32})
-    max_turn = parse(Int, args[1])
-    #println("max_turn:  $(max_turn)")
-    num_player = parse(Int, args[2])
-    #println("num_player:  $(num_player)")
-    val_num::Int = 2
-    br_num::Int = 3
-    fn_num::Int = 1
-    act_ind = val_num+br_num+fn_num
-    input_dim = act_ind*max_turn
-    middle_dim = parse(Int, args[3])
-    #println("middle_dim:  $(middle_dim)")
-    output =  act_ind + 1
-    depth = parse(Int, args[4])
-    #println("depth:  $(depth)")
-
-    #training parameter
-    training_step = parse(Int, args[5])
-    #println("training_step:  $(training_step)")
-    checkpoint_interval = 200
-    batch_size = parse(Int, args[6])
-    #println("batch_size:  $(batch_size)")
-
-    γ::Float32 = hyperparams[1] #discount factor
-    λ::Float32 = hyperparams[2] #GAE factor
-    ϵ::Float32 = 0.2 #CLIP VALUE
-    E::Float32 = 0.01 #entropy weight
-
-    η::Float32 = 2.0f-3#learning rate
-
-
-    num_simulation = parse(Int, args[7])
-    #println("num_simulation:  $(num_simulation)")
-
-    t_step = 100
-    HS_size = 4
-    Ω = 10.0f0
-    ξ = 0.4f0
-    Jz = 1.0f0
-    Jx = 0.7f0
-    hz = 0.5f0
-    H_0 = Hermitian([ -Jz-2hz 0 0 -Jx; 0 Jz -Jx 0; 0 -Jx Jz 0; -Jx 0 0 -Jz+2hz])
-    V_t = Hermitian([ 0 -ξ -ξ 0; -ξ 0 0 -ξ; -ξ 0 0 -ξ; 0 -ξ -ξ 0])
-    dt = 2pi/t_step/Ω
-
-    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, γ, λ, ϵ, E, η, num_simulation, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt)
+    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, ratio, ratio_r, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt, Cb, Ci, C)
 end
 
 x = symbols("x")
@@ -256,8 +228,6 @@ function hist2eq(history::Vector{Int})
         S *= dict[i]
     end
     return S
-end
-
 function legal_action(env::Env, history::Vector{Int}, branch_left::Vector{Int})
     if(isempty(history))
         return [i for i in 1:env.act_ind]
