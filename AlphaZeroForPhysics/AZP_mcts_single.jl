@@ -94,6 +94,7 @@ function add_exploration_noise!(env::Env, node::Node)
     end
 end
 
+#良くないかも
 function add_exploration_noise!(env::Env, node::Node, ratio::Float32)
     actions = Int.(keys(node.children))
     noise = rand(Dirichlet(env.α * ones(Float32, length(actions))))
@@ -105,6 +106,7 @@ function add_exploration_noise!(env::Env, node::Node, ratio::Float32)
     end
 end
 
+#valueを正規化するべし, value_sumで本当に良い？
 function ucb_score(env::Env, parent::Node, child::Node)
     pb_c = log((parent.visit_count + env.Cb + 1) / env.Cb) + env.Ci
     pb_c *= sqrt(parent.visit_count) / (child.visit_count + 1)
@@ -113,12 +115,6 @@ function ucb_score(env::Env, parent::Node, child::Node)
     #st_value(child)
     #child.value_sum / (child.visit_count + 1)
     ans = prior_score + value_score
-    if(isnan(ans))
-        println("prior_score: $(prior_score)")
-        println("value_score: $(value_score)")
-        println("child.visit_count: $(child.visit_count)")
-        println("child.value_sum: $(child.value_sum)")
-    end
     return ans
     #return prior_score + value_score
 end
@@ -140,12 +136,12 @@ function select_child(env::Env, node::Node, model::Chain)
     children = [node.children[a] for a in actions]
     score_v = [ucb_score(env, node, child) for child in children]
     its = findall(x -> x==maximum(score_v), score_v)
+    #=
     if(isempty(its))
         println("score_v: $(score_v)")
         @save "BadModel.bson" model
-    end
+    end=#
     it = rand(its)
-    #it = rand(findall(x -> x==maximum(score_v), score_v))
     return actions[it], children[it]
 end
 
@@ -165,17 +161,20 @@ end
 
 function backpropagate!(search_path::Vector{Node}, value::Float32)
     for node in search_path
+        #対戦相手が居ないので最大値をvalueにしておく
         if(value>node.value_sum)
             node.value_sum = value
         elseif(node.value_sum==0)
             node.value_sum = value
         end
+        #元々のalphazeroはこっちで期待値を計算する
         #node.value_sum += value
+        #=
         if(isnan(node.value_sum))
             println("value Nan!!!!!!!!")
             println("value: $(value)")
             println(node)
-        end
+        end=#
         node.visit_count += 1
     end
 end
@@ -191,8 +190,15 @@ end
 function select_action(env::Env, root::Node, agt::Agent)
     actions = Int.(keys(root.children))
     visits = [root.children[a].visit_count for a in actions]
+    #Alpha Zeroの場合。将棋等で序盤の手を広げるためにsoftmaxを使っている
+    #alphazeroでは30手までsoftmaxを使っている。将棋が大体100手で終わることを考えると、max_turnの1/3までsoftmaxを使うのは妥当かもしれない
+    #=
+    if(length(agt.history)<=div(env.max_turn, 3))
+        d = ProbabilityWeights(softmax(visits))
+        a = sample(actions, d)
+        return a
+    end=#
     return actions[argmax(visits)]
-    #end
 end
 
 
@@ -224,6 +230,7 @@ function eval!(env::Env, agt::Agent, model::Chain)
     return value
 end
 
+#scoreの計算に時間がかかる場合は、一度計算したscoreは保存しておく
 function eval_t!(env::Env, agt::Agent, scores::Dict{Vector{Int}, Float32})
     #Y = model(cu(make_image(env, agt, length(agt.history))))
     #Yc = cpu(Y)
@@ -272,6 +279,7 @@ function run_MCTS(env::Env, agt::Agent, model::Chain, ratio::Float32, noise_r::F
     return select_action(env, root, agt), root
 end
 
+#探索効率の可視化のために、max_histを追加
 function run_MCTS!(env::Env, agt::Agent, model::Chain, ratio::Float32, noise_r::Float32, scores::Dict{Vector{Int}, Float32}, max_hist::Vector{Float32})
     root = init_node(Float32(0.0))
     value = evaluate!(env, agt, root, model)
