@@ -10,11 +10,12 @@ mutable struct ReplayBuffer
     buffer::Vector{Agent}
     buffer_size::Int
     batch_size::Int
+    scores::Dict{Vector{Int}, Float32}
     #count::Int
 end
 
 function init_buffer(buffer_size::Int, batch_size::Int)
-    return ReplayBuffer([], buffer_size, batch_size)
+    return ReplayBuffer([], buffer_size, batch_size, Dict())
 end
 
 function save_game!(buffer::ReplayBuffer, agt::Agent)
