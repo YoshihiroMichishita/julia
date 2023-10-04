@@ -249,6 +249,24 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
     return ld, max_hist, latest_model(storage)
 end
 
+function AlphaZero_ForPhysics_hind(env::Env, storage::Storage)
+    ld = []
+    max_hist::Vector{Float32} = [-12.0f0]
+    itn = 2
+    ratio = env.ratio
+    randr = env.ratio_r
+    for it in 1:itn
+        replay_buffer = init_buffer(1200, env.batch_size)
+        
+        run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
+        ll = train_model!(env, replay_buffer, storage)
+
+        push!(ld,ll)
+    end
+    
+    return max_hist
+end
+
 function dict_copy(orig::Dict{Vector{Int}, Float32})
     c_dict = Dict{String, Float32}()
     for k in keys(orig)
@@ -257,6 +275,7 @@ function dict_copy(orig::Dict{Vector{Int}, Float32})
     return c_dict
 end
 
+#=
 using BSON: @save
 using BSON: @load
 using Plots
@@ -343,4 +362,4 @@ end
 
 
 
-@time main(ARGS)
+@time main(ARGS)=#
