@@ -228,6 +228,8 @@ function hist2eq(history::Vector{Int})
         S *= dict[i]
     end
     return S
+end
+
 function legal_action(env::Env, history::Vector{Int}, branch_left::Vector{Int})
     if(isempty(history))
         return [i for i in 1:env.act_ind]

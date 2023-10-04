@@ -106,7 +106,7 @@ function add_exploration_noise!(env::Env, node::Node, ratio::Float32)
     end
 end
 
-#valueを正規化するべし, value_sumで本当に良い？
+#valueを正規化するべし=>すると正規化のnormを更新する回での挙動が微妙なはず。今回はやめておく(回避方法はありそう)
 function ucb_score(env::Env, parent::Node, child::Node)
     pb_c = log((parent.visit_count + env.Cb + 1) / env.Cb) + env.Ci
     pb_c *= sqrt(parent.visit_count) / (child.visit_count + 1)

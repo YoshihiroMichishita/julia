@@ -196,7 +196,6 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
     ld = []
     max_hist::Vector{Float32} = [-12.0f0]
     itn = 3
-    lastit = 0
     ratio = env.ratio
     randr = env.ratio_r
     for it in 1:itn
@@ -205,24 +204,9 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
 
         replay_buffer = init_buffer(1200, env.batch_size)
         
-        if(it<5)
-            #ratio -= Float32(1.0)
-            #randr -= Float32(1.0f-1)
-            #@time run_selfplay_palss(env, replay_buffer, storage, ratio, randr)
-            @time run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
-            #@time run_selfplay_pals(env, replay_buffer, storage, ratio, 1.0f0)
-            @time ll = train_model!(env, replay_buffer, storage)
-        else
-            #ratio -= Float32(2.0)
-            #randr -= Float32(1.0f-1)
-            #ratio = Float32(6.0)
-            #@time run_selfplay_palss(env, replay_buffer, storage, ratio, randr)
-            @time run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
-            @time ll = train_model!(env, replay_buffer, storage)
-        end
-        #@report_call run_selfplay(env, replay_buffer, storage)
-        #ll = @report_call train_model!(env, replay_buffer, storage)
-        #println("loss_average: $(ll)")
+        run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
+        ll = train_model!(env, replay_buffer, storage)
+        
         push!(ld,ll)
         println("store data")
         println(length(storage.scores))
@@ -273,7 +257,7 @@ function main(args::Vector{String})
     env_fc = init_Env_forcheck(args)
     lds = []
     max_hists = []
-    for dd in 1:5
+    for dd in 1:1
         storage = init_storage(env)
         ld, max_hist, model = AlphaZero_ForPhysics(env, env_fc, storage)
         push!(max_hists, max_hist)
@@ -293,9 +277,9 @@ function main(args::Vector{String})
     #savefig(p0, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/valMAX_itr_mt$(env.max_turn)_$(date).png")
     savefig(p0, "/Users/johnbrother/Documents/Codes/julia/AlphaZeroForPhysics/valMAX_itr_mt$(env.max_turn)_$(date).png")
     
-    p = plot(lds[1], yaxis=:log, linewidth=3.0)
+    p = plot((lds[1])[1,:], yaxis=:log, linewidth=3.0)
     for i in 2:length(lds)
-        plot!(lds[i], yaxis=:log, linewidth=3.0)
+        plot!((lds[i])[1,:], yaxis=:log, linewidth=3.0)
     end
     #savefig(p, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/loss_valMAX_mt$(env.max_turn)_$(date).png")
     savefig(p, "/Users/johnbrother/Documents/Codes/julia/AlphaZeroForPhysics/loss_valMAX_mt$(env.max_turn)_$(date).png")
