@@ -125,13 +125,14 @@ function ucb_score(env::Env, parent::Node, child::Node, ratio::Float32)
     prior_score = pb_c * child.prior
     value_score = child.value_sum
     # / (child.visit_count + 1)
-    ans = ratio*prior_score + value_score
+    ans = prior_score + ratio*value_score
     return ans
 end
 
 
 using BSON: @save
-function select_child(env::Env, node::Node, model::Chain)
+#function select_child(env::Env, node::Node, model::Chain)
+function select_child(env::Env, node::Node)
     actions = Int.(keys(node.children))
     children = [node.children[a] for a in actions]
     score_v = [ucb_score(env, node, child) for child in children]
@@ -145,15 +146,17 @@ function select_child(env::Env, node::Node, model::Chain)
     return actions[it], children[it]
 end
 
-function select_child(env::Env, node::Node, model::Chain, ratio::Float32)
+#function select_child(env::Env, node::Node, model::Chain, ratio::Float32)
+function select_child(env::Env, node::Node, ratio::Float32)
     actions = Int.(keys(node.children))
     children = [node.children[a] for a in actions]
     score_v = [ucb_score(env, node, child, ratio) for child in children]
     its = findall(x -> x==maximum(score_v), score_v)
+    #=
     if(isempty(its))
         println("score_v: $(score_v)")
         @save "BadModel.bson" model
-    end
+    end=#
     it = rand(its)
     #it = rand(findall(x -> x==maximum(score_v), score_v))
     return actions[it], children[it]
@@ -187,10 +190,11 @@ function select_action(root::Node)
 end
 =#
 
-function select_action(env::Env, root::Node, agt::Agent)
+#function select_action(env::Env, root::Node, agt::Agent)
+function select_action(root::Node)
     actions = Int.(keys(root.children))
     visits = [root.children[a].visit_count for a in actions]
-    #Alpha Zeroの場合。将棋等で序盤の手を広げるためにsoftmaxを使っている
+    #Alpha Zeroの場合、おそらく将棋等で序盤の手を広げるためにsoftmaxを使っている
     #alphazeroでは30手までsoftmaxを使っている。将棋が大体100手で終わることを考えると、max_turnの1/3までsoftmaxを使うのは妥当かもしれない
     #=
     if(length(agt.history)<=div(env.max_turn, 3))
@@ -248,15 +252,16 @@ function run_MCTS(env::Env, agt::Agent, model::Chain)
         scratch = deepcopy(agt)
         search_path = [node]
         while(!is_finish(env, scratch) && has_children(node))#has_children(node)
-            action, node = select_child(env, node, model)
+            #action, node = select_child(env, node, model)
+            action, node = select_child(env, node)
             apply!(env, scratch, action)
             push!(search_path, node)
         end
         value = evaluate!(env, scratch, node, model)
         backpropagate!(search_path, value)
     end
-    #return select_action(root), root
-    return select_action(env, root, agt), root
+    return select_action(root), root
+    #return select_action(env, root, agt), root
 end
 
 function run_MCTS(env::Env, agt::Agent, model::Chain, ratio::Float32, noise_r::Float32)
@@ -268,15 +273,16 @@ function run_MCTS(env::Env, agt::Agent, model::Chain, ratio::Float32, noise_r::F
         scratch = deepcopy(agt)
         search_path = [node]
         while(!is_finish(env, scratch) && has_children(node))#has_children(node)
-            action, node = select_child(env, node, model, ratio)
+            #action, node = select_child(env, node, model, ratio)
+            action, node = select_child(env, node, ratio)
             apply!(env, scratch, action)
             push!(search_path, node)
         end
         value = evaluate!(env, scratch, node, model)
         backpropagate!(search_path, value)
     end
-    #return select_action(root), root
-    return select_action(env, root, agt), root
+    return select_action(root), root
+    #return select_action(env, root, agt), root
 end
 
 #探索効率の可視化のために、max_histを追加
@@ -289,7 +295,8 @@ function run_MCTS!(env::Env, agt::Agent, model::Chain, ratio::Float32, noise_r::
         scratch = deepcopy(agt)
         search_path = [node]
         while(!is_finish(env, scratch) && has_children(node))#has_children(node)
-            action, node = select_child(env, node, model, ratio)
+            #action, node = select_child(env, node, model, ratio)
+            action, node = select_child(env, node, ratio)
             apply!(env, scratch, action)
             push!(search_path, node)
         end
@@ -308,8 +315,8 @@ function run_MCTS!(env::Env, agt::Agent, model::Chain, ratio::Float32, noise_r::
         #value = evaluate!(env, scratch, node, model)
         backpropagate!(search_path, value)
     end
-    #return select_action(root), root
-    return select_action(env, root, agt), root
+    return select_action(root), root
+    #return select_action(env, root, agt), root
 end
 
 
