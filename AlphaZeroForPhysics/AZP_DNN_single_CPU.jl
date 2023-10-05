@@ -116,9 +116,10 @@ end
 function run_selfplay(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32, noise_r::Float32)
     model = latest_model(storage)
     for it in 1:env.num_player
+        #=
         if(it%(env.num_player/10)==0)
             print("#")
-        end
+        end=#
         #model = gpu(latest_model(storage))
         game = play_physics!(env, model, ratio, noise_r)
         save_game!(buffer, game)
@@ -128,9 +129,10 @@ end
 function run_selfplay!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32, noise_r::Float32, max_hist::Vector{Float32})
     model = latest_model(storage)
     for it in 1:env.num_player
+        #=
         if(it%(env.num_player/10)==0)
             print("#")
-        end
+        end=#
         #model = gpu(latest_model(storage))
         game = play_physics!(env, model, ratio, noise_r, storage.scores, max_hist)
         save_game!(buffer, game)
@@ -180,10 +182,11 @@ function train_model!(env::Env, buffer::ReplayBuffer, storage::Storage)
             end
             Flux.Optimise.update!(opt, Flux.params(model), grads)
             ll[b_num, it] = val
+            #=
             if(it > env.training_step-6)
                 val, pol = loss_check(image_batch,target_batch,env,model)
                 println("val=$(val), pol=$(pol)")
-            end
+            end=#
         end
         storage.storage[b_num] = model
     end
