@@ -112,14 +112,14 @@ end
 
 
 #cpu並列化予定
-function run_selfplay(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32)
+function run_selfplay(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32, noise_r::Float32)
     model = latest_model(storage) |> gpu
     for it in 1:env.num_player
         if(it%(env.num_player/10)==0)
             print("#")
         end
         #model = gpu(latest_model(storage))
-        game = play_physics!(env, model, ratio)
+        game = play_physics!(env, model, ratio, noise_r)
         save_game!(buffer, game)
     end
 end
@@ -167,11 +167,11 @@ function train_model!(env::Env, buffer::ReplayBuffer, storage::Storage)
             model = Chain(Dense(env.input_dim, env.middle_dim), BatchNorm(env.middle_dim), Tuple(Chain(Parallel(+, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, env.middle_dim, relu),Dense(env.middle_dim, env.middle_dim, relu)), identity)) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), env.act_ind, tanh2)), Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), 1, tanh10)))) |> gpu
             #model = Chain(Dense(env.input_dim, env.middle_dim), Tuple(Chain(Parallel(+, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, env.middle_dim, relu)),Dense(env.middle_dim, env.middle_dim, relu)), identity) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Chain(Dense(env.middle_dim, env.middle_dim, relu), Dense(env.middle_dim, env.act_ind, tanh2)), Chain(Dense(env.middle_dim, env.middle_dim, relu), Dense(env.middle_dim, 1, tanh10)))) |> gpu
         end
-        opt = Flux.Optimiser(WeightDecay(env.C), Adam(1f-5))
+        opt = Flux.Optimiser(WeightDecay(env.C), Adam(1f-4))
         #ParameterSchedulers.Scheduler(env.scheduler, Momentum())
         for it in 1:env.training_step
             if(it%(env.checkpoint_interval)==0)
-                opt = Flux.Optimiser(WeightDecay(env.C), Adam(1f-5))
+                opt = Flux.Optimiser(WeightDecay(env.C), Adam(1f-4))
             end
             image_batch, target_batch = sample_batch!(env, buffer, storage.scores)
             val, grads = Flux.withgradient(Flux.params(model)) do

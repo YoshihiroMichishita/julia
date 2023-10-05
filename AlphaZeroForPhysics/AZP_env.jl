@@ -161,6 +161,56 @@ function init_Env_forcheck(args::Vector{String})
     return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, ratio, ratio_r, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt, Cb, Ci, C)
 end
 
+#max_turn, middle_dim, depth, α, frac, Cb, Ci
+function init_Env_quick(args::Vector{String}, hyperparams::Vector{Any})
+    max_turn = parse(Int, args[1])
+    num_player = 200
+    #parse(Int, args[2])
+    val_num::Int = 2
+    br_num::Int = 3
+    fn_num::Int = 1
+    act_ind = val_num+br_num+fn_num
+    input_dim = act_ind*max_turn
+    middle_dim = parse(Int, args[2])
+    output =  act_ind + 1
+    depth = parse(Int, args[3])
+
+    #training parameter
+    training_step = 1000
+    #parse(Int, args[5])
+    checkpoint_interval = 200
+    batch_size = 500
+    #parse(Int, args[6])
+    batch_num = 1
+    η = 1f-5
+    momentum = 0.9
+
+
+    num_simulation = 512
+    #parse(Int, args[8])
+    α = Float32(hyperparams[1])
+    frac = parse(Float32, args[4])
+    ratio = 0.1f0
+    ratio_r = 1.0f0
+
+    t_step = 100
+    HS_size = 4
+    Ω = 10.0f0
+    ξ = 0.4f0
+    Jz = 1.0f0
+    Jx = 0.7f0
+    hz = 0.5f0
+    H_0 = Hermitian([ -Jz-2hz 0 0 -Jx; 0 Jz -Jx 0; 0 -Jx Jz 0; -Jx 0 0 -Jz+2hz])
+    V_t = Hermitian([ 0 -ξ -ξ 0; -ξ 0 0 -ξ; -ξ 0 0 -ξ; 0 -ξ -ξ 0])
+    dt = 2pi/t_step/Ω
+
+    Cb = Int(hyperparams[2])
+    Ci = Float32(hyperparams[3])
+    C = 1f-6
+
+    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, ratio, ratio_r, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt, Cb, Ci, C)
+end
+
 x = symbols("x")
 sx = sin(x)
 
@@ -228,6 +278,8 @@ function hist2eq(history::Vector{Int})
         S *= dict[i]
     end
     return S
+end
+
 function legal_action(env::Env, history::Vector{Int}, branch_left::Vector{Int})
     if(isempty(history))
         return [i for i in 1:env.act_ind]

@@ -1,5 +1,6 @@
 using Dates
 
+#include("AZP_env.jl")
 include("AZP_env.jl")
 include("AZP_agt.jl")
 include("AZP_mcts_single_CPU.jl")
@@ -112,14 +113,14 @@ end
 
 
 #cpu並列化予定
-function run_selfplay(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32)
+function run_selfplay(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32, noise_r::Float32)
     model = latest_model(storage)
     for it in 1:env.num_player
         if(it%(env.num_player/10)==0)
             print("#")
         end
         #model = gpu(latest_model(storage))
-        game = play_physics!(env, model, ratio)
+        game = play_physics!(env, model, ratio, noise_r)
         save_game!(buffer, game)
     end
 end
@@ -137,13 +138,13 @@ function run_selfplay!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::
 end
 
 
-function loss(image::Array{Int, 2}, target::Matrix{Float32}, env::Env, model::Chain)
+function loss(image::Matrix{Int}, target::Matrix{Float32}, env::Env, model::Chain)
     y1 = model(image)
     return sum([(((y1[end,i]-target[end,i]))^2 - target[1:end-1,i]' * log.(softmax(y1[1:end-1,i]))) for i in 1:env.batch_size])/env.batch_size
     # + env.C * sum(sqnorm, Flux.params(model))
 end
 
-function loss_check(image::Array{Int, 2}, target::Matrix{Float32}, env::Env, model::Chain)
+function loss_check(image::Matrix{Int}, target::Matrix{Float32}, env::Env, model::Chain)
     y1 = model(image)
     val = sum([(((y1[end,i]-target[end,i]))^2) for i in 1:env.batch_size])/env.batch_size
     pol = sum([(-target[1:end-1,i]' * log.(softmax(y1[1:end-1,i]))) for i in 1:env.batch_size])/env.batch_size
@@ -167,11 +168,11 @@ function train_model!(env::Env, buffer::ReplayBuffer, storage::Storage)
             model = Chain(Dense(env.input_dim, env.middle_dim), BatchNorm(env.middle_dim), Tuple(Chain(Parallel(+, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, env.middle_dim, relu),Dense(env.middle_dim, env.middle_dim, relu)), identity)) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), env.act_ind, tanh2)), Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), 1, tanh10))))
             #model = Chain(Dense(env.input_dim, env.middle_dim), Tuple(Chain(Parallel(+, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, env.middle_dim, relu)),Dense(env.middle_dim, env.middle_dim, relu)), identity) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Chain(Dense(env.middle_dim, env.middle_dim, relu), Dense(env.middle_dim, env.act_ind, tanh2)), Chain(Dense(env.middle_dim, env.middle_dim, relu), Dense(env.middle_dim, 1, tanh10)))) |> gpu
         end
-        opt = Flux.Optimiser(WeightDecay(env.C), Adam(1f-5))
+        opt = Flux.Optimiser(WeightDecay(env.C), Adam(2f-5))
         #ParameterSchedulers.Scheduler(env.scheduler, Momentum())
         for it in 1:env.training_step
             if(it%(env.checkpoint_interval)==0)
-                opt = Flux.Optimiser(WeightDecay(env.C), Adam(1f-5))
+                opt = Flux.Optimiser(WeightDecay(env.C), Adam(2f-5))
             end
             image_batch, target_batch = sample_batch!(env, buffer, storage.scores)
             val, grads = Flux.withgradient(Flux.params(model)) do
@@ -203,18 +204,18 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
         println("=============")
         println("it=$(it);")
 
-        replay_buffer = init_buffer(1000, env.batch_size)
+        replay_buffer = init_buffer(1200, env.batch_size)
         
         if(it<5)
-            ratio -= Float32(1.0)
-            randr -= Float32(1.0f-1)
+            #ratio -= Float32(1.0)
+            #randr -= Float32(1.0f-1)
             #@time run_selfplay_palss(env, replay_buffer, storage, ratio, randr)
             @time run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
             #@time run_selfplay_pals(env, replay_buffer, storage, ratio, 1.0f0)
             @time ll = train_model!(env, replay_buffer, storage)
         else
-            ratio -= Float32(2.0)
-            randr -= Float32(1.0f-1)
+            #ratio -= Float32(2.0)
+            #randr -= Float32(1.0f-1)
             #ratio = Float32(6.0)
             #@time run_selfplay_palss(env, replay_buffer, storage, ratio, randr)
             @time run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
@@ -248,6 +249,24 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
     return ld, max_hist, latest_model(storage)
 end
 
+function AlphaZero_ForPhysics_hind(env::Env, storage::Storage)
+    ld = []
+    max_hist::Vector{Float32} = [-12.0f0]
+    itn = 2
+    ratio = env.ratio
+    randr = env.ratio_r
+    for it in 1:itn
+        replay_buffer = init_buffer(1200, env.batch_size)
+        
+        run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
+        ll = train_model!(env, replay_buffer, storage)
+
+        push!(ld,ll)
+    end
+    
+    return max_hist
+end
+
 function dict_copy(orig::Dict{Vector{Int}, Float32})
     c_dict = Dict{String, Float32}()
     for k in keys(orig)
@@ -256,6 +275,7 @@ function dict_copy(orig::Dict{Vector{Int}, Float32})
     return c_dict
 end
 
+#=
 using BSON: @save
 using BSON: @load
 using Plots
@@ -264,25 +284,26 @@ ENV["GKSwstype"]="nul"
 using JLD2
 using FileIO
 
-date = 916
+date = 1004
 
 function main(args::Vector{String})
     #args = ARGS
     println("Start! at $(now())")
     env = init_Env(args)
     env_fc = init_Env_forcheck(args)
-    
+    lds = []
     max_hists = []
-    for dd in 1:1
+    for dd in 1:5
         storage = init_storage(env)
         ld, max_hist, model = AlphaZero_ForPhysics(env, env_fc, storage)
         push!(max_hists, max_hist)
-        string_score = dict_copy(storage.scores)
-        k = [keys(string_score)...]
-        inds = findall(s -> string_score[s] == findmax(string_score)[1], k)
+        push!(lds, ld)
+        #string_score = dict_copy(storage.scores)
+        k = [keys(storage.scores)...]
+        inds = findall(s -> storage.scores[s] == findmax(storage.scores)[1], k)
         println("max score:")
         for i in inds
-            println("$(k[i]), $(string_score[k[i]])")
+            println("$(hist2eq(k[i])), $(storage.scores[k[i]])")
         end
     end
     p0 = plot(max_hists[1], linewidth=3.0)
@@ -291,13 +312,14 @@ function main(args::Vector{String})
     end
     #savefig(p0, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/valMAX_itr_mt$(env.max_turn)_$(date).png")
     savefig(p0, "/Users/johnbrother/Documents/Codes/julia/AlphaZeroForPhysics/valMAX_itr_mt$(env.max_turn)_$(date).png")
-    #=
-    p = plot((ld[1])[1,:], yaxis=:log, linewidth=3.0)
-    for i in 2:length(ld)
-        plot!((ld[i])[1,:], yaxis=:log, linewidth=3.0)
+    
+    p = plot(lds[1], yaxis=:log, linewidth=3.0)
+    for i in 2:length(lds)
+        plot!(lds[i], yaxis=:log, linewidth=3.0)
     end
-    savefig(p, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/loss_valMAX_mt$(env.max_turn)_$(date).png")
-    =#
+    #savefig(p, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/loss_valMAX_mt$(env.max_turn)_$(date).png")
+    savefig(p, "/Users/johnbrother/Documents/Codes/julia/AlphaZeroForPhysics/loss_valMAX_mt$(env.max_turn)_$(date).png")
+    
     println("AlphaZero Finish!")
     #println("loss-dynamics: $(ld)")
     #=
@@ -340,4 +362,4 @@ end
 
 
 
-@time main(ARGS)
+@time main(ARGS)=#
