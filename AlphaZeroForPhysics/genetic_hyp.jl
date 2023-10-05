@@ -31,12 +31,12 @@ function gene_search(args::Vector{String})
         println("sigma = ", σ)
         hype_test = []
         score = []
-        hyps = collect(Iterators.product(((init_hype[1]-σ):σ:(init_hype[1]+σ)), ((init_hype[2]-2.5f0σ):(2.5f0σ):(init_hype[2]+2.5f0σ))))
+        hyps = collect(Iterators.product(((init_hype[1]-σ), init_hype[1], (init_hype[1]+σ)), ((init_hype[2]-2.5f0σ), init_hype[2], (init_hype[2]+2.5f0σ))))
         #g = Uniform(-σ, σ)
         #lam = Uniform(-2.5σ, 2.5σ)
-        for i in 1:9
+        for hype in hyps
             #hype = init_hype + [Float32(rand(g)), Float32(rand(lam))]
-            hype = init_hype .+ hyps[i]
+            #hype = init_hype .+ hyps[i]
             push!(hype_test, hype)
             push!(score, PPO_hype(args, hype))
             print("#")
