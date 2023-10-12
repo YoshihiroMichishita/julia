@@ -1,5 +1,5 @@
 using Distributed
-addprocs(5)
+addprocs(10)
 
 @everywhere include("AZP_DNN_single_CPU.jl")
 
