@@ -1,5 +1,5 @@
 using Distributed
-addprocs(5)
+addprocs(10)
 
 @everywhere include("AZP_DNN_single_CPU.jl")
 
@@ -7,7 +7,7 @@ function AZP_hype(args::Vector{String} ,hyperparams::Vector{Any})
     env = init_Env_quick(args, hyperparams)
     
     find_ave = 0.0
-    @everywhere dist = 10
+    @everywhere dist = 20
 
     find_ave = @distributed (+) for dd in 1:dist
         storage = init_storage(env)
@@ -47,9 +47,10 @@ function gene_search(args::Vector{String})
             print("#")
         end
         println("")
+        println("scores =  $(score)")
         parm_ind = findmin(score)[2]
         push!(score_itr, score[parm_ind])
-        println("score =  $(score[parm_ind])")
+        println("best_score =  $(score[parm_ind])")
         init_hype = hype_test[parm_ind]
         push!(hype_itr, init_hype)
         println("hype =  $(init_hype)")

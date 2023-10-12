@@ -166,3 +166,41 @@ ratio:  10.0
 ratio_r:  1.0
 =============
 it=1;
+┌ Warning: Forcibly interrupting busy workers
+│   exception = rmprocs: pids [2, 3, 4, 5, 6] not terminated after 5.0 seconds.
+└ @ Distributed ~/.julia/juliaup/julia-1.9.3+0.x64.linux.gnu/share/julia/stdlib/v1.9/Distributed/src/cluster.jl:1253
+┌ Warning: rmprocs: process 1 not removed
+└ @ Distributed ~/.julia/juliaup/julia-1.9.3+0.x64.linux.gnu/share/julia/stdlib/v1.9/Distributed/src/cluster.jl:1049
+===========================
+it = 1
+###########################
+score =  35.8
+hype =  Any[0.6000000029802323, 48.0, 0.75]
+===========================
+it = 2
+###########################
+score =  37.2
+hype =  Any[0.7000000044703484, 60.0, 1.0]
+Any[Any[0.6000000029802323, 48.0, 0.75], Any[0.7000000044703484, 60.0, 1.0]]
+Any[35.8, 37.2]
+38781.366358 seconds (1.21 M allocations: 79.701 MiB, 0.00% gc time, 0.00% compilation time: 4% of which was recompilation)
+┌ Warning: Forcibly interrupting busy workers
+│   exception = rmprocs: pids [2, 3, 4, 5, 6, 7, 8, 9, 10, 11] not terminated after 5.0 seconds.
+└ @ Distributed ~/.julia/juliaup/julia-1.9.3+0.x64.linux.gnu/share/julia/stdlib/v1.9/Distributed/src/cluster.jl:1253
+┌ Warning: rmprocs: process 1 not removed
+└ @ Distributed ~/.julia/juliaup/julia-1.9.3+0.x64.linux.gnu/share/julia/stdlib/v1.9/Distributed/src/cluster.jl:1049
+===========================
+it = 1
+###########################
+scores =  Any[49.849999999999994, 100.15, 45.25000000000001, 47.6, 137.10000000000002, 120.24999999999997, 166.45000000000002, 227.45, 251.00000000000006, 48.9, 53.75, 44.45, 47.25, 45.050000000000004, 42.400000000000006, 47.8, 41.45, 34.9, 62.99999999999999, 41.6, 45.300000000000004, 53.74999999999999, 44.4, 43.400000000000006, 62.49999999999999, 41.3, 43.25]
+best_score =  34.9
+hype =  Any[0.6000000029802323, 96.0, 1.25]
+===========================
+it = 2
+###########################
+scores =  Any[64.60000000000001, 65.0, 39.7, 63.099999999999994, 62.449999999999996, 65.9, 64.45, 85.75, 228.45000000000005, 39.95, 43.5, 41.300000000000004, 47.95, 40.3, 39.699999999999996, 62.7, 42.7, 39.1, 41.6, 44.949999999999996, 42.300000000000004, 46.6, 42.29999999999999, 39.4, 46.0, 41.449999999999996, 37.699999999999996]
+best_score =  37.699999999999996
+hype =  Any[0.7000000044703484, 108.0, 1.5]
+Any[Any[0.6000000029802323, 96.0, 1.25], Any[0.7000000044703484, 108.0, 1.5]]
+Any[34.9, 37.699999999999996]
+46603.636549 seconds (1.26 M allocations: 82.341 MiB, 0.00% gc time, 0.00% compilation time: 4% of which was recompilation)
