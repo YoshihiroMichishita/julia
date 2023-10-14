@@ -7,7 +7,7 @@ function AZP_hype(args::Vector{String} ,hyperparams::Vector{Any})
     env = init_Env_quick(args, hyperparams)
     
     find_ave = 0.0
-    @everywhere dist = 20
+    @everywhere dist = 10
 
     find_ave = @distributed (+) for dd in 1:dist
         storage = init_storage(env)
