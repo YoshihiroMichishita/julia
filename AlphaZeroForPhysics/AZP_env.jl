@@ -217,6 +217,7 @@ sx = sin(x)
 function calc_Kt(history::Vector{Int}, env::Env)
     MV = []
     his = copy(history)
+    t = collect(0:env.Ω*env.dt:2pi)
     #println(length(his))
     for it in 1:length(his)
         sw = pop!(his)
@@ -241,9 +242,15 @@ function calc_Kt(history::Vector{Int}, env::Env)
             push!(MV, C)
         elseif(sw==6)
             A = pop!(MV)
+            if(A.subs)
+            
             try
-                #B = A.integrate((x, 0, x))/env.Ω
-                B = A.integrate(x)/env.Ω
+                S = A.subs(x, t[1])-A.subs(x, t[env.t_step//4])
+                if(S==zeros(env.HS_size, env.HS_size))
+                    B = A
+                else
+                    B = A.integrate(x)/env.Ω
+                end
             catch
                 B = A
             end
@@ -251,7 +258,7 @@ function calc_Kt(history::Vector{Int}, env::Env)
         end
         #@show MV
     end
-    t = collect(0:env.Ω*env.dt:2pi)
+    #t = collect(0:env.Ω*env.dt:2pi)
 
     Ks = MV[end]
     
