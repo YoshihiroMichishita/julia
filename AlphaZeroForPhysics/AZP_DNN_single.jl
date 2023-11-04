@@ -152,7 +152,7 @@ function loss_check(image::CuArray{Int, 2}, target::Matrix{Float32}, env::Env, m
 end
 
 
-tanh10(x) = Float32(12)*tanh(x/10)
+tanh10(x) = Float32(15)*tanh(x/10)
 tanh2(x) = Float32(4)*tanh(x/4)
 
 #gpu並列化予定
@@ -266,7 +266,7 @@ ENV["GKSwstype"]="nul"
 using JLD2
 using FileIO
 
-date = 1023
+date = 1104
 
 function main(args::Vector{String})
     println("Start! at $(now())")
@@ -274,7 +274,7 @@ function main(args::Vector{String})
     env_fc = init_Env_forcheck(args)
     
     max_hists = []
-    for dd in 1:1
+    for dd in 1:3
         storage = init_storage(env)
         ld, max_hist, model = AlphaZero_ForPhysics(env, env_fc, storage)
         push!(max_hists, max_hist)
