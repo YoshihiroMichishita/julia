@@ -1,25 +1,27 @@
 using LinearAlgebra
 using Plots
-using SymPy
+#using SymPy
 
-x = symbols("x")
-sx = sin(x)
+#x = symbols("x")
+#sx = sin(x)
+const ii::ComplexF32 = 0.0f0 + 1.0f0im
+const pp::Float32 = 2pi
 
 struct Parm
-    t_step::Int
-    n_site::Int
+    t_step::Int32
+    n_site::Int32
     Ω::Float32
     ξ::Float32
     Jz::Float32
     Jx::Float32
     hz::Float32
     dt::Float32
-    Ms::Int
+    Ms::Int32
 end
 
 function init_parm(arg::Vector{String})
-    t_step = parse(Int, arg[1])
-    n_site = parse(Int, arg[2])
+    t_step = parse(Int32, arg[1])
+    n_site = parse(Int32, arg[2])
     Ω = parse(Float32, arg[3])
     ξ = parse(Float32, arg[4])
     Jz = parse(Float32, arg[5])
@@ -27,16 +29,16 @@ function init_parm(arg::Vector{String})
     hz = parse(Float32, arg[7])
     #H_0 = Hermitian([ -Jz-2hz 0 0 -Jx; 0 Jz -Jx 0; 0 -Jx Jz 0; -Jx 0 0 -Jz+2hz])
     #V_t = Hermitian([ 0 -ξ -ξ 0; -ξ 0 0 -ξ; -ξ 0 0 -ξ; 0 -ξ -ξ 0])
-    dt = 2pi/Ω/t_step
-    Ms = 2^n_site
+    dt = pp/Ω/t_step
+    Ms = Int32(2)^n_site
 
     #return Parm(t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt)
     return Parm(t_step, n_site, Ω, ξ, Jz, Jx, hz, dt, Ms)
 end
 
 function init_parm_ξdep(arg::Vector{String}, ξ0::Float32)
-    t_step = parse(Int, arg[1])
-    n_site = parse(Int, arg[2])
+    t_step = parse(Int32, arg[1])
+    n_site = parse(Int32, arg[2])
     Ω = parse(Float32, arg[3])
     ξ = ξ0
     #parse(Float32, arg[4])
@@ -45,8 +47,8 @@ function init_parm_ξdep(arg::Vector{String}, ξ0::Float32)
     hz = parse(Float32, arg[7])
     #H_0 = Hermitian([ -Jz-2hz 0 0 -Jx; 0 Jz -Jx 0; 0 -Jx Jz 0; -Jx 0 0 -Jz+2hz])
     #V_t = Hermitian([ 0 -ξ -ξ 0; -ξ 0 0 -ξ; -ξ 0 0 -ξ; 0 -ξ -ξ 0])
-    dt = 2pi/Ω/t_step
-    Ms = 2^n_site
+    dt = pp/Ω/t_step
+    Ms = Int32(2)^n_site
 
     #return Parm(t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt)
     return Parm(t_step, n_site, Ω, ξ, Jz, Jx, hz, dt, Ms)
@@ -57,12 +59,12 @@ struct System
     V_t::Hermitian{Float32, Matrix{Float32}}
 end
 
-function vec2ind(n::Int, v::Vector{Bool})
+function vec2ind(n::Int32, v::Vector{Bool})
     ind = 0
     for i in 1:n
         ind += Int(v[i])*2^(i-1)
     end
-    return ind+1
+    return Int32(ind+1)
 end
 
 function onebody!(p::Parm,v::Vector{Bool}, H::Matrix{Float32}, V::Matrix{Float32})
@@ -120,6 +122,7 @@ function init_system(p::Parm)
     return System(H0, Vt)
 end
 
+#=
 function calc_Kt(history::Vector{Int}, p::Parm, s::System)
     MV = []
     his = copy(history)
@@ -175,8 +178,109 @@ function calc_Kt(history::Vector{Int}, p::Parm, s::System)
     end=#
     #Kt = [Hermitian(N(Ks.subs(x,t[i]))) for i in 1:env.t_step]
     
+end=#
+#sx(x) = sin(x)
+#cx(x) = cos(x)
+function com(M1, M2)
+    return Hermitian(-ii*(M1*M2 - M2*M1))
 end
 
+function uncom(M1, M2)
+    return Hermitian((M1*M2 + M2*M1)/2)
+end
+
+
+function given_Kt(p::Parm, s::System)
+    #t = collect(0:p.Ω*p.dt:2pi)
+    l = 1
+    r = 1
+    function Ks(x::Float32)
+        if(x < pp/4)
+            M = l*s.V_t/p.Ω*x + r*com(s.H_0, s.V_t)/p.Ω^2 * x^2
+        elseif(x < pp/2)
+            M = l*s.V_t/p.Ω*(pp/2 - x) + r*com(s.H_0, s.V_t)/p.Ω^2 * (pp^2/4 - (x-pp/2)^2)
+        elseif(x < 3pp/4)
+            M = l*s.V_t/p.Ω*(pp/2 - x) + r*com(s.H_0, s.V_t)/p.Ω^2 * (pp^2/4 - (x-pp/2)^2)
+        else
+            M = l*s.V_t/p.Ω*(-pp + x) + r*com(s.H_0, s.V_t)/p.Ω^2 * (x-pp)^2
+        end
+        return M
+    end
+    return Ks
+end
+
+#=
+function given_Kt(p::Parm, s::System)
+    Ks(x) = -s.V_t/p.Ω*(cos(x)-1) - uncom(s.H_0, s.V_t)/p.Ω^2 * sin(x)
+    return Ks
+end=#
+#=
+function given_Kt(p::Parm, s::System)
+    Ks(x) = -s.V_t/p.Ω*(cos(x)-1) - com(s.H_0, s.V_t)/p.Ω^2 * sin(x) + com(s.H_0, com(s.H_0, s.V_t))/p.Ω^3 * (cos(x) - 1)
+    return Ks
+end=#
+
+#=
+function given_Kt(p::Parm, s::System)
+    #Ks(x) = -s.V_t/p.Ω*(cos(x)-1) - com(s.H_0, s.V_t)/p.Ω^2 * sin(x) - com(s.V_t, com(s.H_0, s.V_t))/p.Ω^2 * sin(x)*cos(x) + com(s.H_0, com(s.H_0, s.V_t))/p.Ω^3 * (cos(x) - 1)
+    function Ks(x::Float32)
+        M = -s.V_t/p.Ω*(cos(x)-1) - com(s.H_0, s.V_t)/p.Ω^2 * sin(x) - com(s.V_t, com(s.H_0, s.V_t))/p.Ω^2 * (cos(2x)-1)/4 + com(s.H_0, com(s.H_0, s.V_t))/p.Ω^3 * (cos(x) - 1)/2
+        return M
+    end
+    #Ks(x) = -s.V_t/p.Ω*(cos(x)-1) - com(s.H_0, s.V_t)/p.Ω^2 * sin(x) - com(s.V_t, com(s.H_0, s.V_t))/p.Ω^3 * (cos(2x)-1)/4
+    # - com(s.H_0, com(s.H_0, s.V_t))/p.Ω^3 * (cos(x) - 1)
+    # - com(s.H_0, com(s.H_0, s.V_t))/p.Ω^3 * (cos(x) - 1)
+    return Ks
+end=#
+
+#=
+function calc_Kt(history::Vector{Int}, p::Parm, s::System)
+    MV = []
+    tdep = []
+    Mr = []
+    his = copy(history)
+    his2 = copy(history)
+    for it in 1:length(his)
+        sw = pop!(his)
+        if(sw==1)
+            push!(MV, s.H_0)
+            push!(tdep, 1)
+        elseif(sw==2)
+            push!(MV, s.V_t)
+            push!(tdep, sx)
+        elseif(sw==3)
+            A = pop!(MV)
+            B = pop!(MV)
+            C = A + B
+            push!(MV, C)
+        elseif(sw==4)
+            A = pop!(MV)
+            B = pop!(MV)
+            C = -1im*(A*B - B*A)
+            push!(MV, C)
+            f = pop!(tdep)
+            g = pop!(tdep)
+            push!(tdep, f*g)
+        elseif(sw==5)
+            A = pop!(MV)
+            B = pop!(MV)
+            C = (A*B + B*A)/2
+            push!(MV, C)
+            f = pop!(tdep)
+            g = pop!(tdep)
+            push!(tdep, f*g)
+        elseif(sw==6)
+            A = pop!(MV)
+        end
+        #@show MV
+    end
+    t = collect(0:p.Ω*p.dt:2pi)
+
+    Ks = MV[end]
+    K0 = N(Ks.subs(x,0.0f0))
+    return Ks-K0
+end=#
+#=
 function calc_Hr(p::Parm, s::System, Kt)
     HFn = Hermitian(zeros(ComplexF32, p.Ms, p.Ms))
     Vp = Hermitian(zeros(ComplexF32, p.Ms, p.Ms))
@@ -190,35 +294,77 @@ function calc_Hr(p::Parm, s::System, Kt)
         Vm += HFt*exp(ComplexF32(-1im*p.Ω*i*p.dt))
     end
     return HFn, Vp, Vm
+end=#
+
+function calc_Hr(p::Parm, s::System, Kt)
+    HFn = Hermitian(zeros(ComplexF32, p.Ms, p.Ms))
+    Vp = Hermitian(zeros(ComplexF32, p.Ms, p.Ms))
+    Vm = Hermitian(zeros(ComplexF32, p.Ms, p.Ms))
+    for i in 1:p.t_step
+        t = Float32(p.Ω*i*p.dt)
+        U = exp(ii*Kt(t))
+        #HFt = Hermitian(ComplexF32.(U*(s.H_0 + s.V_t*sin(t)) * U' - ii* U*(exp(-ii*Kt(t+p.Ω*p.dt))-exp(-ii*Kt(t-p.Ω*p.dt)))/2p.dt))/p.t_step
+        HFt = Hermitian(ComplexF32.(U*(s.H_0 + s.V_t*sign(cos(p.Ω*t*p.dt))) * U' - ii* U*(exp(-ii*Kt(t+p.Ω*p.dt))-exp(-ii*Kt(t-p.Ω*p.dt)))/2p.dt))/p.t_step
+        #HFt = Hermitian(ComplexF32.(U*(s.H_0 + s.V_t*sin(t)) * U' - ii* U*(exp(-ii*Kt(t+p.Ω*p.dt))-exp(-ii*Kt(t-p.Ω*p.dt)))/2p.dt))*p.Ω/pp
+        HFn += HFt
+        Vp += exp(ComplexF32(ii*p.Ω*i*p.dt))*HFt
+        Vm += exp(ComplexF32(-ii*p.Ω*i*p.dt))*HFt
+    end
+    return HFn, Vp, Vm
 end
 
-function calc_HR_p(p::Parm, HFn::Hermitian{ComplexF32, Matrix{ComplexF32}}, Vp::Matrix{ComplexF32}, β::Float32, sts::Vector{Vector{ComplexF32}})
-    U = exp(Float32(2pi)*1im*HFn/p.t_step)
-    Vdp = Hermitian(-1im*(Vp*HFn - HFn*Vp))
-    Vt = Vdp
-    C = 0.0f0
-    l = length(sts)
+function given_Hr(p::Parm, s::System, Kt)
+    HFn = Hermitian(zeros(ComplexF32, p.Ms, p.Ms))
+    Vp = Hermitian(zeros(ComplexF32, p.Ms, p.Ms))
+    Vm = Hermitian(zeros(ComplexF32, p.Ms, p.Ms))
     for i in 1:p.t_step
-        Vt = Hermitian(U*Vt*U')
-        for st in sts
-            C += p.dt* real(st'*Vt*Vdp*st) * exp(1im*p.Ω*i*p.dt)/l
+        t = Float32(p.Ω*i*p.dt)
+        U = exp(ii*Kt(t))
+        #HFt = Hermitian(ComplexF32.(U*(s.H_0 + s.V_t*sin(t)) * U' - ii* U*(exp(-ii*Kt(t+p.Ω*p.dt))-exp(-ii*Kt(t-p.Ω*p.dt)))/2p.dt))/p.t_step
+        HFt = Hermitian(ComplexF32.(U*(s.H_0 + s.V_t*sign(cos(p.Ω*t*p.dt))) * U' - ii* U*(exp(-ii*Kt(t+p.Ω*p.dt))-exp(-ii*Kt(t-p.Ω*p.dt)))/2p.dt))/p.t_step
+        #HFt = Hermitian(ComplexF32.(U*(s.H_0 + s.V_t*sin(t)) * U' - ii* U*(exp(-ii*Kt(t+p.Ω*p.dt))-exp(-ii*Kt(t-p.Ω*p.dt)))/2p.dt))*p.Ω/pp
+        HFn += HFt
+        Vp += exp(ComplexF32(ii*p.Ω*i*p.dt))*HFt
+        Vm += exp(ComplexF32(-ii*p.Ω*i*p.dt))*HFt
+    end
+    return HFn, Vp, Vm
+end
+
+#function calc_HR_p(p::Parm, HFn::Hermitian{ComplexF32, Matrix{ComplexF32}}, Vp::Matrix{ComplexF32}, β::Float32, sts::Vector{Vector{ComplexF32}})
+function calc_HR_p(p::Parm, HFn::Hermitian{ComplexF32, Matrix{ComplexF32}}, Vp::Matrix{ComplexF32}, β::Float32, sts::Matrix{ComplexF32})
+    U = exp(pp*ii*HFn/p.t_step)
+    Vdp = com(Vp, HFn)
+    #Hermitian(-ii*(Vp*HFn - HFn*Vp))
+    Vt = copy(Vdp)
+    C = 0.0f0
+    l = size(sts)[1]
+    for i in 1:p.t_step
+        Vt1 = Hermitian(U*Vt*U')
+        #for st in sts
+        for it in 1:l
+            st = sts[it,:]
+            C += p.dt* real(dot(st,(Vt1*Vdp),st)) * real(exp(ii*p.Ω*i*p.dt))/l
         end
+        Vt = Vt1
     end
     C = (1-exp(-β*p.Ω))/(2p.Ω)*C
     return C
 end
 
-function calc_HR_m(p::Parm, HFn::Hermitian{ComplexF32, Matrix{ComplexF32}}, Vm::Matrix{ComplexF32}, β::Float32, sts::Vector{Vector{ComplexF32}})
-    U = exp(Float32(2pi)*1im*HFn/p.t_step)
-    Vdm = Hermitian(-1im*(Vm*HFn - HFn*Vm))
-    Vt = Vdm
+function calc_HR_m(p::Parm, HFn::Hermitian{ComplexF32, Matrix{ComplexF32}}, Vm::Matrix{ComplexF32}, β::Float32, sts::Matrix{ComplexF32})
+    U = exp(pp*ii*HFn/p.t_step)
+    Vdm = com(Vm, HFn)
+    #Hermitian(-ii*(Vm*HFn - HFn*Vm))
+    Vt = copy(Vdm)
     C = 0.0f0
-    l = length(sts)
+    l = size(sts)[1]
     for i in 1:p.t_step
-        Vt = Hermitian(U*Vt*U')
-        for st in sts
-            C += p.dt* real(st'*Vt*Vdm*st) * exp(1im*p.Ω*i*p.dt)/l
+        Vt1 = Hermitian(U*Vt*U')
+        for it in 1:l
+            st = sts[it,:]
+            C += p.dt* real(dot(st,(Vt1*Vdm),st)) * real(exp(-ii*p.Ω*i*p.dt))/l
         end
+        Vt = Vt1
     end
     C = (1-exp(-β*p.Ω))/(-2p.Ω)*C
     return C
@@ -232,27 +378,49 @@ function calc_Udt_orig(old_Udt::Matrix,t::Int, p::Parm, s::System)
     return newU
 end=#
 
+function therm_U(β::Float32, s::System)
+    e,v = eigen(s.H_0)
+    #println(e[end]-e[1])
+    U = v*Diagonal(exp.(-β*e))*v'
+    return U
+end
+
 function therm_U(β::Float32, H::Hermitian{ComplexF32, Matrix{ComplexF32}})
     e,v = eigen(H)
-    println(e[end]-e[1])
+    #println(e[end]-e[1])
     U = v*Diagonal(exp.(-β*e))*v'
     return U
 end
 
 function calc_E(st::Vector{ComplexF32}, s::System)
-    st2 = s.H_0*st
-    E = real(st' * st2)/real(st' * st)
+    #st2 = s.H_0*st
+    E = real(dot(st, s.H_0, st))/real(norm(st, 2))
     return E
 end
 
-function init_state(p::Parm, thermoU::Matrix{ComplexF32}, β_it::Int)
+function onestep_thermo!(st::Vector{ComplexF32}, thermoU)
+    st1 = thermoU*st
+    st = normalize(st1, 2)
+    return st
+end
+
+function init_state(p::Parm, thermoU, β_it::Int32)
     st = randn(ComplexF32, p.Ms)
-    st = st/sqrt(st'*st)
+    normalize!(st, 2)
     for it in 1:β_it
-        st = thermoU*st
-        st = st/sqrt(st'*st)
+        st = onestep_thermo!(st, thermoU)
+        #st1 = thermoU*st
+        #st = normalize(st1, 2)
     end
     return st
+end
+
+function smpls(p::Parm, thermoU, β_it::Int32, sample::Int)
+    sts = zeros(ComplexF32, sample, p.Ms)
+    for it in 1:sample
+        sts[it,:] = init_state(p, thermoU, β_it)
+    end
+    return sts
 end
 #=
 function main(ARG)
@@ -334,24 +502,33 @@ function calc_HR_ξdep(ARG, ξ)
     s = init_system(p)
 
     β0 = parse(Float32, ARG[8])
-    β_it = parse(Int, ARG[9])
+    β_it = parse(Int32, ARG[9])
     β = β0*β_it
 
-    hist = parse.(Int, ARG[10:end])
+    #hist = parse.(Int, ARG[10:end])
+    #HFn, Vp, Vm = calc_Hr(p, s, calc_Kt(hist, p, s))
 
-    HFn, Vp, Vm = calc_Hr(p, s, calc_Kt(hist, p, s))
-    thermoU = therm_U(β0, HFn)
+    HFn, Vp, Vm = calc_Hr(p, s, given_Kt(p, s))
+    #thermoU = therm_U(β0, HFn)
+    thermoU = therm_U(β0, s)
     
-    sample = 10
-    sts::Vector{Vector{ComplexF32}} = []
+    sample = 20
+    sts = smpls(p, thermoU, β_it, sample)
+    #=zeros(ComplexF32, sample, p.Ms)
 
     for it in 1:sample
-        st = init_state(p, thermoU, β_it)
-        push!(sts, st)
-    end
+        sts[it,:] = init_state(p, thermoU, β_it)
+    end=#
+    #thermoU = nothing
     #println("states ready!")
 
     κ = calc_HR_p(p, HFn, Vp, β, sts) + calc_HR_m(p, HFn, Vm, β, sts)
+    #=
+    sts = nothing
+    HFn = nothing
+    Vp = nothing
+    Vm = nothing=#
+
     κ = real(κ)
     println("κ = $(κ)")
     return κ
@@ -365,12 +542,13 @@ function calc_HR_βdep(ARG, β_it::Int)
     #β_it = parse(Float32, ARG[9])
     β = β0*β_it
 
-    hist = parse.(Int, ARG[10:end])
+    #hist = parse.(Int, ARG[10:end])
 
-    HFn, Vp, Vm = calc_Hr(p, s, calc_Kt(hist, p, s))
+    #HFn, Vp, Vm = calc_Hr(p, s, calc_Kt(hist, p, s))
+    HFn, Vp, Vm = calc_Hr(p, s, given_Kt(p, s))
     thermoU = therm_U(β0, s)
     
-    sample = 10
+    sample = 20
     sts::Vector{Vector{ComplexF32}} = []
 
     for it in 1:sample
@@ -384,21 +562,28 @@ function calc_HR_βdep(ARG, β_it::Int)
     return κ
 end
 
+
 function main_ξ(ARG)
+    or=3
     κs = []
-    ξs::Vector{Float32} = [0.1f0, 0.2f0, 0.4f0, 0.6f0, 0.8f0, 0.9f0, 1.0f0]
+    ξs::Vector{Float32} = [0.4f0, 0.8f0, 1.0f0, 1.1f0]
+    #[0.1f0, 0.2f0, 0.4f0, 0.8f0, 1.0f0]
+    #[0.1f0, 0.2f0, 0.3f0, 0.6f0, 0.7f0, 0.8f0, 0.9f0, 1.0f0, 1.05f0, 1.1f0]
     for ξ in ξs
         println("===================")
         println("ξ = $(ξ)")
         @time κ = calc_HR_ξdep(ARG, ξ)
         push!(κs, κ)
+        GC.gc()
+        #κ = calc_HR_ξdep(ARG, ξ)
+        #push!(κs, κ)
     end
     println(κs)
     p0 = plot(ξs, κs, linewidth=2.0, marker=:circle, xscale=:log10)
-    savefig(p0, "./HeatingRate_ξdep.png")
-    if(κs[end>0])
+    savefig(p0, "./HeatingRate_ξdep_RF$(or).png")
+    if(κs[end]>0)
         p1 = plot(ξs, κs, linewidth=2.0, marker=:circle, xscale=:log10, yscale=:log10)
-        savefig(p1, "./HeatingRate_ξdep_log.png")
+        savefig(p1, "./HeatingRate_ξdep_RF$(or)_log.png")
     end
 end
 
@@ -408,6 +593,7 @@ function main_β(ARG)
     for β_it in β_its
         κ = calc_HR_ξdep(ARG, β_it)
         push!(κs, κ)
+        
     end
     println(κs)
     p0 = plot(β_its, κs, linewidth=2.0, marker=:circle)
