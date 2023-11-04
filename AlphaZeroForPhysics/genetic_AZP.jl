@@ -47,9 +47,10 @@ function gene_search(args::Vector{String})
             print("#")
         end
         println("")
+        println("scores =  $(score)")
         parm_ind = findmin(score)[2]
         push!(score_itr, score[parm_ind])
-        println("score =  $(score[parm_ind])")
+        println("best_score =  $(score[parm_ind])")
         init_hype = hype_test[parm_ind]
         push!(hype_itr, init_hype)
         println("hype =  $(init_hype)")

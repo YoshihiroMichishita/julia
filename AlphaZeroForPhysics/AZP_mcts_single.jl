@@ -3,7 +3,7 @@
 #include("AZP_agt.jl")
 
 using CUDA
-using Rand
+using Random
 using Distributions
 using StatsBase
 

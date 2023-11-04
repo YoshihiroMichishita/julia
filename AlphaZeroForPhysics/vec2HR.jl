@@ -1,5 +1,9 @@
 using LinearAlgebra
 using Plots
+using SymPy
+
+x = symbols("x")
+sx = sin(x)
 
 struct Parm
     t_step::Int
@@ -178,17 +182,17 @@ function calc_Hr(p::Parm, s::System, Kt)
     Vp = Hermitian(zeros(ComplexF32, p.Ms, p.Ms))
     Vm = Hermitian(zeros(ComplexF32, p.Ms, p.Ms))
     for i in 1:p.t_step
-        t = p.Ω*i*p.dt
+        t = Float32(p.Ω*i*p.dt)
         U = exp(1im*N(Kt.subs(x, t)))
-        HFt = Hermitian(U*(s.H_0 + s.V_t*sin(t)) * U' - 1im* U*(exp(-1im*N(Kt.subs(x, t+p.Ω*p.dt)))-exp(-1im*N(Kt.subs(x, t-p.Ω*p.dt))))/2p.dt)/p.t_step
+        HFt = Hermitian(ComplexF32.(U*(s.H_0 + s.V_t*sin(t)) * U' - 1im* U*(exp(-1im*N(Kt.subs(x, t+p.Ω*p.dt)))-exp(-1im*N(Kt.subs(x, t-p.Ω*p.dt))))/2p.dt))/p.t_step
         HFn += HFt
-        Vp += HFt*exp(1im*p.Ω*i*p.dt)
-        Vm += HFt*exp(-1im*p.Ω*i*p.dt)
+        Vp += HFt*exp(ComplexF32(1im*p.Ω*i*p.dt))
+        Vm += HFt*exp(ComplexF32(-1im*p.Ω*i*p.dt))
     end
     return HFn, Vp, Vm
 end
 
-function calc_HR_p(p::Parm, HFn::Hermitian{ComplexF32, Matrix{ComplexF32}}, Vp::Hermitian{ComplexF32, Matrix{ComplexF32}}, β::Float32, sts::Vector{Vector{ComplexF32}})
+function calc_HR_p(p::Parm, HFn::Hermitian{ComplexF32, Matrix{ComplexF32}}, Vp::Matrix{ComplexF32}, β::Float32, sts::Vector{Vector{ComplexF32}})
     U = exp(Float32(2pi)*1im*HFn/p.t_step)
     Vdp = Hermitian(-1im*(Vp*HFn - HFn*Vp))
     Vt = Vdp
@@ -204,7 +208,7 @@ function calc_HR_p(p::Parm, HFn::Hermitian{ComplexF32, Matrix{ComplexF32}}, Vp::
     return C
 end
 
-function calc_HR_m(p::Parm, HFn::Hermitian{ComplexF32, Matrix{ComplexF32}}, Vm::Hermitian{ComplexF32, Matrix{ComplexF32}}, β::Float32, sts::Vector{Vector{ComplexF32}})
+function calc_HR_m(p::Parm, HFn::Hermitian{ComplexF32, Matrix{ComplexF32}}, Vm::Matrix{ComplexF32}, β::Float32, sts::Vector{Vector{ComplexF32}})
     U = exp(Float32(2pi)*1im*HFn/p.t_step)
     Vdm = Hermitian(-1im*(Vm*HFn - HFn*Vm))
     Vt = Vdm
@@ -228,8 +232,8 @@ function calc_Udt_orig(old_Udt::Matrix,t::Int, p::Parm, s::System)
     return newU
 end=#
 
-function therm_U(β::Float32, s::System)
-    e,v = eigen(s.H_0)
+function therm_U(β::Float32, H::Hermitian{ComplexF32, Matrix{ComplexF32}})
+    e,v = eigen(H)
     println(e[end]-e[1])
     U = v*Diagonal(exp.(-β*e))*v'
     return U
@@ -241,7 +245,7 @@ function calc_E(st::Vector{ComplexF32}, s::System)
     return E
 end
 
-function init_state(p::Parm, thermoU::Matrix{Float32}, β_it::Int)
+function init_state(p::Parm, thermoU::Matrix{ComplexF32}, β_it::Int)
     st = randn(ComplexF32, p.Ms)
     st = st/sqrt(st'*st)
     for it in 1:β_it
@@ -330,13 +334,13 @@ function calc_HR_ξdep(ARG, ξ)
     s = init_system(p)
 
     β0 = parse(Float32, ARG[8])
-    β_it = parse(Float32, ARG[9])
+    β_it = parse(Int, ARG[9])
     β = β0*β_it
 
     hist = parse.(Int, ARG[10:end])
 
     HFn, Vp, Vm = calc_Hr(p, s, calc_Kt(hist, p, s))
-    thermoU = therm_U(β0, s)
+    thermoU = therm_U(β0, HFn)
     
     sample = 10
     sts::Vector{Vector{ComplexF32}} = []
@@ -345,8 +349,10 @@ function calc_HR_ξdep(ARG, ξ)
         st = init_state(p, thermoU, β_it)
         push!(sts, st)
     end
+    #println("states ready!")
 
     κ = calc_HR_p(p, HFn, Vp, β, sts) + calc_HR_m(p, HFn, Vm, β, sts)
+    κ = real(κ)
     println("κ = $(κ)")
     return κ
 end
@@ -373,20 +379,27 @@ function calc_HR_βdep(ARG, β_it::Int)
     end
 
     κ = calc_HR_p(p, HFn, Vp, β, sts) + calc_HR_m(p, HFn, Vm, β, sts)
+    κ = real(κ)
     println("κ = $(κ)")
     return κ
 end
 
 function main_ξ(ARG)
     κs = []
-    ξs::Vector{Float32} = [0.025f0, 0.05f0, 0.1f0, 0.2f0, 0.4f0, 0.8f0, 1.6f0, 3.2f0, 6.4f0]
+    ξs::Vector{Float32} = [0.1f0, 0.2f0, 0.4f0, 0.6f0, 0.8f0, 0.9f0, 1.0f0]
     for ξ in ξs
-        κ = calc_HR_ξdep(ARG, ξ)
+        println("===================")
+        println("ξ = $(ξ)")
+        @time κ = calc_HR_ξdep(ARG, ξ)
         push!(κs, κ)
     end
     println(κs)
-    p0 = plot(ξs, κs, linewidth=2.0, marker=:circle, xscale=:log10, yscale=:log10)
+    p0 = plot(ξs, κs, linewidth=2.0, marker=:circle, xscale=:log10)
     savefig(p0, "./HeatingRate_ξdep.png")
+    if(κs[end>0])
+        p1 = plot(ξs, κs, linewidth=2.0, marker=:circle, xscale=:log10, yscale=:log10)
+        savefig(p1, "./HeatingRate_ξdep_log.png")
+    end
 end
 
 function main_β(ARG)
