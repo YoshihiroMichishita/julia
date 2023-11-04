@@ -129,10 +129,10 @@ end
 function run_selfplay!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32, noise_r::Float32, max_hist::Vector{Float32})
     model = latest_model(storage)
     for it in 1:env.num_player
-        #=
+        
         if(it%(env.num_player/10)==0)
             print("#")
-        end=#
+        end
         #model = gpu(latest_model(storage))
         game = play_physics!(env, model, ratio, noise_r, storage.scores, max_hist)
         save_game!(buffer, game)
@@ -242,8 +242,9 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
                 println("$(hist2eq(game.history)), score:$(score), val(NN):$(val)")
             end
         end
-        val = findmax(storage.scores)[1]
+        val, key = findmax(storage.scores)
         println("max score: $(val)")
+        println(key)
         #if(max_hist[end]>10.0f0)
         #    break
         #end
@@ -255,7 +256,7 @@ end
 function AlphaZero_ForPhysics_hind(env::Env, storage::Storage)
     ld = []
     max_hist::Vector{Float32} = [-12.0f0]
-    itn = 2
+    itn = 3
     ratio = env.ratio
     randr = env.ratio_r
     for it in 1:itn
@@ -296,7 +297,7 @@ function main(args::Vector{String})
     env_fc = init_Env_forcheck(args)
     lds = []
     max_hists = []
-    for dd in 1:5
+    for dd in 1:1
         storage = init_storage(env)
         ld, max_hist, model = AlphaZero_ForPhysics(env, env_fc, storage)
         push!(max_hists, max_hist)

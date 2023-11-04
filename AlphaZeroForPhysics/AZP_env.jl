@@ -257,16 +257,16 @@ function calc_Kt(history::Vector{Int}, env::Env)
     
     #println(Ks)
     if(typeof(Ks)==Matrix{Sym})
-        K0 = N(Ks.subs(x,t[1]))
+        K0 = convert(Matrix{ComplexF32}, Ks.subs(x,t[1]))
+        #N(Ks.subs(x,t[1]))
         #Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(N(Ks.subs(x,t[i]))) for i in 1:env.t_step]
-        Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(N(Ks.subs(x,t[i]))-K0) for i in 1:env.t_step]
+        #Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(N(Ks.subs(x,t[i]))-K0) for i in 1:env.t_step]
+        Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(convert(Matrix{ComplexF32}, Ks.subs(x,t[i]))-K0) for i in 1:env.t_step]
         return Kt
     else
-        Kh::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(Ks) for i in 1:env.t_step]
+        Kh::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(convert(Matrix{ComplexF32}, Ks)) for i in 1:env.t_step]
         return Kh
     end
-    #Kt = [Hermitian(N(Ks.subs(x,t[i]))) for i in 1:env.t_step]
-    
 end
 
 dict = Dict(1=>"H_0 ", 2=>"V(t) ", 3=>"+ ", 4=>"-i[,] ", 5=>"{,}/2 ", 6=>"∱dt ")
