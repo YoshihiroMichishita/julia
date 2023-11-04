@@ -242,8 +242,6 @@ function calc_Kt(history::Vector{Int}, env::Env)
             push!(MV, C)
         elseif(sw==6)
             A = pop!(MV)
-            if(A.subs)
-            
             try
                 S = A.subs(x, t[1])-A.subs(x, t[env.t_step//4])
                 if(S==zeros(env.HS_size, env.HS_size))
