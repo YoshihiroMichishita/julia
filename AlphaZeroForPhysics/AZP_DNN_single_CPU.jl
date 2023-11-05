@@ -140,15 +140,15 @@ function run_selfplay!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::
 end
 
 
-function loss(image::Matrix{Int}, target::Matrix{Float32}, env::Env, model::Chain)
+function loss(image::Matrix{Int}, target::Matrix{Float32}, env::Env, model::Chain, ratio::Float32)
     y1 = model(image)
-    return sum([(((y1[end,i]-target[end,i]))^2 - target[1:end-1,i]' * log.(softmax(y1[1:end-1,i]))) for i in 1:env.batch_size])/env.batch_size
+    return sum([((ratio*(y1[end,i]-target[end,i]))^2 - target[1:end-1,i]' * log.(softmax(y1[1:end-1,i]))) for i in 1:env.batch_size])/env.batch_size
     # + env.C * sum(sqnorm, Flux.params(model))
 end
 
 function loss_check(image::Matrix{Int}, target::Matrix{Float32}, env::Env, model::Chain)
     y1 = model(image)
-    val = sum([(((y1[end,i]-target[end,i]))^2) for i in 1:env.batch_size])/env.batch_size
+    val = sum([((ratio*(y1[end,i]-target[end,i]))^2) for i in 1:env.batch_size])/env.batch_size
     pol = sum([(-target[1:end-1,i]' * log.(softmax(y1[1:end-1,i]))) for i in 1:env.batch_size])/env.batch_size
     return val, pol
     # + env.C * sum(sqnorm, Flux.params(model))
@@ -159,7 +159,7 @@ tanh10(x) = Float32(12)*tanh(x/10)
 tanh2(x) = Float32(4)*tanh(x/4)
 
 #gpu並列化予定
-function train_model!(env::Env, buffer::ReplayBuffer, storage::Storage)
+function train_model!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32)
     #ll = zeros(Float32, env.batch_num)
     ll = zeros(Float32, env.batch_num, env.training_step)
     for b_num in 1:env.batch_num
@@ -178,7 +178,7 @@ function train_model!(env::Env, buffer::ReplayBuffer, storage::Storage)
             end
             image_batch, target_batch = sample_batch!(env, buffer, storage.scores)
             val, grads = Flux.withgradient(Flux.params(model)) do
-                loss(image_batch,target_batch,env,model)
+                loss(image_batch,target_batch,env,model, ratio)
             end
             Flux.Optimise.update!(opt, Flux.params(model), grads)
             ll[b_num, it] = val
@@ -215,14 +215,14 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
             #@time run_selfplay_palss(env, replay_buffer, storage, ratio, randr)
             @time run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
             #@time run_selfplay_pals(env, replay_buffer, storage, ratio, 1.0f0)
-            @time ll = train_model!(env, replay_buffer, storage)
+            @time ll = train_model!(env, replay_buffer, storage, ratio)
         else
             #ratio -= Float32(2.0)
             #randr -= Float32(1.0f-1)
             #ratio = Float32(6.0)
             #@time run_selfplay_palss(env, replay_buffer, storage, ratio, randr)
             @time run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
-            @time ll = train_model!(env, replay_buffer, storage)
+            @time ll = train_model!(env, replay_buffer, storage, ratio)
         end
         #@report_call run_selfplay(env, replay_buffer, storage)
         #ll = @report_call train_model!(env, replay_buffer, storage)
@@ -263,7 +263,7 @@ function AlphaZero_ForPhysics_hind(env::Env, storage::Storage)
         replay_buffer = init_buffer(1200, env.batch_size)
         
         run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
-        ll = train_model!(env, replay_buffer, storage)
+        ll = train_model!(env, replay_buffer, storage, ratio)
 
         push!(ld,ll)
     end
