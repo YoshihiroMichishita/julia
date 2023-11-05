@@ -245,7 +245,8 @@ function calc_Kt(history::Vector{Int}, env::Env)
         elseif(sw==6)
             A = pop!(MV)
             try
-                S = A.subs(x, t[1])-A.subs(x, t[env.t_step//4])
+                S = A.subs(x, t[1])-A.subs(x, t[div(env.t_step,4)])
+                #println(S)
                 if(S==zeros(env.HS_size, env.HS_size))
                     B = A
                 else
@@ -362,5 +363,5 @@ function score_test()
     println(calc_score(history, env))
 end
 
-#score_test()
+score_test()
 
