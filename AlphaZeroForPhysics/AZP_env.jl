@@ -89,7 +89,9 @@ function init_Env(args::Vector{String})
     t_step = parse(Int, args[11])
     HS_size = parse(Int, args[12])
     Ω = parse(Float32, args[13])
+    println("Ω:  $(Ω)")
     ξ = parse(Float32, args[14])
+    println("ξ:  $(ξ)")
     Jz = parse(Float32, args[15])
     Jx = parse(Float32, args[16])
     hz = parse(Float32, args[17])
@@ -243,7 +245,8 @@ function calc_Kt(history::Vector{Int}, env::Env)
         elseif(sw==6)
             A = pop!(MV)
             try
-                S = A.subs(x, t[1])-A.subs(x, t[env.t_step//4])
+                S = A.subs(x, t[1])-A.subs(x, t[div(env.t_step,4)])
+                #println(S)
                 if(S==zeros(env.HS_size, env.HS_size))
                     B = A
                 else
@@ -360,5 +363,5 @@ function score_test()
     println(calc_score(history, env))
 end
 
-#score_test()
+score_test()
 
