@@ -18,6 +18,11 @@ function init_buffer(buffer_size::Int, batch_size::Int)
     return ReplayBuffer([], buffer_size, batch_size, Dict())
 end
 
+function show_buffer(buffer::ReplayBuffer)
+    println("buffer_size: $(length(buffer.buffer))")
+    println("scores: $(length(buffer.scores))")
+end
+
 function save_game!(buffer::ReplayBuffer, agt::Agent)
     if length(buffer.buffer) > buffer.buffer_size
         popfirst!(buffer.buffer)
@@ -29,6 +34,14 @@ mutable struct Storage
     storage::Dict{Int, Chain}
     random_out::Chain
     scores::Dict{Vector{Int}, Float32}
+    scores_size::Int
+end
+
+function save_score!(storage::Storage, history::Vector{Int}, score::Float32)
+    if length(storage.score) > storage.scores_size
+        popfirst!(storage.score)
+    end
+    push!(buffer.buffer, agt)
 end
 
 function init_storage(env)
@@ -227,6 +240,7 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
         #@report_call run_selfplay(env, replay_buffer, storage)
         #ll = @report_call train_model!(env, replay_buffer, storage)
         #println("loss_average: $(ll)")
+        show_buffer(replay_buffer)
         push!(ld,ll)
         println("store data")
         println(length(storage.scores))
@@ -315,14 +329,16 @@ function main(args::Vector{String})
         p0 = plot!(max_hists[i], linewidth=3.0)
     end
     #savefig(p0, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/valMAX_itr_mt$(env.max_turn)_$(date).png")
-    savefig(p0, "/Users/johnbrother/Documents/Codes/julia/AlphaZeroForPhysics/valMAX_itr_mt$(env.max_turn)_$(date).png")
+    #savefig(p0, "/Users/johnbrother/Documents/Codes/julia/AlphaZeroForPhysics/valMAX_itr_mt$(env.max_turn)_$(date).png")
+    savefig(p0, "valMAX_itr_mt$(env.max_turn)_$(date).png")
     
     p = plot(lds[1], yaxis=:log, linewidth=3.0)
     for i in 2:length(lds)
         plot!(lds[i], yaxis=:log, linewidth=3.0)
     end
     #savefig(p, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/loss_valMAX_mt$(env.max_turn)_$(date).png")
-    savefig(p, "/Users/johnbrother/Documents/Codes/julia/AlphaZeroForPhysics/loss_valMAX_mt$(env.max_turn)_$(date).png")
+    #savefig(p, "/Users/johnbrother/Documents/Codes/julia/AlphaZeroForPhysics/loss_valMAX_mt$(env.max_turn)_$(date).png")
+    savefig(p, "loss_valMAX_mt$(env.max_turn)_$(date).png")
     
     println("AlphaZero Finish!")
     #println("loss-dynamics: $(ld)")

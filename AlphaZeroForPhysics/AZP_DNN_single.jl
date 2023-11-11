@@ -17,6 +17,10 @@ function init_buffer(buffer_size::Int, batch_size::Int)
     return ReplayBuffer([], buffer_size, batch_size)
 end
 
+function show_buffer(buffer::ReplayBuffer)
+    println("buffer_size: $(length(buffer.buffer))")
+end
+
 function save_game!(buffer::ReplayBuffer, agt::Agent)
     if length(buffer.buffer) > buffer.buffer_size
         popfirst!(buffer.buffer)
@@ -24,23 +28,7 @@ function save_game!(buffer::ReplayBuffer, agt::Agent)
     push!(buffer.buffer, agt)
 end
 
-mutable struct Storage
-    storage::Dict{Int, Chain}
-    random_out::Chain
-    scores::Dict{Vector{Int}, Float32}
-end
 
-function init_storage(env)
-    return Storage(Dict(), Chain(Dense(zeros(Float32, env.output,env.input_dim))), Dict())
-end
-
-function latest_model(storage::Storage)
-    if(isempty(storage.storage))
-        return storage.random_out
-    else
-        return storage.storage[rand(keys(storage.storage))]
-    end
-end
 
 #=
 function WeightSample(hist::Vector{Int})
@@ -110,6 +98,53 @@ function sample_batch!(env::Env, buffer::ReplayBuffer, scores::Dict{Vector{Int},
     return imag, tar_data
 end
 
+#cpu並列化予定
+function sample_batch!(env::Env, buffer::ReplayBuffer, storage::Storage)
+    games = sample(buffer.buffer, weights([length(agt.history) for agt in buffer.buffer]), env.batch_size, replace=true)
+    g_turn = [(g, WeightSample(g.history)) for g in games]
+
+    if(isempty(storage.scores))
+        imag = zeros(Int, env.input_dim, env.batch_size)
+        target = zeros(Float32, env.output, env.batch_size)
+        for it in 1:env.batch_size
+            g, turn = g_turn[it]
+            imag[:,it] = make_image(env, g, turn)
+            target[:,it] = make_target(env, g, storage, turn)
+        end
+    else
+        imag = zeros(Int, env.input_dim, 4env.batch_size)
+        target = zeros(Float32, env.output, 4env.batch_size)
+        for it in 1:env.batch_size
+            g, turn = g_turn[it]
+            imag[:,it] = make_image(env, g, turn)
+            target[:,it] = make_target(env, g, storage, turn)
+        end
+        for it in 1:3env.batch_size
+            hist = rand(keys(storage.scores))
+            imag[:,env.batch_size+it] = make_image(env, hist)
+            target[end,env.batch_size+it] = storage.scores[hist]
+        end
+    end
+
+    tar_data = copy(target)
+    for it in 1:env.batch_size
+        g, turn = g_turn[it]
+        for l in 1:length(g.history)
+            his = g.history[1:l]
+            if(haskey(storage.scores, his))
+                if(storage.scores[his] < tar_data[end,it])
+                    #println("score_data:$(scores[his]), tar_data:$(tar_data[end,it]), max:$(max(scores[his], tar_data[end,it]))")
+                    storage.scores[his] = tar_data[end,it]
+                end
+                #max(scores[his], tar_data[end,it])
+            else
+                storage.scores[his] = tar_data[end,it]
+            end
+        end
+    end
+    return imag, tar_data
+end
+
 
 #cpu並列化予定
 function run_selfplay(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32, noise_r::Float32)
@@ -127,11 +162,17 @@ end
 function run_selfplay!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32, noise_r::Float32, max_hist::Vector{Float32})
     model = latest_model(storage) |> gpu
     for it in 1:env.num_player
-        if(it%(env.num_player/10)==0)
-            print("#")
+        par = div(env.num_player,10)
+        if(it%par==0)
+            for ii in 1:(11-div(it, par))
+                print("#")
+            end
+            show_buffer(buffer)
+            println("score: $(length(storage.scores))")
+            println("now: $(now())")
         end
         #model = gpu(latest_model(storage))
-        game = play_physics!(env, model, ratio, noise_r, storage.scores, max_hist)
+        game = play_physics!(env, model, ratio, noise_r, storage, max_hist)
         save_game!(buffer, game)
     end
 end
@@ -173,7 +214,8 @@ function train_model!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::F
             if(it%(env.checkpoint_interval)==0)
                 opt = Flux.Optimiser(WeightDecay(env.C), Adam(1f-4))
             end
-            image_batch, target_batch = sample_batch!(env, buffer, storage.scores)
+            #image_batch, target_batch = sample_batch!(env, buffer, storage.scores)
+            image_batch, target_batch = sample_batch!(env, buffer, storage)
             val, grads = Flux.withgradient(Flux.params(model)) do
                 loss(cu(image_batch),target_batch,env,model, ratio)
             end
@@ -258,12 +300,12 @@ function dict_copy(orig::Dict{Vector{Int}, Float32})
     return c_dict
 end
 
-using BSON: @save
-using BSON: @load
+#using BSON: @save
+#using BSON: @load
 using Plots
 ENV["GKSwstype"]="nul"
 
-using JLD2
+#using JLD2
 using FileIO
 
 date = 1104
@@ -275,7 +317,8 @@ function main(args::Vector{String})
     
     max_hists = []
     for dd in 1:3
-        storage = init_storage(env)
+        #storage = init_storage(env)
+        storage = init_storage(env, 1000)
         ld, max_hist, model = AlphaZero_ForPhysics(env, env_fc, storage)
         push!(max_hists, max_hist)
         #string_score = dict_copy(storage.scores)

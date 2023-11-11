@@ -244,6 +244,15 @@ function eval_t!(env::Env, agt::Agent, scores::Dict{Vector{Int}, Float32})
     return value
 end
 
+function eval_t!(env::Env, agt::Agent, storage::Storage)
+    #Y = model(cu(make_image(env, agt, length(agt.history))))
+    #Yc = cpu(Y)
+    value = calc_score(agt.history, env) 
+    #scores[agt.history] = value
+    score_save!(storage, agt.history, value)
+    return value
+end
+
 function run_MCTS(env::Env, agt::Agent, model::Chain)
     root = init_node(Float32(0.0))
     value = evaluate!(env, agt, root, model)
@@ -320,6 +329,39 @@ function run_MCTS!(env::Env, agt::Agent, model::Chain, ratio::Float32, noise_r::
     #return select_action(env, root, agt), root
 end
 
+function run_MCTS!(env::Env, agt::Agent, model::Chain, ratio::Float32, noise_r::Float32, storage::Storage, max_hist::Vector{Float32})
+    root = init_node(Float32(0.0))
+    value = evaluate!(env, agt, root, model)
+    add_exploration_noise!(env, root, noise_r)
+    for it in 1:env.num_simulation
+        node = root
+        scratch = deepcopy(agt)
+        search_path = [node]
+        while(!is_finish(env, scratch) && has_children(node))#has_children(node)
+            #action, node = select_child(env, node, model, ratio)
+            action, node = select_child(env, node, ratio)
+            apply!(env, scratch, action)
+            push!(search_path, node)
+        end
+        if(haskey(storage.scores, scratch.history))
+            value = evaluate!(env, scratch, node, model)
+            value = storage.scores[scratch.history]
+        else
+            if(is_finish(env, scratch))
+                value = eval_t!(env, scratch, storage)
+                max_now = max(max_hist[end], value)
+                push!(max_hist, max_now)
+            else
+                value = evaluate!(env, scratch, node, model)
+            end
+        end
+        #value = evaluate!(env, scratch, node, model)
+        backpropagate!(search_path, value)
+    end
+    return select_action(root), root
+    #return select_action(env, root, agt), root
+end
+
 
 function play_physics!(env::Env, model::Chain)
     agt = init_agt()
@@ -344,6 +386,16 @@ function play_physics!(env::Env, model::Chain, ratio::Float32, noise_r::Float32,
     agt = init_agt()
     while(!is_finish(env, agt))
         action, root = run_MCTS!(env, agt, model, ratio, noise_r, scores, max_hist)
+        apply!(env, agt, action)
+        store_search_statistics!(env, root, agt)
+    end
+    return agt
+end
+
+function play_physics!(env::Env, model::Chain, ratio::Float32, noise_r::Float32, storage::Storage, max_hist::Vector{Float32})
+    agt = init_agt()
+    while(!is_finish(env, agt))
+        action, root = run_MCTS!(env, agt, model, ratio, noise_r, storage, max_hist)
         apply!(env, agt, action)
         store_search_statistics!(env, root, agt)
     end
