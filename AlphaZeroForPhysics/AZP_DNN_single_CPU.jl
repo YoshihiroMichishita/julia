@@ -142,20 +142,20 @@ end
 
 function loss(image::Matrix{Int}, target::Matrix{Float32}, env::Env, model::Chain, ratio::Float32)
     y1 = model(image)
-    return sum([((ratio*(y1[end,i]-target[end,i]))^2 - target[1:end-1,i]' * log.(softmax(y1[1:end-1,i]))) for i in 1:env.batch_size])/env.batch_size
+    return sum([((env.ratio*(y1[end,i]-target[end,i]))^2 - target[1:end-1,i]' * log.(softmax(y1[1:end-1,i]))) for i in 1:env.batch_size])/env.batch_size
     # + env.C * sum(sqnorm, Flux.params(model))
 end
 
 function loss_check(image::Matrix{Int}, target::Matrix{Float32}, env::Env, model::Chain)
     y1 = model(image)
-    val = sum([((ratio*(y1[end,i]-target[end,i]))^2) for i in 1:env.batch_size])/env.batch_size
+    val = sum([((env.ratio*(y1[end,i]-target[end,i]))^2) for i in 1:env.batch_size])/env.batch_size
     pol = sum([(-target[1:end-1,i]' * log.(softmax(y1[1:end-1,i]))) for i in 1:env.batch_size])/env.batch_size
     return val, pol
     # + env.C * sum(sqnorm, Flux.params(model))
 end
 
 
-tanh10(x) = Float32(12)*tanh(x/10)
+tanh10(x) = Float32(15)*tanh(x/10)
 tanh2(x) = Float32(4)*tanh(x/4)
 
 #gpu並列化予定
@@ -235,7 +235,7 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
             model0 = storage.storage[bb]
             println("------------")
             println("head = $(bb);")
-            for tes in 1:5
+            for tes in 1:2
                 game = play_physics!(envf, model0)
                 score = calc_score(game.history, envf)
                 val = model0(make_image(envf, game, length(game.history)))[end, 1]
@@ -260,7 +260,7 @@ function AlphaZero_ForPhysics_hind(env::Env, storage::Storage)
     ratio = env.ratio
     randr = env.ratio_r
     for it in 1:itn
-        replay_buffer = init_buffer(1200, env.batch_size)
+        replay_buffer = init_buffer(600, env.batch_size)
         
         run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
         ll = train_model!(env, replay_buffer, storage, ratio)
@@ -280,15 +280,15 @@ function dict_copy(orig::Dict{Vector{Int}, Float32})
 end
 
 
-using BSON: @save
-using BSON: @load
+#using BSON: @save
+#using BSON: @load
 using Plots
 ENV["GKSwstype"]="nul"
 
 using JLD2
-using FileIO
+#using FileIO
 
-date = 1012
+date = 1105
 
 function main(args::Vector{String})
     #args = ARGS
@@ -297,7 +297,7 @@ function main(args::Vector{String})
     env_fc = init_Env_forcheck(args)
     lds = []
     max_hists = []
-    for dd in 1:1
+    for dd in 1:2
         storage = init_storage(env)
         ld, max_hist, model = AlphaZero_ForPhysics(env, env_fc, storage)
         push!(max_hists, max_hist)
