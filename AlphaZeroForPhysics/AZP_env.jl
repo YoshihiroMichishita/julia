@@ -291,7 +291,8 @@ end
 function legal_action(env::Env, history::Vector{Int}, branch_left::Vector{Int})
     if(isempty(history))
         return [i for i in 1:env.act_ind]
-    elseif(env.max_turn-length(history)<=length(branch_left)+1)
+    #elseif(env.max_turn-length(history)<=length(branch_left)+1)
+    elseif(env.max_turn-length(history)<=length(branch_left)+2)
         return [i for i in 1:env.val_num]
     elseif(history[end]>env.val_num && history[end]<=env.val_num+env.br_num)
         return [i for i in 1:env.act_ind if(i!=history[end])]
@@ -363,5 +364,5 @@ function score_test()
     println(calc_score(history, env))
 end
 
-score_test()
+#score_test()
 
