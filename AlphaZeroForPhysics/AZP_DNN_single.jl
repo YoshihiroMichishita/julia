@@ -164,12 +164,12 @@ function run_selfplay!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::
     for it in 1:env.num_player
         par = div(env.num_player,10)
         if(it%par==0)
-            for ii in 1:(11-div(it, par))
+            for ii in 1:div(it, par)
                 print("#")
             end
-            show_buffer(buffer)
-            println("score: $(length(storage.scores))")
-            println("now: $(now())")
+            #show_buffer(buffer)
+            #println("score: $(length(storage.scores))")
+            #println("now: $(now())")
         end
         #model = gpu(latest_model(storage))
         game = play_physics!(env, model, ratio, noise_r, storage, max_hist)
@@ -318,7 +318,7 @@ function main(args::Vector{String})
     max_hists = []
     for dd in 1:3
         #storage = init_storage(env)
-        storage = init_storage(env, 1000)
+        storage = init_storage(env, 2000)
         ld, max_hist, model = AlphaZero_ForPhysics(env, env_fc, storage)
         push!(max_hists, max_hist)
         #string_score = dict_copy(storage.scores)

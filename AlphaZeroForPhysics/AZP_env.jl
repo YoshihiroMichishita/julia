@@ -343,6 +343,7 @@ function calc_loss(Hr::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}, env::E
 end=#
 
 function calc_score(history::Vector{Int}, env::Env)
+    println("history: $(history)")
     Kt = calc_Kt(history, env)
     Hr = calc_Hr(Kt, env)
     score = calc_loss(Hr, env)
