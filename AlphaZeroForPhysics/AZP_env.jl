@@ -216,7 +216,51 @@ end
 x = symbols("x")
 sx = sin(x)
 
+function calc_Kt_sym(history::Vector{Int}, env::Env)
+    MV = []
+    his = copy(history)
+    #println(length(his))
+    for it in 1:length(his)
+        sw = pop!(his)
+        if(sw==1)
+            push!(MV, env.H_0)
+        elseif(sw==2)
+            push!(MV, env.V_t*sx)
+        elseif(sw==3)
+            A = pop!(MV)
+            B = pop!(MV)
+            C = A + B
+            push!(MV, C)
+        elseif(sw==4)
+            A = pop!(MV)
+            B = pop!(MV)
+            C = -1im*(A*B - B*A)
+            push!(MV, C)
+        elseif(sw==5)
+            A = pop!(MV)
+            B = pop!(MV)
+            C = (A*B + B*A)/2
+            push!(MV, C)
+        elseif(sw==6)
+            A = pop!(MV)
+            try
+                S = A.subs(x, t[1])-A.subs(x, t[env.t_step//4])
+                if(S==zeros(env.HS_size, env.HS_size))
+                    B = A
+                else
+                    B = A.integrate(x)/env.Ω
+                end
+            catch
+                B = A
+            end
+            push!(MV, B)
+        end
+    end
+    return MV[end]
+end
+
 function calc_Kt(history::Vector{Int}, env::Env)
+    #=
     MV = []
     his = copy(history)
     t = collect(0:env.Ω*env.dt:2pi)
@@ -261,14 +305,11 @@ function calc_Kt(history::Vector{Int}, env::Env)
     end
     #t = collect(0:env.Ω*env.dt:2pi)
 
-    Ks = MV[end]
-    
+    Ks = MV[end]=#
+    Ks = calc_Kt_sym(history, env)
     #println(Ks)
     if(typeof(Ks)==Matrix{Sym})
         K0 = convert(Matrix{ComplexF32}, Ks.subs(x,t[1]))
-        #N(Ks.subs(x,t[1]))
-        #Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(N(Ks.subs(x,t[i]))) for i in 1:env.t_step]
-        #Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(N(Ks.subs(x,t[i]))-K0) for i in 1:env.t_step]
         Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(convert(Matrix{ComplexF32}, Ks.subs(x,t[i]))-K0) for i in 1:env.t_step]
         return Kt
     else
@@ -343,7 +384,7 @@ function calc_loss(Hr::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}, env::E
 end=#
 
 function calc_score(history::Vector{Int}, env::Env)
-    println("history: $(history)")
+    #println("history: $(history)")
     Kt = calc_Kt(history, env)
     Hr = calc_Hr(Kt, env)
     score = calc_loss(Hr, env)
