@@ -30,6 +30,8 @@ function save_game!(buffer::ReplayBuffer, agt::Agent)
     push!(buffer.buffer, agt)
 end
 
+
+#=
 mutable struct Storage
     storage::Dict{Int, Chain}
     random_out::Chain
@@ -46,7 +48,7 @@ end
 
 function init_storage(env)
     return Storage(Dict(), Chain(Dense(zeros(Float32, env.output,env.input_dim))), Dict())
-end
+end=#
 
 function latest_model(storage::Storage)
     if(isempty(storage.storage))
@@ -124,6 +126,52 @@ function sample_batch!(env::Env, buffer::ReplayBuffer, scores::Dict{Vector{Int},
     return imag, tar_data
 end
 
+function sample_batch!(env::Env, buffer::ReplayBuffer, storage::Storage)
+    games = sample(buffer.buffer, weights([length(agt.history) for agt in buffer.buffer]), env.batch_size, replace=true)
+    g_turn = [(g, WeightSample(g.history)) for g in games]
+
+    if(isempty(storage.scores))
+        imag = zeros(Int, env.input_dim, env.batch_size)
+        target = zeros(Float32, env.output, env.batch_size)
+        for it in 1:env.batch_size
+            g, turn = g_turn[it]
+            imag[:,it] = make_image(env, g, turn)
+            target[:,it] = make_target(env, g, storage, turn)
+        end
+    else
+        imag = zeros(Int, env.input_dim, 4env.batch_size)
+        target = zeros(Float32, env.output, 4env.batch_size)
+        for it in 1:env.batch_size
+            g, turn = g_turn[it]
+            imag[:,it] = make_image(env, g, turn)
+            target[:,it] = make_target(env, g, storage, turn)
+        end
+        for it in 1:3env.batch_size
+            hist = rand(keys(storage.scores))
+            imag[:,env.batch_size+it] = make_image(env, hist)
+            target[end,env.batch_size+it] = storage.scores[hist]
+        end
+    end
+
+    tar_data = copy(target)
+    for it in 1:env.batch_size
+        g, turn = g_turn[it]
+        for l in 1:length(g.history)
+            his = g.history[1:l]
+            if(haskey(storage.scores, his))
+                if(storage.scores[his] < tar_data[end,it])
+                    #println("score_data:$(scores[his]), tar_data:$(tar_data[end,it]), max:$(max(scores[his], tar_data[end,it]))")
+                    storage.scores[his] = tar_data[end,it]
+                end
+                #max(scores[his], tar_data[end,it])
+            else
+                storage.scores[his] = tar_data[end,it]
+            end
+        end
+    end
+    return imag, tar_data
+end
+
 
 #cpu並列化予定
 function run_selfplay(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32, noise_r::Float32)
@@ -147,7 +195,7 @@ function run_selfplay!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::
             print("#")
         end
         #model = gpu(latest_model(storage))
-        game = play_physics!(env, model, ratio, noise_r, storage.scores, max_hist)
+        game = play_physics!(env, model, ratio, noise_r, storage, max_hist)
         save_game!(buffer, game)
     end
 end
@@ -189,7 +237,7 @@ function train_model!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::F
             if(it%(env.checkpoint_interval)==0)
                 opt = Flux.Optimiser(WeightDecay(env.C), Adam(2f-5))
             end
-            image_batch, target_batch = sample_batch!(env, buffer, storage.scores)
+            image_batch, target_batch = sample_batch!(env, buffer, storage)
             val, grads = Flux.withgradient(Flux.params(model)) do
                 loss(image_batch,target_batch,env,model, ratio)
             end
@@ -274,7 +322,7 @@ function AlphaZero_ForPhysics_hind(env::Env, storage::Storage)
     ratio = env.ratio
     randr = env.ratio_r
     for it in 1:itn
-        replay_buffer = init_buffer(600, env.batch_size)
+        replay_buffer = init_buffer(1500, env.batch_size)
         
         run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
         ll = train_model!(env, replay_buffer, storage, ratio)
@@ -311,8 +359,8 @@ function main(args::Vector{String})
     env_fc = init_Env_forcheck(args)
     lds = []
     max_hists = []
-    for dd in 1:2
-        storage = init_storage(env)
+    for dd in 1:3
+        storage = init_storage(env, 1200)
         ld, max_hist, model = AlphaZero_ForPhysics(env, env_fc, storage)
         push!(max_hists, max_hist)
         push!(lds, ld)
@@ -324,9 +372,9 @@ function main(args::Vector{String})
             println("$(hist2eq(k[i])), $(storage.scores[k[i]])")
         end
     end
-    p0 = plot(max_hists[1], linewidth=3.0)
+    p0 = plot(max_hists[1], linewidth=3.0, xrange=(0,1000))
     for i in 2:length(max_hists)
-        p0 = plot!(max_hists[i], linewidth=3.0)
+        p0 = plot!(max_hists[i], linewidth=3.0, xrange=(0,1000))
     end
     #savefig(p0, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/valMAX_itr_mt$(env.max_turn)_$(date).png")
     #savefig(p0, "/Users/johnbrother/Documents/Codes/julia/AlphaZeroForPhysics/valMAX_itr_mt$(env.max_turn)_$(date).png")

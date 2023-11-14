@@ -213,12 +213,13 @@ function init_Env_quick(args::Vector{String}, hyperparams::Vector{Any})
     return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, ratio, ratio_r, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt, Cb, Ci, C)
 end
 
-x = symbols("x")
+x = symbols("x", real=true)
 sx = sin(x)
 
 function calc_Kt_sym(history::Vector{Int}, env::Env)
     MV = []
     his = copy(history)
+    t = collect(0:env.Ω*env.dt:2pi)
     #println(length(his))
     for it in 1:length(his)
         sw = pop!(his)
@@ -243,20 +244,29 @@ function calc_Kt_sym(history::Vector{Int}, env::Env)
             push!(MV, C)
         elseif(sw==6)
             A = pop!(MV)
+            a1 = sympy.re.(A)
+            a2 = sympy.im.(A)
+            B = (a1.integrate(x) + 1im*a2.integrate(x))/env.Ω
+            #=
             try
-                S = A.subs(x, t[1])-A.subs(x, t[env.t_step//4])
+                S = A.subs(x, t[1])-A.subs(x, t[div(env.t_step,10)])
                 if(S==zeros(env.HS_size, env.HS_size))
                     B = A
                 else
-                    B = A.integrate(x)/env.Ω
+                    a1 = sympy.re.(A)
+                    a2 = sympy.im.(A)
+                    #println("it=$(it): Integral!")
+                    B = (a1.integrate(x) + 1im*a2.integrate(x))/env.Ω
                 end
+                #println("try!$(A)")
             catch
                 B = A
-            end
+            end=#
             push!(MV, B)
         end
+        #println("it=$(it): $(MV[end])")
     end
-    return MV[end]
+    return MV[end], t
 end
 
 function calc_Kt(history::Vector{Int}, env::Env)
@@ -306,7 +316,8 @@ function calc_Kt(history::Vector{Int}, env::Env)
     #t = collect(0:env.Ω*env.dt:2pi)
 
     Ks = MV[end]=#
-    Ks = calc_Kt_sym(history, env)
+    Ks, t = calc_Kt_sym(history, env)
+    
     #println(Ks)
     if(typeof(Ks)==Matrix{Sym})
         K0 = convert(Matrix{ComplexF32}, Ks.subs(x,t[1]))
