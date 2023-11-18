@@ -377,11 +377,12 @@ function calc_loss(Hr::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}, env::E
     score::Float32 = 0.0
     for i in 1:env.t_step
         if(i==1)
-            continue
-        end
-        score += real(tr((Hr[i]-Hr[i-1])^2))
+            score += real(tr((Hr[i]-Hr[end])^2))
+        else
+            score += real(tr((Hr[i]-Hr[i-1])^2))
+        end 
     end
-    return -log(score/env.t_step+1f-10)
+    return -log(score/env.t_step+1f-15)
 end
 #=
 function calc_loss(Hr::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}, env::Env)
