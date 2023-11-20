@@ -66,20 +66,16 @@ end
 
 
 #child_visit_piの計算
+#=
 function store_search_statistics!(env::Env, root::Node, agt::Agent)
     visit_pi = zeros(Float32, env.act_ind)
     actions = Int.(keys(root.children))
     sum_visits = sum([root.children[a].visit_count for a in actions])
     for a in actions
         visit_pi[a] = root.children[a].visit_count/sum_visits
-        if(isnan(visit_pi[a]))
-            println("root.children[a].visit_count: $(root.children[a].visit_count)")
-            println("sum_visits: $(sum_visits)")
-            visit_pi[a] = 1f-6
-        end
     end
     push!(agt.child_visit_pi, visit_pi)
-end
+end=#
 
 
 function add_exploration_noise!(env::Env, node::Node)
@@ -171,12 +167,6 @@ function backpropagate!(search_path::Vector{Node}, value::Float32)
         end
         #元々のalphazeroはこっちで期待値を計算する
         #node.value_sum += value
-        #=
-        if(isnan(node.value_sum))
-            println("value Nan!!!!!!!!")
-            println("value: $(value)")
-            println(node)
-        end=#
         node.visit_count += 1
     end
 end
@@ -363,7 +353,7 @@ function play_physics!(env::Env, model::Chain)
     while(!is_finish(env, agt))
         action, root = run_MCTS(env, agt, model)
         apply!(env, agt, action)
-        store_search_statistics!(env, root, agt)
+        #store_search_statistics!(env, root, agt)
     end
     return agt
 end
@@ -373,7 +363,7 @@ function play_physics!(env::Env, model::Chain, ratio::Float32, noise_r::Float32)
     while(!is_finish(env, agt))
         action, root = run_MCTS(env, agt, model, ratio, noise_r)
         apply!(env, agt, action)
-        store_search_statistics!(env, root, agt)
+        #store_search_statistics!(env, root, agt)
     end
     return agt
 end
@@ -382,7 +372,7 @@ function play_physics!(env::Env, model::Chain, ratio::Float32, noise_r::Float32,
     while(!is_finish(env, agt))
         action, root = run_MCTS!(env, agt, model, ratio, noise_r, scores, max_hist)
         apply!(env, agt, action)
-        store_search_statistics!(env, root, agt)
+        #store_search_statistics!(env, root, agt)
     end
     return agt
 end
@@ -392,7 +382,7 @@ function play_physics!(env::Env, model::Chain, ratio::Float32, noise_r::Float32,
     while(!is_finish(env, agt))
         action, root = run_MCTS!(env, agt, model, ratio, noise_r, storage, max_hist)
         apply!(env, agt, action)
-        store_search_statistics!(env, root, agt)
+        #store_search_statistics!(env, root, agt)
     end
     return agt
 end
