@@ -159,6 +159,8 @@ function run_selfplay(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::F
     end
 end
 
+lmax_hist::Int = 2100
+
 function run_selfplay!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32, noise_r::Float32, max_hist::Vector{Float32})
     model = latest_model(storage) |> gpu
     for it in 1:env.num_player
@@ -174,6 +176,11 @@ function run_selfplay!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::
         #model = gpu(latest_model(storage))
         game = play_physics!(env, model, ratio, noise_r, storage, max_hist)
         save_game!(buffer, game)
+        if(length(max_hist)>lmax_hist)
+            println("max_hist: $(max_hist[end])")
+            println("lmax_hist: $(lmax_hist)")
+            break
+        end
     end
 end
 
@@ -199,7 +206,7 @@ tanh2(x) = Float32(4)*tanh(x/4)
 #gpu並列化予定
 function train_model!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32)
     #ll = zeros(Float32, env.batch_num)
-    ll = zeros(Float32, env.batch_num, env.training_step)
+    ll = zeros(Float32, env.training_step)
     for b_num in 1:env.batch_num
         if(haskey(storage.storage, b_num))
             model = storage.storage[b_num] |> gpu
@@ -220,7 +227,7 @@ function train_model!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::F
                 loss(cu(image_batch),target_batch,env,model, ratio)
             end
             Flux.Optimise.update!(opt, Flux.params(model), grads)
-            ll[b_num, it] = val
+            ll[it] = val
             if(it > env.training_step-6)
                 val, pol = loss_check(cu(image_batch),target_batch,env,model, ratio)
                 println("val=$(val), pol=$(pol)")
@@ -237,7 +244,7 @@ end
 function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
     ld = []
     max_hist::Vector{Float32} = [-12.0f0]
-    itn = 4
+    itn = 6
     lastit = 0
     ratio = env.ratio
     randr = env.ratio_r
@@ -247,21 +254,8 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
 
         replay_buffer = init_buffer(1200, env.batch_size)
         
-        if(it<5)
-            #ratio -= Float32(1.0)
-            #randr -= Float32(1.0f-1)
-            #@time run_selfplay_palss(env, replay_buffer, storage, ratio, randr)
-            @time run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
-            #@time run_selfplay_pals(env, replay_buffer, storage, ratio, 1.0f0)
-            @time ll = train_model!(env, replay_buffer, storage, ratio)
-        else
-            #ratio -= Float32(2.0)
-            #randr -= Float32(1.0f-1)
-            #ratio = Float32(6.0)
-            #@time run_selfplay_palss(env, replay_buffer, storage, ratio, randr)
-            @time run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
-            @time ll = train_model!(env, replay_buffer, storage, ratio)
-        end
+        @time run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
+        @time ll = train_model!(env, replay_buffer, storage, ratio)
         #@report_call run_selfplay(env, replay_buffer, storage)
         #ll = @report_call train_model!(env, replay_buffer, storage)
         #println("loss_average: $(ll)")
@@ -284,9 +278,9 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
         end=#
         val, hist = findmax(storage.scores)
         println("max score: $(val);  hist: $(hist2eq(hist))")
-        #if(max_hist[end]>10.0f0)
-        #    break
-        #end
+        if(length(max_hist)>lmax_hist)
+            break
+        end
     end
     
     return ld, max_hist, latest_model(storage)
@@ -304,11 +298,14 @@ end
 #using BSON: @load
 using Plots
 ENV["GKSwstype"]="nul"
+Plots.scalefontsizes(1.3)
 
 #using JLD2
-using FileIO
+#using FileIO
+using DataFrames
+using CSV
 
-date = 1104
+date = 1119
 
 function main(args::Vector{String})
     println("Start! at $(now())")
@@ -316,25 +313,27 @@ function main(args::Vector{String})
     env_fc = init_Env_forcheck(args)
     
     max_hists = []
-    for dd in 1:3
+    for dd in 1:5
         #storage = init_storage(env)
         storage = init_storage(env, 2000)
         ld, max_hist, model = AlphaZero_ForPhysics(env, env_fc, storage)
         push!(max_hists, max_hist)
         #string_score = dict_copy(storage.scores)
-        #=
+        
         k = [keys(storage.scores)...]
         inds = findall(s -> storage.scores[s] == findmax(storage.scores)[1], k)
         println("max score:")
         for i in inds
             println("$(hist2eq(k[i])), $(storage.scores[k[i]])")
-        end=#
+        end
     end
-    p0 = plot(max_hists[1], linewidth=3.0)
+    p0 = plot(max_hists[1], linewidth=3.0, xaxis=:log, xrange=(1,lmax_hist))
     for i in 2:length(max_hists)
-        p0 = plot!(max_hists[i], linewidth=3.0)
+        p0 = plot!(max_hists[i], linewidth=3.0, xaxis=:log, xrange=(1,lmax_hist))
     end
     savefig(p0, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/valMAX_itr_mt$(env.max_turn)_$(date).png")
+    save_data = DataFrame(hist1=max_hists[1][1:lmax_hist-100],hist2=max_hists[2][1:lmax_hist-100],hist3=max_hists[3][1:lmax_hist-100],hist4=max_hists[4][1:lmax_hist-100],hist5=max_hists[5][1:lmax_hist-100])
+    CSV.write("./hists_mt$(env.max_turn)_$(date).csv", save_data)
     println("AlphaZero Finish!")
     
 end
