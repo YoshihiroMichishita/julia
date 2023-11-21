@@ -159,7 +159,7 @@ function run_selfplay(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::F
     end
 end
 
-lmax_hist::Int = 2100
+lmax_hist::Int = 5100
 
 function run_selfplay!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32, noise_r::Float32, max_hist::Vector{Float32})
     model = latest_model(storage) |> gpu
@@ -305,7 +305,7 @@ Plots.scalefontsizes(1.3)
 using DataFrames
 using CSV
 
-date = 1119
+date = 1122
 
 function main(args::Vector{String})
     println("Start! at $(now())")
@@ -327,9 +327,9 @@ function main(args::Vector{String})
             println("$(hist2eq(k[i])), $(storage.scores[k[i]])")
         end
     end
-    p0 = plot(max_hists[1], linewidth=3.0, xaxis=:log, xrange=(1,lmax_hist))
+    p0 = plot(max_hists[1], linewidth=3.0, xaxis=:log, xrange=(1,lmax_hist), yrange=(0,12))
     for i in 2:length(max_hists)
-        p0 = plot!(max_hists[i], linewidth=3.0, xaxis=:log, xrange=(1,lmax_hist))
+        p0 = plot!(max_hists[i], linewidth=3.0, xaxis=:log, xrange=(1,lmax_hist), yrange=(0,12))
     end
     savefig(p0, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/valMAX_itr_mt$(env.max_turn)_$(date).png")
     save_data = DataFrame(hist1=max_hists[1][1:lmax_hist-100],hist2=max_hists[2][1:lmax_hist-100],hist3=max_hists[3][1:lmax_hist-100],hist4=max_hists[4][1:lmax_hist-100],hist5=max_hists[5][1:lmax_hist-100])

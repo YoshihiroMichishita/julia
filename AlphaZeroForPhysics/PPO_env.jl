@@ -189,12 +189,67 @@ function init_Env_quick(args::Vector{String}, hyperparams::Vector{Float32})
     return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, γ, λ, ϵ, E, η, num_simulation, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt)
 end
 
-x = symbols("x")
+x = symbols("x", real=true)
 sx = sin(x)
 
-function calc_Kt(history::Vector{Int}, env::Env)
+function calc_Kt_sym(history::Vector{Int}, env::Env)
     MV = []
     his = copy(history)
+    t = collect(0:env.Ω*env.dt:2pi)
+    #println(length(his))
+    for it in 1:length(his)
+        sw = pop!(his)
+        if(sw==1)
+            push!(MV, env.H_0)
+        elseif(sw==2)
+            push!(MV, env.V_t*sx)
+        elseif(sw==3)
+            A = pop!(MV)
+            B = pop!(MV)
+            C = A + B
+            push!(MV, C)
+        elseif(sw==4)
+            A = pop!(MV)
+            B = pop!(MV)
+            C = -1im*(A*B - B*A)
+            push!(MV, C)
+        elseif(sw==5)
+            A = pop!(MV)
+            B = pop!(MV)
+            C = (A*B + B*A)/2
+            push!(MV, C)
+        elseif(sw==6)
+            A = pop!(MV)
+            a1 = sympy.re.(A)
+            a2 = sympy.im.(A)
+            B = (a1.integrate(x) + 1im*a2.integrate(x))/env.Ω
+            #=
+            try
+                S = A.subs(x, t[1])-A.subs(x, t[div(env.t_step,10)])
+                if(S==zeros(env.HS_size, env.HS_size))
+                    B = A
+                else
+                    a1 = sympy.re.(A)
+                    a2 = sympy.im.(A)
+                    #println("it=$(it): Integral!")
+                    B = (a1.integrate(x) + 1im*a2.integrate(x))/env.Ω
+                end
+                #println("try!$(A)")
+            catch
+                B = A
+            end=#
+            push!(MV, B)
+        end
+        #println("it=$(it): $(MV[end])")
+    end
+    return MV[end], t
+end
+
+function calc_Kt(history::Vector{Int}, env::Env)
+    #=
+    MV = []
+    his = copy(history)
+    t = collect(0:env.Ω*env.dt:2pi)
     #println(length(his))
     for it in 1:length(his)
         sw = pop!(his)
@@ -220,8 +275,13 @@ function calc_Kt(history::Vector{Int}, env::Env)
         elseif(sw==6)
             A = pop!(MV)
             try
-                #B = A.integrate((x, 0, x))/env.Ω
-                B = A.integrate(x)/env.Ω
+                S = A.subs(x, t[1])-A.subs(x, t[div(env.t_step,4)])
+                #println(S)
+                if(S==zeros(env.HS_size, env.HS_size))
+                    B = A
+                else
+                    B = A.integrate(x)/env.Ω
+                end
             catch
                 B = A
             end
@@ -229,22 +289,20 @@ function calc_Kt(history::Vector{Int}, env::Env)
         end
         #@show MV
     end
-    t = collect(0:env.Ω*env.dt:2pi)
+    #t = collect(0:env.Ω*env.dt:2pi)
 
-    Ks = MV[end]
+    Ks = MV[end]=#
+    Ks, t = calc_Kt_sym(history, env)
     
     #println(Ks)
     if(typeof(Ks)==Matrix{Sym})
-        K0 = N(Ks.subs(x,t[1]))
-        #Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(N(Ks.subs(x,t[i]))) for i in 1:env.t_step]
-        Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(N(Ks.subs(x,t[i]))-K0) for i in 1:env.t_step]
+        K0 = convert(Matrix{ComplexF32}, Ks.subs(x,t[1]))
+        Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(convert(Matrix{ComplexF32}, Ks.subs(x,t[i]))-K0) for i in 1:env.t_step]
         return Kt
     else
-        Kh::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(Ks) for i in 1:env.t_step]
+        Kh::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(convert(Matrix{ComplexF32}, Ks)) for i in 1:env.t_step]
         return Kh
     end
-    #Kt = [Hermitian(N(Ks.subs(x,t[i]))) for i in 1:env.t_step]
-    
 end
 
 dict = Dict(1=>"H_0 ", 2=>"V(t) ", 3=>"+ ", 4=>"-i[,] ", 5=>"{,}/2 ", 6=>"∱dt ")

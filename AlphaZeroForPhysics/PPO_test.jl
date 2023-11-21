@@ -274,7 +274,7 @@ ENV["GKSwstype"]="nul"
 using JLD2
 using FileIO
 =#
-date = 930
+date = 1121
 
 function PPO(args::Vector{String})
     #args = ARGS
@@ -305,23 +305,26 @@ function PPO(args::Vector{String})
     for i in 2:dist
         p0 = plot!(max_hists[i], linewidth=3.0)
     end
-    savefig(p0, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/PPO_valMAX_itr_mt$(env.max_turn)_$(date).png")
+    savefig(p0, "./PPO_valMAX_itr_mt$(env.max_turn)_$(date).png")
 
     p1 = plot(lds[1], linewidth=3.0)
     for i in 2:dist
         p1 = plot!(lds[i], linewidth=3.0)
     end
-    savefig(p1, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/PPO_loss_itr_mt$(env.max_turn)_$(date).png")
+    savefig(p1, "./PPO_loss_itr_mt$(env.max_turn)_$(date).png")
 
     p2 = plot(max_hists[1], linewidth=3.0, xrange=(0,400))
     for i in 2:dist
         p2 = plot!(max_hists[i], linewidth=3.0)
     end
-    savefig(p2, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/PPO_valMAX_zoom_mt$(env.max_turn)_$(date).png")
+    savefig(p2, "./PPO_valMAX_zoom_mt$(env.max_turn)_$(date).png")
+
+    save_data = DataFrame(hist1=max_hists[1][1:2000],hist2=max_hists[2][1:2000],hist3=max_hists[3][1:2000],hist4=max_hists[4][1:2000],hist5=max_hists[5][1:2000])
+    CSV.write("./PPO_hists_mt$(env.max_turn)_$(date).csv", save_data)
 
     println("PPO Finish!")
 end
 
 
 
-#@time PPO(ARGS)
+@time PPO(ARGS)
