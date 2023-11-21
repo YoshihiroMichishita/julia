@@ -104,8 +104,8 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
                 println("$(hist2eq(game.history)), score:$(score), val(NN):$(val)")
             end
         end=#
-        val, hist = findmax(storage.scores)
-        println("max score: $(val);  hist: $(hist2eq(hist))")
+        #val, hist = findmax(storage.scores)
+        #println("max score: $(val);  hist: $(hist2eq(hist))")
         if(length(max_hist)>lmax_hist)
             break
         end
@@ -161,7 +161,7 @@ function main(args::Vector{String})
     for i in 2:length(max_hists)
         p0 = plot!(max_hists[i], linewidth=3.0, xaxis=:log, xrange=(1,lmax_hist))
     end
-    savefig(p0, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/valMAX_woNN_itr_mt$(env.max_turn)_$(date).png")
+    savefig(p0, "./valMAX_woNN_itr_mt$(env.max_turn)_$(date).png")
     save_data = DataFrame(hist1=max_hists[1][1:lmin_hist],hist2=max_hists[2][1:lmin_hist],hist3=max_hists[3][1:lmin_hist],hist4=max_hists[4][1:lmin_hist],hist5=max_hists[5][1:lmin_hist])
     CSV.write("./hists_woNN_mt$(env.max_turn)_$(date).csv", save_data)
     println("AlphaZero Finish!")

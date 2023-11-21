@@ -2,7 +2,7 @@
 #include("AZP_env_manychoice.jl")
 #include("AZP_agt.jl")
 
-using CUDA
+#using CUDA
 using Random
 using Distributions
 using StatsBase
