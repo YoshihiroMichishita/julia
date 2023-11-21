@@ -18,14 +18,13 @@ function init_agt()
 end
 
 mutable struct Storage
-    storage::Dict{Int, Chain}
-    random_out::Chain
     scores::Dict{Vector{Int}, Float32}
     scores_size::Int
+    tp_trees::Dict{Vector{Int}, Float32}
 end
 
-function init_storage(env, size::Int)
-    return Storage(Dict(), Chain(Dense(zeros(Float32, env.output,env.input_dim))), Dict(), size)
+function init_storage(size::Int)
+    return Storage(Dict(), size, Dict())
 end
 
 function score_save!(storage::Storage, hist::Vector{Int}, score::Float32)
@@ -35,13 +34,14 @@ function score_save!(storage::Storage, hist::Vector{Int}, score::Float32)
     storage.scores[hist] = score
 end
 
-function latest_model(storage::Storage)
-    if(isempty(storage.storage))
-        return storage.random_out
-    else
-        return storage.storage[rand(keys(storage.storage))]
+function tp_trees_update!(storage::Storage, hist::Vector{Int}, score::Float32)
+    if(length(storage.tp_trees)=5)
+        pop!(storage.tp_trees, collect(keys(storage.tp_trees))[end])
     end
+    storage.tp_trees[hist] = score
+    sort!(storage.tp_trees,)
 end
+
 
 function calc_score_his(history::Vector{Int}, env::Env, scores::Dict{Vector{Int}, Float32})
     if haskey(scores, history)
