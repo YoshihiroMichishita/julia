@@ -264,13 +264,13 @@ function AlphaZero_ForPhysics_hind(env::Env)
     
     return ld, max_hist, model, replay_buffer.scores
 end
-#=
-using BSON: @save
-using BSON: @load
+
+#using BSON: @save
+#using BSON: @load
 using Plots
 ENV["GKSwstype"]="nul"
 
-
+#=
 using JLD2
 using FileIO
 =#
@@ -312,13 +312,6 @@ function PPO(args::Vector{String})
         p1 = plot!(lds[i], linewidth=3.0)
     end
     savefig(p1, "./PPO_loss_itr_mt$(env.max_turn)_$(date).png")
-
-    #=
-    p2 = plot(max_hists[1], linewidth=3.0, xrange=(0,400))
-    for i in 2:dist
-        p2 = plot!(max_hists[i], linewidth=3.0)
-    end
-    savefig(p2, "./PPO_valMAX_zoom_mt$(env.max_turn)_$(date).png")=#
 
     save_data = DataFrame(hist1=max_hists[1][1:2000],hist2=max_hists[2][1:2000],hist3=max_hists[3][1:2000],hist4=max_hists[4][1:2000],hist5=max_hists[5][1:2000])
     CSV.write("./PPO_hists_mt$(env.max_turn)_$(date).csv", save_data)
