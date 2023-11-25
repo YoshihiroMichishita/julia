@@ -159,7 +159,7 @@ function run_selfplay(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::F
     end
 end
 
-lmax_hist::Int = 5100
+lmax_hist::Int = 1600
 
 function run_selfplay!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32, noise_r::Float32, max_hist::Vector{Float32})
     model = latest_model(storage) |> gpu
@@ -305,7 +305,7 @@ Plots.scalefontsizes(1.3)
 using DataFrames
 using CSV
 
-date = 1122
+date = 1123
 
 function main(args::Vector{String})
     println("Start! at $(now())")
