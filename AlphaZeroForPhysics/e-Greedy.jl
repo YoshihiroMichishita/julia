@@ -1,7 +1,7 @@
 include("AZP_env.jl")
 include("AZP_agt.jl")
 
-using CUDA
+#using CUDA
 using Distributions
 using StatsBase
 
@@ -177,6 +177,7 @@ end
 
 using Plots
 ENV["GKSwstype"]="nul"
+date=1124
 
 function main(args::Vector{String})
     #args = ARGS
@@ -198,11 +199,11 @@ function main(args::Vector{String})
         #max_values[:, it] = mv
     end
     
-    p = plot(max_values[1], linewidth=2.0, yrange=(-12,12))
+    p = plot(max_values[1], linewidth=2.0, xaxis=:log, xticks=([1, 10, 100, 1000]), yrange=(0,12))
     for it in 2:tes
         p=plot!(max_values[it], linewidth=2.0) 
     end
-    savefig(p, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/ϵ-greedy_ValItr_n$(env.num_simulation)_η$(env.frac)_$(tes).png")
+    savefig(p, "./ϵ-greedy_ValItr_n$(env.num_simulation)_η$(env.frac)_$(date).png")
 end
   
 @time main(ARGS)
