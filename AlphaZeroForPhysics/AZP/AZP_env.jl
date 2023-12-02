@@ -1,9 +1,12 @@
 ###########################
 #You can utilyze Alpha Zero for Physics just by rewriting this env code for your problems. What you have to consider are just setting of the scores and defining of the function, branch, and variable nodes.  
 ###########################
+
 using LinearAlgebra
 using Flux
-using SymPy
+using SymPy #DO NOT USE VER:2.0.1!!!!! THIS CODE DOES NOT WORK!!!!!!!!! PLEASE USE VER:1.2.1. Pkg> add SymPy@1.2.1
+
+#ENV["PYTHON"] = "/Users/johnbrother/miniforge3/envs/p310/bin/python"
 
 
 struct Env
