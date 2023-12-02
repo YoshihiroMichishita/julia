@@ -177,7 +177,8 @@ end
 
 using Plots
 ENV["GKSwstype"]="nul"
-date=1124
+Plots.scalefontsizes(1.3)
+date=1201
 
 function main(args::Vector{String})
     #args = ARGS
@@ -199,9 +200,9 @@ function main(args::Vector{String})
         #max_values[:, it] = mv
     end
     
-    p = plot(max_values[1], linewidth=2.0, xaxis=:log, xticks=([1, 10, 100, 1000]), yrange=(0,12), label="trial1")
+    p = plot(max_values[1],gridwidth=2.0, linewidth=3.0, xaxis=:log, xticks=([1, 10, 100, 1000]), yrange=(0,12), label="trial1")
     for it in 2:tes
-        p=plot!(max_values[it], linewidth=2.0, label="trial$(it)") 
+        p=plot!(max_values[it], linewidth=3.0, label="trial$(it)") 
     end
     savefig(p, "./ϵ-greedy_ValItr_n$(env.num_simulation)_η$(env.frac)_$(date).png")
 end
