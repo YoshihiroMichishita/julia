@@ -1,3 +1,6 @@
+###########################
+#You can utilyze Alpha Zero for Physics just by rewriting this env code for your problems. What you have to consider are just setting of the scores and defining of the function, branch, and variable nodes.  
+###########################
 using LinearAlgebra
 using Flux
 using SymPy
@@ -340,6 +343,7 @@ function hist2eq(history::Vector{Int})
     return S
 end
 
+#Rule of AZfP
 function legal_action(env::Env, history::Vector{Int}, branch_left::Vector{Int})
     if(isempty(history))
         return [i for i in 1:env.act_ind]
@@ -384,16 +388,6 @@ function calc_loss(Hr::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}, env::E
     end
     return -log(score/env.t_step+1f-15)
 end
-#=
-function calc_loss(Hr::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}, env::Env)
-    score::Float32 = 0.0
-    for i in 1:env.t_step
-        for j in 1:env.t_step
-            score += real(tr((Hr[i]-Hr[j])^2))/env.t_step
-        end
-    end
-    return -score+Float32(1.0)
-end=#
 
 function calc_score(history::Vector{Int}, env::Env)
     #println("history: $(history)")

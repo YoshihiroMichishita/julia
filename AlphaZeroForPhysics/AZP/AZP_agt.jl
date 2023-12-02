@@ -17,6 +17,7 @@ function init_agt()
     return Agent([], [], [-1], [], 0)
 end
 
+#save the recent scores
 mutable struct Storage
     storage::Dict{Int, Chain}
     random_out::Chain
@@ -43,6 +44,7 @@ function latest_model(storage::Storage)
     end
 end
 
+#make image for training batch.
 function make_image(env::Env, agt::Agent, turn::Int)
     input_data = zeros(Int, env.input_dim, 1)
     for act_ind in 1:env.act_ind
@@ -75,10 +77,12 @@ function make_image(env::Env, history::Vector{Int})
     return input_data
 end
 
+#make target for training batch
 function make_target(env::Env,agt::Agent, turn::Int)
     return [agt.child_visit_pi[turn]; calc_score(agt.history, env)]
 end
 
+#calcuate the score of the game (equation) by using memory of recent scores
 function calc_score_his(history::Vector{Int}, env::Env, scores::Dict{Vector{Int}, Float32})
     if haskey(scores, history)
         return scores[history]

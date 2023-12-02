@@ -1,6 +1,3 @@
-#include("AZP_env.jl")
-#include("AZP_env_manychoice.jl")
-#include("AZP_agt.jl")
 
 using Distributions
 using StatsBase
@@ -30,7 +27,7 @@ function st_value(node::Node)
 end
 
 
-#finishの判定
+#Judging whether the game finishes.
 function is_finish(env::Env, agt::Agent)
     #max_turnに達したか、branchがなくなって最後のstateがval_numに達したか
     #return env.max_turn == length(agt.history) || (length(agt.branch_left) == 0 && agt.history[end]<=env.val_num)
@@ -54,7 +51,7 @@ function legal_action(env::Env, agt::Agent)
     end
 end
 =#
-#historyにactionを追加し、branch_leftを更新
+#push action to history, and update branch_left
 function apply!(env::Env, agt::Agent, act::Int)
     push!(agt.history, act)
     if act <= env.val_num
@@ -77,7 +74,7 @@ function store_search_statistics!(env::Env, root::Node, agt::Agent)
     push!(agt.child_visit_pi, visit_pi)
 end=#
 
-
+#adding the Dirichlet noise for exploration.
 function add_exploration_noise!(env::Env, node::Node)
     actions = Int.(keys(node.children))
     noise = rand(Dirichlet(env.α * ones(Float32, length(actions))))
@@ -89,7 +86,7 @@ function add_exploration_noise!(env::Env, node::Node)
     end
 end
 
-#良くないかも
+#
 function add_exploration_noise!(env::Env, node::Node, ratio::Float32)
     actions = Int.(keys(node.children))
     noise = rand(Dirichlet(env.α * ones(Float32, length(actions))))
@@ -101,7 +98,7 @@ function add_exploration_noise!(env::Env, node::Node, ratio::Float32)
     end
 end
 
-#valueを正規化するべし=>すると正規化のnormを更新する回での挙動が微妙なはず。今回はやめておく(回避方法はありそう)
+#ucb
 function ucb_score(env::Env, parent::Node, child::Node)
     pb_c = log((parent.visit_count + env.Cb + 1) / env.Cb) + env.Ci
     pb_c *= sqrt(parent.visit_count) / (child.visit_count + 1)
@@ -114,6 +111,7 @@ function ucb_score(env::Env, parent::Node, child::Node)
     #return prior_score + value_score
 end
 
+#ucb(value is normalized)
 function ucb_score(env::Env, parent::Node, child::Node, ratio::Float32)
     pb_c = log((parent.visit_count + env.Cb + 1) / env.Cb) + env.Ci
     pb_c *= sqrt(parent.visit_count) / (child.visit_count + 1)

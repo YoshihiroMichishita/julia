@@ -1,11 +1,10 @@
 using Dates
 
-#include("AZP_env.jl")
 include("AZP_env.jl")
 include("AZP_agt.jl")
 include("AZP_mcts_single_CPU.jl")
 
-#1局1局の情報をストックする
+#Stock the games in serious trials. 
 mutable struct ReplayBuffer
     buffer::Vector{Agent}
     buffer_size::Int
@@ -14,6 +13,7 @@ mutable struct ReplayBuffer
     #count::Int
 end
 
+#initialization(Constructor)
 function init_buffer(buffer_size::Int, batch_size::Int)
     return ReplayBuffer([], buffer_size, batch_size, Dict())
 end
@@ -23,7 +23,9 @@ function show_buffer(buffer::ReplayBuffer)
     println("scores: $(length(buffer.scores))")
 end
 
+#save games in buffer
 function save_game!(buffer::ReplayBuffer, agt::Agent)
+    #if size of the games saved in buffer is larger than its maximum, delete a date for a old game.
     if length(buffer.buffer) > buffer.buffer_size
         popfirst!(buffer.buffer)
     end
@@ -50,13 +52,14 @@ function init_storage(env)
     return Storage(Dict(), Chain(Dense(zeros(Float32, env.output,env.input_dim))), Dict())
 end=#
 
+#=
 function latest_model(storage::Storage)
     if(isempty(storage.storage))
         return storage.random_out
     else
         return storage.storage[rand(keys(storage.storage))]
     end
-end
+end=#
 
 #=
 function WeightSample(hist::Vector{Int})
@@ -66,12 +69,14 @@ function WeightSample(hist::Vector{Int})
     return sample(s, ProbabilityWeights(ww))
 end=#
 
+#we can weight the probability of sampling the experience from the buffer as the difference between the true value and estimated value is large.(Prioritzed Experience Replay)
 function WeightSample(hist::Vector{Int})
     s = [i for i in 1:length(hist)]
     w = [2^i for i in 1:length(hist)]
     ww = w/sum(w)
     return sample(s, ProbabilityWeights(ww))
 end
+
 function WeightSample(agt::Agent)
     s = [i for i in 1:length(agt.history)]
     w = agt.surprise
@@ -79,7 +84,7 @@ function WeightSample(agt::Agent)
     return sample(s, ProbabilityWeights(ww))
 end
 
-#cpu並列化予定
+#Sampling situations of the games and its statistics form the buffer.
 function sample_batch!(env::Env, buffer::ReplayBuffer, scores::Dict{Vector{Int}, Float32})
     games = sample(buffer.buffer, weights([length(agt.history) for agt in buffer.buffer]), env.batch_size, replace=true)
     g_turn = [(g, WeightSample(g.history)) for g in games]
@@ -173,7 +178,7 @@ function sample_batch!(env::Env, buffer::ReplayBuffer, storage::Storage)
 end
 
 
-#cpu並列化予定
+#Play and save the game by AZfP
 function run_selfplay(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32, noise_r::Float32)
     model = latest_model(storage)
     for it in 1:env.num_player
@@ -204,7 +209,7 @@ function run_selfplay!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::
 end
 
 
-function loss(image::Matrix{Int}, target::Matrix{Float32}, env::Env, model::Chain, ratio::Float32)
+function loss(image::Matrix{Int}, target::Matrix{Float32}, env::Env, model::Chain)
     y1 = model(image)
     return sum([((env.ratio*(y1[end,i]-target[end,i]))^2 - target[1:end-1,i]' * log.(softmax(y1[1:end-1,i]))) for i in 1:env.batch_size])/env.batch_size
     # + env.C * sum(sqnorm, Flux.params(model))
@@ -222,8 +227,8 @@ end
 tanh10(x) = Float32(15)*tanh(x/10)
 tanh2(x) = Float32(4)*tanh(x/4)
 
-#gpu並列化予定
-function train_model!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32)
+#training
+function train_model!(env::Env, buffer::ReplayBuffer, storage::Storage)
     ll = zeros(Float32, env.training_step)
     #ll = zeros(Float32, env.batch_num, env.training_step)
     for b_num in 1:env.batch_num
@@ -242,7 +247,7 @@ function train_model!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::F
             end
             image_batch, target_batch = sample_batch!(env, buffer, storage)
             val, grads = Flux.withgradient(Flux.params(model)) do
-                loss(image_batch,target_batch,env,model, ratio)
+                loss(image_batch,target_batch,env,model)
             end
             Flux.Optimise.update!(opt, Flux.params(model), grads)
             ll[it] = val
@@ -259,7 +264,6 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
     ld = []
     max_hist::Vector{Float32} = [-12.0f0]
     itn = 4
-    lastit = 0
     ratio = env.ratio
     randr = env.ratio_r
     for it in 1:itn
@@ -270,7 +274,7 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
         
         if(it<5)
             @time run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
-            @time ll = train_model!(env, replay_buffer, storage, ratio)
+            @time ll = train_model!(env, replay_buffer, storage)
         else
             #ratio -= Float32(2.0)
             #randr -= Float32(1.0f-1)
@@ -279,14 +283,12 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
             @time run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
             @time ll = train_model!(env, replay_buffer, storage, ratio)
         end
-        #@report_call run_selfplay(env, replay_buffer, storage)
-        #ll = @report_call train_model!(env, replay_buffer, storage)
-        #println("loss_average: $(ll)")
+
         show_buffer(replay_buffer)
         push!(ld,ll)
         println("store data")
         println(length(storage.scores))
-        #if(it%2==0)
+
         for bb in 1:env.batch_num
             model0 = storage.storage[bb]
             println("------------")
@@ -298,6 +300,7 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
                 println("$(hist2eq(game.history)), score:$(score), val(NN):$(val)")
             end
         end
+
         val, key = findmax(storage.scores)
         println("max score: $(val)")
         println(key)
@@ -309,6 +312,7 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
     return ld, max_hist, latest_model(storage)
 end
 
+#When we try the optimization of the hyperparameters by genetic algorithms, we can use this.
 function AlphaZero_ForPhysics_hind(env::Env, storage::Storage)
     ld = []
     max_hist::Vector{Float32} = [-12.0f0]
@@ -319,7 +323,7 @@ function AlphaZero_ForPhysics_hind(env::Env, storage::Storage)
         replay_buffer = init_buffer(1500, env.batch_size)
         
         run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
-        ll = train_model!(env, replay_buffer, storage, ratio)
+        ll = train_model!(env, replay_buffer, storage)
 
         push!(ld,ll)
     end
@@ -356,7 +360,8 @@ function main(args::Vector{String})
     env_fc = init_Env_forcheck(args)
     lds = []
     max_hists = []
-    bb = 5
+    
+    bb = 5 #number of trials by AZfP
     for dd in 1:bb
         storage = init_storage(env, 1200)
         ld, max_hist, model = AlphaZero_ForPhysics(env, env_fc, storage)
@@ -370,6 +375,7 @@ function main(args::Vector{String})
             println("$(hist2eq(k[i])), $(storage.scores[k[i]])")
         end
     end
+
     h_max = 2000
     p0 = plot(max_hists[1], linewidth=3.0, xaxis=:log, xrange=(1,h_max))
     for i in 2:length(max_hists)
@@ -383,17 +389,17 @@ function main(args::Vector{String})
     #savefig(p0, "/Users/johnbrother/Documents/Codes/julia/AlphaZeroForPhysics/valMAX_itr_mt$(env.max_turn)_$(date).png")
     
     
-    p1 = plot(((lds[1])[1])[1,:], yaxis=:log, linewidth=3.0)
+    p1 = plot((lds[1])[1], yaxis=:log, linewidth=3.0)
     for i in 2:size(lds[1])[1]
-        p1 = plot!(((lds[1])[i])[1,:], yaxis=:log, linewidth=3.0)
+        p1 = plot!((lds[1])[i], yaxis=:log, linewidth=3.0)
     end
     #savefig(p, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/loss_valMAX_mt$(env.max_turn)_$(date).png")
     #savefig(p, "/Users/johnbrother/Documents/Codes/julia/AlphaZeroForPhysics/loss_valMAX_mt$(env.max_turn)_$(date).png")
     savefig(p1, "loss_valMAX_mt$(env.max_turn)_$(date).png")
     
-    p2 = plot(((lds[1])[1])[1,:], linewidth=3.0)
+    p2 = plot((lds[1])[1], linewidth=3.0)
     for i in 2:size(lds[1])[1]
-        p2 = plot!(((lds[1])[i])[1,:], linewidth=3.0)
+        p2 = plot!((lds[1])[i], linewidth=3.0)
     end
     savefig(p2, "loss_valMAX_mt$(env.max_turn)_$(date)_normal.png")
 

@@ -199,9 +199,9 @@ function main(args::Vector{String})
         #max_values[:, it] = mv
     end
     
-    p = plot(max_values[1], linewidth=2.0, xaxis=:log, xticks=([1, 10, 100, 1000]), yrange=(0,12))
+    p = plot(max_values[1], linewidth=2.0, xaxis=:log, xticks=([1, 10, 100, 1000]), yrange=(0,12), label="trial1")
     for it in 2:tes
-        p=plot!(max_values[it], linewidth=2.0) 
+        p=plot!(max_values[it], linewidth=2.0, label="trial$(it)") 
     end
     savefig(p, "./ϵ-greedy_ValItr_n$(env.num_simulation)_η$(env.frac)_$(date).png")
 end
