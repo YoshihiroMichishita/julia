@@ -269,6 +269,8 @@ end
 #using BSON: @load
 using Plots
 ENV["GKSwstype"]="nul"
+Plots.scalefontsizes(1.3)
+
 using DataFrames
 using CSV
 
@@ -276,7 +278,7 @@ using CSV
 using JLD2
 using FileIO
 =#
-date = 1124
+date = 1201
 
 function PPO(args::Vector{String})
     #args = ARGS
@@ -303,11 +305,11 @@ function PPO(args::Vector{String})
             println("History:$(hist2eq(game.history)), Reward:$(game.reward)")
         end
     end
-    p0 = plot(max_hists[1],linewidth=3.0, xaxis=:log, yrange=(0,12), legend=:bottomright)
+    p0 = plot(max_hists[1],linewidth=3.0, gridwidth=2.0, xaxis=:log, xticks=([1,10,100,1000]), xlabel="iterate", yrange=(0,12), ylabel="max score", legend=:bottomright)
     for i in 2:dist
         p0 = plot!(max_hists[i], linewidth=3.0, xaxis=:log, yrange=(0,12))
     end
-    savefig(p0, "./PPO_valMAX_itr_mt$(env.max_turn)_$(date).png")
+    savefig(p0, "./PPO_valMAX_itr_mt$(env.max_turn)_$(date).pdf")
 
     p1 = plot(lds[1], linewidth=3.0)
     for i in 2:dist
