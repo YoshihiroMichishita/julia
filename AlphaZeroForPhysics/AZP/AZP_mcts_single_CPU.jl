@@ -1,6 +1,3 @@
-#include("AZP_env.jl")
-#include("AZP_env_manychoice.jl")
-#include("AZP_agt.jl")
 
 using Distributions
 using StatsBase
@@ -30,7 +27,7 @@ function st_value(node::Node)
 end
 
 
-#finishの判定
+#Judging whether the game finishes.
 function is_finish(env::Env, agt::Agent)
     #max_turnに達したか、branchがなくなって最後のstateがval_numに達したか
     #return env.max_turn == length(agt.history) || (length(agt.branch_left) == 0 && agt.history[end]<=env.val_num)
@@ -54,7 +51,7 @@ function legal_action(env::Env, agt::Agent)
     end
 end
 =#
-#historyにactionを追加し、branch_leftを更新
+#push action to history, and update branch_left
 function apply!(env::Env, agt::Agent, act::Int)
     push!(agt.history, act)
     if act <= env.val_num
@@ -66,22 +63,18 @@ end
 
 
 #child_visit_piの計算
+#=
 function store_search_statistics!(env::Env, root::Node, agt::Agent)
     visit_pi = zeros(Float32, env.act_ind)
     actions = Int.(keys(root.children))
     sum_visits = sum([root.children[a].visit_count for a in actions])
     for a in actions
         visit_pi[a] = root.children[a].visit_count/sum_visits
-        if(isnan(visit_pi[a]))
-            println("root.children[a].visit_count: $(root.children[a].visit_count)")
-            println("sum_visits: $(sum_visits)")
-            visit_pi[a] = 1f-6
-        end
     end
     push!(agt.child_visit_pi, visit_pi)
-end
+end=#
 
-
+#adding the Dirichlet noise for exploration.
 function add_exploration_noise!(env::Env, node::Node)
     actions = Int.(keys(node.children))
     noise = rand(Dirichlet(env.α * ones(Float32, length(actions))))
@@ -93,7 +86,7 @@ function add_exploration_noise!(env::Env, node::Node)
     end
 end
 
-#良くないかも
+#
 function add_exploration_noise!(env::Env, node::Node, ratio::Float32)
     actions = Int.(keys(node.children))
     noise = rand(Dirichlet(env.α * ones(Float32, length(actions))))
@@ -105,7 +98,7 @@ function add_exploration_noise!(env::Env, node::Node, ratio::Float32)
     end
 end
 
-#valueを正規化するべし=>すると正規化のnormを更新する回での挙動が微妙なはず。今回はやめておく(回避方法はありそう)
+#ucb
 function ucb_score(env::Env, parent::Node, child::Node)
     pb_c = log((parent.visit_count + env.Cb + 1) / env.Cb) + env.Ci
     pb_c *= sqrt(parent.visit_count) / (child.visit_count + 1)
@@ -118,6 +111,7 @@ function ucb_score(env::Env, parent::Node, child::Node)
     #return prior_score + value_score
 end
 
+#ucb(value is normalized)
 function ucb_score(env::Env, parent::Node, child::Node, ratio::Float32)
     pb_c = log((parent.visit_count + env.Cb + 1) / env.Cb) + env.Ci
     pb_c *= sqrt(parent.visit_count) / (child.visit_count + 1)
@@ -171,12 +165,6 @@ function backpropagate!(search_path::Vector{Node}, value::Float32)
         end
         #元々のalphazeroはこっちで期待値を計算する
         #node.value_sum += value
-        #=
-        if(isnan(node.value_sum))
-            println("value Nan!!!!!!!!")
-            println("value: $(value)")
-            println(node)
-        end=#
         node.visit_count += 1
     end
 end
@@ -239,6 +227,12 @@ function eval_t!(env::Env, agt::Agent, scores::Dict{Vector{Int}, Float32})
     #Yc = cpu(Y)
     value = calc_score(agt.history, env) 
     scores[agt.history] = value
+    return value
+end
+
+function eval_t!(env::Env, agt::Agent, storage::Storage)
+    value = calc_score(agt.history, env) 
+    score_save!(storage, agt.history, value)
     return value
 end
 
@@ -318,13 +312,46 @@ function run_MCTS!(env::Env, agt::Agent, model::Chain, ratio::Float32, noise_r::
     #return select_action(env, root, agt), root
 end
 
+function run_MCTS!(env::Env, agt::Agent, model::Chain, ratio::Float32, noise_r::Float32, storage::Storage, max_hist::Vector{Float32})
+    root = init_node(Float32(0.0))
+    value = evaluate!(env, agt, root, model)
+    add_exploration_noise!(env, root, noise_r)
+    for it in 1:env.num_simulation
+        node = root
+        scratch = deepcopy(agt)
+        search_path = [node]
+        while(!is_finish(env, scratch) && has_children(node))#has_children(node)
+            #action, node = select_child(env, node, model, ratio)
+            action, node = select_child(env, node, ratio)
+            apply!(env, scratch, action)
+            push!(search_path, node)
+        end
+        if(haskey(storage.scores, scratch.history))
+            value = evaluate!(env, scratch, node, model)
+            value = storage.scores[scratch.history]
+        else
+            if(is_finish(env, scratch))
+                value = eval_t!(env, scratch, storage)
+                max_now = max(max_hist[end], value)
+                push!(max_hist, max_now)
+            else
+                value = evaluate!(env, scratch, node, model)
+            end
+        end
+        #value = evaluate!(env, scratch, node, model)
+        backpropagate!(search_path, value)
+    end
+    return select_action(root), root
+    #return select_action(env, root, agt), root
+end
+
 
 function play_physics!(env::Env, model::Chain)
     agt = init_agt()
     while(!is_finish(env, agt))
         action, root = run_MCTS(env, agt, model)
         apply!(env, agt, action)
-        store_search_statistics!(env, root, agt)
+        #store_search_statistics!(env, root, agt)
     end
     return agt
 end
@@ -334,7 +361,7 @@ function play_physics!(env::Env, model::Chain, ratio::Float32, noise_r::Float32)
     while(!is_finish(env, agt))
         action, root = run_MCTS(env, agt, model, ratio, noise_r)
         apply!(env, agt, action)
-        store_search_statistics!(env, root, agt)
+        #store_search_statistics!(env, root, agt)
     end
     return agt
 end
@@ -343,7 +370,17 @@ function play_physics!(env::Env, model::Chain, ratio::Float32, noise_r::Float32,
     while(!is_finish(env, agt))
         action, root = run_MCTS!(env, agt, model, ratio, noise_r, scores, max_hist)
         apply!(env, agt, action)
-        store_search_statistics!(env, root, agt)
+        #store_search_statistics!(env, root, agt)
+    end
+    return agt
+end
+
+function play_physics!(env::Env, model::Chain, ratio::Float32, noise_r::Float32, storage::Storage, max_hist::Vector{Float32})
+    agt = init_agt()
+    while(!is_finish(env, agt))
+        action, root = run_MCTS!(env, agt, model, ratio, noise_r, storage, max_hist)
+        apply!(env, agt, action)
+        #store_search_statistics!(env, root, agt)
     end
     return agt
 end

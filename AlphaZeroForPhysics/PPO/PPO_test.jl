@@ -113,12 +113,12 @@ end
 function run_selfplay!(env::Env, buffer::ReplayBuffer, model::Chain, best_score::Vector{Float32})
     for it in 1:env.num_player
         game = play_physics!(env, model, buffer.scores, best_score)
-        #=
+        #print("#")
         if(game.reward > best_score[end])
             push!(best_score, game.reward)
         else
             push!(best_score, best_score[end])
-        end=#
+        end
         save_game!(buffer, game)
     end
 end
@@ -242,17 +242,17 @@ function AlphaZero_ForPhysics_hind(env::Env)
     old_model = deepcopy(model)
 
     for it in 1:env.num_simulation
-        #=
+        
         if(it%(env.num_simulation/10)==0)
             println("=============")
             println("it=$(it);")
             println("max score: $(max_hist[end])")
-            k = [keys(replay_buffer.scores)...]
-            inds = findall(s -> replay_buffer.scores[s] == max_hist[end], k)
-            for i in inds
-                println("$(k[i])")
-            end
-        end=#
+            #k = [keys(replay_buffer.scores)...]
+            #inds = findall(s -> replay_buffer.scores[s] == max_hist[end], k)
+            #for i in inds
+            #    println("$(k[i])")
+            #end
+        end
         
         run_selfplay!(env, replay_buffer, model, max_hist)
 
@@ -264,17 +264,21 @@ function AlphaZero_ForPhysics_hind(env::Env)
     
     return ld, max_hist, model, replay_buffer.scores
 end
-#=
-using BSON: @save
-using BSON: @load
+
+#using BSON: @save
+#using BSON: @load
 using Plots
 ENV["GKSwstype"]="nul"
+Plots.scalefontsizes(1.3)
 
+using DataFrames
+using CSV
 
+#=
 using JLD2
 using FileIO
 =#
-date = 930
+date = 1201
 
 function PPO(args::Vector{String})
     #args = ARGS
@@ -285,7 +289,7 @@ function PPO(args::Vector{String})
     lds = []
     dist = 5
     for dd in 1:dist
-        ld, max_hist, model, scores = AlphaZero_ForPhysics(env)
+        @time ld, max_hist, model, scores = AlphaZero_ForPhysics(env)
         push!(max_hists, max_hist)
         push!(lds, ld)
 
@@ -301,27 +305,24 @@ function PPO(args::Vector{String})
             println("History:$(hist2eq(game.history)), Reward:$(game.reward)")
         end
     end
-    p0 = plot(max_hists[1], linewidth=3.0)
+    p0 = plot(max_hists[1],linewidth=3.0, gridwidth=2.0, xaxis=:log, xticks=([1,10,100,1000]), xlabel="iterate", yrange=(0,12), ylabel="max score", legend=:bottomright)
     for i in 2:dist
-        p0 = plot!(max_hists[i], linewidth=3.0)
+        p0 = plot!(max_hists[i], linewidth=3.0, xaxis=:log, yrange=(0,12))
     end
-    savefig(p0, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/PPO_valMAX_itr_mt$(env.max_turn)_$(date).png")
+    savefig(p0, "./PPO_valMAX_itr_mt$(env.max_turn)_$(date).pdf")
 
     p1 = plot(lds[1], linewidth=3.0)
     for i in 2:dist
         p1 = plot!(lds[i], linewidth=3.0)
     end
-    savefig(p1, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/PPO_loss_itr_mt$(env.max_turn)_$(date).png")
+    savefig(p1, "./PPO_loss_itr_mt$(env.max_turn)_$(date).png")
 
-    p2 = plot(max_hists[1], linewidth=3.0, xrange=(0,400))
-    for i in 2:dist
-        p2 = plot!(max_hists[i], linewidth=3.0)
-    end
-    savefig(p2, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/PPO_valMAX_zoom_mt$(env.max_turn)_$(date).png")
+    save_data = DataFrame(hist1=max_hists[1][1:2000],hist2=max_hists[2][1:2000],hist3=max_hists[3][1:2000],hist4=max_hists[4][1:2000],hist5=max_hists[5][1:2000])
+    CSV.write("./PPO_hists_mt$(env.max_turn)_$(date).csv", save_data)
 
     println("PPO Finish!")
 end
 
 
 
-#@time PPO(ARGS)
+@time PPO(ARGS)

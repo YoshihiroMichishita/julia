@@ -1,6 +1,12 @@
+###########################
+#You can utilyze Alpha Zero for Physics just by rewriting this env code for your problems. What you have to consider are just setting of the scores and defining of the function, branch, and variable nodes.  
+###########################
+
 using LinearAlgebra
 using Flux
-using SymPy
+using SymPy #DO NOT USE VER:2.0.1!!!!! THIS CODE DOES NOT WORK!!!!!!!!! PLEASE USE VER:1.2.1. Pkg> add SymPy@1.2.1
+
+#ENV["PYTHON"] = "/Users/johnbrother/miniforge3/envs/p310/bin/python"
 
 
 struct Env
@@ -213,10 +219,64 @@ function init_Env_quick(args::Vector{String}, hyperparams::Vector{Any})
     return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, ratio, ratio_r, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt, Cb, Ci, C)
 end
 
-x = symbols("x")
+x = symbols("x", real=true)
 sx = sin(x)
 
+function calc_Kt_sym(history::Vector{Int}, env::Env)
+    MV = []
+    his = copy(history)
+    t = collect(0:env.Ω*env.dt:2pi)
+    #println(length(his))
+    for it in 1:length(his)
+        sw = pop!(his)
+        if(sw==1)
+            push!(MV, env.H_0)
+        elseif(sw==2)
+            push!(MV, env.V_t*sx)
+        elseif(sw==3)
+            A = pop!(MV)
+            B = pop!(MV)
+            C = A + B
+            push!(MV, C)
+        elseif(sw==4)
+            A = pop!(MV)
+            B = pop!(MV)
+            C = -1im*(A*B - B*A)
+            push!(MV, C)
+        elseif(sw==5)
+            A = pop!(MV)
+            B = pop!(MV)
+            C = (A*B + B*A)/2
+            push!(MV, C)
+        elseif(sw==6)
+            A = pop!(MV)
+            a1 = sympy.re.(A)
+            a2 = sympy.im.(A)
+            B = (a1.integrate(x) + 1im*a2.integrate(x))/env.Ω
+            #=
+            try
+                S = A.subs(x, t[1])-A.subs(x, t[div(env.t_step,10)])
+                if(S==zeros(env.HS_size, env.HS_size))
+                    B = A
+                else
+                    a1 = sympy.re.(A)
+                    a2 = sympy.im.(A)
+                    #println("it=$(it): Integral!")
+                    B = (a1.integrate(x) + 1im*a2.integrate(x))/env.Ω
+                end
+                #println("try!$(A)")
+            catch
+                B = A
+            end=#
+            push!(MV, B)
+        end
+        #println("it=$(it): $(MV[end])")
+    end
+    return MV[end], t
+end
+
 function calc_Kt(history::Vector{Int}, env::Env)
+    #=
     MV = []
     his = copy(history)
     t = collect(0:env.Ω*env.dt:2pi)
@@ -261,14 +321,12 @@ function calc_Kt(history::Vector{Int}, env::Env)
     end
     #t = collect(0:env.Ω*env.dt:2pi)
 
-    Ks = MV[end]
+    Ks = MV[end]=#
+    Ks, t = calc_Kt_sym(history, env)
     
     #println(Ks)
     if(typeof(Ks)==Matrix{Sym})
         K0 = convert(Matrix{ComplexF32}, Ks.subs(x,t[1]))
-        #N(Ks.subs(x,t[1]))
-        #Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(N(Ks.subs(x,t[i]))) for i in 1:env.t_step]
-        #Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(N(Ks.subs(x,t[i]))-K0) for i in 1:env.t_step]
         Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(convert(Matrix{ComplexF32}, Ks.subs(x,t[i]))-K0) for i in 1:env.t_step]
         return Kt
     else
@@ -288,6 +346,7 @@ function hist2eq(history::Vector{Int})
     return S
 end
 
+#Rule of AZfP
 function legal_action(env::Env, history::Vector{Int}, branch_left::Vector{Int})
     if(isempty(history))
         return [i for i in 1:env.act_ind]
@@ -325,24 +384,16 @@ function calc_loss(Hr::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}, env::E
     score::Float32 = 0.0
     for i in 1:env.t_step
         if(i==1)
-            continue
-        end
-        score += real(tr((Hr[i]-Hr[i-1])^2))
+            score += real(tr((Hr[i]-Hr[end])^2))
+        else
+            score += real(tr((Hr[i]-Hr[i-1])^2))
+        end 
     end
-    return -log(score/env.t_step+1f-10)
+    return -log(score/env.t_step+1f-15)
 end
-#=
-function calc_loss(Hr::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}, env::Env)
-    score::Float32 = 0.0
-    for i in 1:env.t_step
-        for j in 1:env.t_step
-            score += real(tr((Hr[i]-Hr[j])^2))/env.t_step
-        end
-    end
-    return -score+Float32(1.0)
-end=#
 
 function calc_score(history::Vector{Int}, env::Env)
+    #println("history: $(history)")
     Kt = calc_Kt(history, env)
     Hr = calc_Hr(Kt, env)
     score = calc_loss(Hr, env)
