@@ -10,7 +10,7 @@ In ``AZP_env.jl``, we define the environment for the reinforcement learning prob
 
 In ``AZP.agt.jl``, we define how to make the batches for learning and the memory for recent experienced scores.
 
-In ``AZP_mcts~.jl``, we write the core part of Alpha Zero For Physics, which are P+UCT serch.
+In ``AZP_mcts~.jl``, we write the core part of Alpha Zero For Physics, which are PUCT serch.
 
 ``AZP_DNN~.jl`` is the main code to run in terminal. 
 
