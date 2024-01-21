@@ -1,13 +1,15 @@
 using Dates
-using CUDA
-using Distributions
-using StatsBase
+using Distributed
+addprocs(5)
+@everywhere using CUDA
+@everywhere using Distributions
+@everywhere using StatsBase
 
-include("PPO_env.jl")
-include("PPO_agt.jl")
+@everywhere include("PPO_env.jl")
+@everywhere include("PPO_agt.jl")
 
 #1局1局の情報をストックする
-mutable struct ReplayBuffer
+@everywhere mutable struct ReplayBuffer
     buffer::Vector{Agent}
     buffer_size::Int
     batch_size::Int
@@ -15,18 +17,18 @@ mutable struct ReplayBuffer
     #count::Int
 end
 
-function init_buffer(buffer_size::Int, batch_size::Int)
+@everywhere function init_buffer(buffer_size::Int, batch_size::Int)
     return ReplayBuffer([], buffer_size, batch_size, Dict{Vector{Int}, Float32}())
 end
 
-function save_game!(buffer::ReplayBuffer, agt::Agent)
+@everywhere function save_game!(buffer::ReplayBuffer, agt::Agent)
     if length(buffer.buffer) > buffer.buffer_size
         popfirst!(buffer.buffer)
     end
     push!(buffer.buffer, agt)
 end
 
-function play_physics!(env::Env, model::Chain, scores::Dict{Vector{Int}, Float32})
+@everywhere function play_physics!(env::Env, model::Chain, scores::Dict{Vector{Int}, Float32})
     game = init_agt()
     while(true)
         input = make_image(env, game.history) |> gpu
@@ -50,15 +52,26 @@ function play_physics!(env::Env, model::Chain, scores::Dict{Vector{Int}, Float32
     return game
 end
 
-function play_physics!(env::Env, model::Chain, scores::Dict{Vector{Int}, Float32}, best_scores::Vector{Float32})
+@everywhere function play_physics!(env::Env, model::Chain, scores::Dict{Vector{Int}, Float32}, best_scores::Vector{Float32})
     game = init_agt()
     while(true)
-        input = make_image(env, game.history) |> gpu
-        output = model(input) |> cpu
+        #input = make_image(env, game.history)
+        #output = cpu(model(input))
+        Y = model(cu(make_image(env, game.history)))
+        output = cpu(Y)
         policy_log = output[1:end-1, 1]
         legal = legal_action(env, game.history, game.branch_left)
         policy = softmax([policy_log[i] for i in legal])
+        if(isnan(policy[1]))
+            println("input:$(make_image(env, game.history))")
+            println("output:$(output)")
+            println("legal:$(legal)")
+            println("policy_log:$(policy_log)")
+            println("history:$(game.history)")
+            println("branch_left:$(game.branch_left)")
+        end
         action = legal[rand(Categorical(policy))]
+        
         apply!(env, game, action)
         if(is_finish(env, game))
             break
@@ -80,7 +93,7 @@ function play_physics!(env::Env, model::Chain, scores::Dict{Vector{Int}, Float32
 end
 
 #cpu並列化予定
-function sample_batch(env::Env, buffer::ReplayBuffer)
+@everywhere function sample_batch(env::Env, buffer::ReplayBuffer)
     games = sample(buffer.buffer, env.batch_size, replace=true)
     images_batch::Vector{Vector{Matrix{Int}}} = []
     legals_batch::Vector{Vector{Vector{Int}}} = []
@@ -110,7 +123,7 @@ function sample_batch(env::Env, buffer::ReplayBuffer)
 end
 
 #cpu並列化予定
-function run_selfplay!(env::Env, buffer::ReplayBuffer, model::Chain, best_score::Vector{Float32})
+@everywhere function run_selfplay!(env::Env, buffer::ReplayBuffer, model::Chain, best_score::Vector{Float32})
     for it in 1:env.num_player
         game = play_physics!(env, model, buffer.scores, best_score)
         #print("#")
@@ -123,7 +136,7 @@ function run_selfplay!(env::Env, buffer::ReplayBuffer, model::Chain, best_score:
     end
 end
 
-function clip(rt::Float32, ϵ::Float32)
+@everywhere function clip(rt::Float32, ϵ::Float32)
     if(rt > 1.0f0 + ϵ)
         return 1.0f0 + ϵ
     elseif(rt < 1.0f0 - ϵ)
@@ -133,7 +146,7 @@ function clip(rt::Float32, ϵ::Float32)
     end
 end
 
-function step(x::Int)
+@everywhere function step(x::Int)
     if(x>1)
         return 1
     else
@@ -141,7 +154,7 @@ function step(x::Int)
     end
 end
 
-function loss(env::Env, images_batch,legals_batch, actions_batch, rewards_batch, model::Chain, old_model::Chain)
+@everywhere function loss(env::Env, images_batch,legals_batch, actions_batch, rewards_batch, model::Chain, old_model::Chain)
     L::Float32 = 0.0f0
     
     for b in 1:env.batch_size
@@ -162,7 +175,7 @@ function loss(env::Env, images_batch,legals_batch, actions_batch, rewards_batch,
             policy = softmax([policy_log[i] for i in legals_batch[b][it]])
             #policy_old = softmax([policy_log_old[i] for i in legal])
 
-            delta = reward + env.γ * val_next - val
+            delta = (reward + env.γ * val_next - val)/10.0f0
 
             adv = delta + env.γ * env.λ * adv
             a = actions_batch[b][it]
@@ -179,11 +192,11 @@ function loss(env::Env, images_batch,legals_batch, actions_batch, rewards_batch,
     # + env.C * sum(sqnorm, Flux.params(model))
 end
 
-tanh10(x) = Float32(12)*tanh(x/10)
-tanh2(x) = Float32(4)*tanh(x/4)
+@everywhere tanh10(x) = Float32(15)*tanh(x/10)
+@everywhere tanh2(x) = Float32(4)*tanh(x/4)
 
 #gpu並列化予定
-function train_model!(env::Env, buffer::ReplayBuffer, model::Chain, old_model::Chain, opt)
+@everywhere function train_model!(env::Env, buffer::ReplayBuffer, model::Chain, old_model::Chain, opt)
 
     
     images_batch, legals_batch, actions_batch, rewards_batch = sample_batch(env, buffer)
@@ -194,12 +207,14 @@ function train_model!(env::Env, buffer::ReplayBuffer, model::Chain, old_model::C
     return val
 end
 
-function AlphaZero_ForPhysics(env::Env)
+@everywhere function AlphaZero_ForPhysics(env::Env)
     ld = []
     max_hist::Vector{Float32} = [-12.0f0]
 
+    #model_0 = Chain(Dense(zeros(Float32, env.output, env.input_dim))) |> gpu
     #model = Chain(Dense(env.input_dim, env.middle_dim), BatchNorm(env.middle_dim), Tuple(Chain(Parallel(+, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, env.middle_dim, relu),Dense(env.middle_dim, env.middle_dim, relu)), identity)) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), env.act_ind, tanh2)), Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), 1, tanh10)))) |> gpu
     model = Chain(Dense(env.input_dim, env.middle_dim), Tuple(Chain(Parallel(+, Chain(Dense(env.middle_dim, env.middle_dim, relu),Dense(env.middle_dim, env.middle_dim, relu)), identity)) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Chain(Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), env.act_ind, tanh2)), Chain(Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), 1, tanh10)))) |> gpu
+    #model = Chain(Dense(env.input_dim, env.middle_dim), Tuple(Chain(Parallel(+, Chain(Dense(env.middle_dim, env.middle_dim, relu),Dense(env.middle_dim, env.middle_dim, relu)), identity)) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Chain(Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), env.act_ind, tanh2)), Chain(Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), 1, tanh10)))) |> gpu
     opt = Flux.Optimiser(WeightDecay(1f-6), Adam(env.η))
 
     replay_buffer = init_buffer(1000, env.batch_size)
@@ -207,6 +222,8 @@ function AlphaZero_ForPhysics(env::Env)
     old_model = deepcopy(model)
 
     for it in 1:env.num_simulation
+        println("=============")
+        println("it=$(it);")
         if(it%(env.num_simulation/10)==0)
             println("=============")
             println("it=$(it);")
@@ -217,32 +234,39 @@ function AlphaZero_ForPhysics(env::Env)
                 println("$(k[i])")
             end
         end
+        if(it == 1)
+            run_selfplay!(env, replay_buffer, model, max_hist)
+        else
+            run_selfplay!(env, replay_buffer, model, max_hist)
+        end
+        for xx in 1:en.training_step
+            ll = train_model!(env, replay_buffer, model, old_model, opt)
+            push!(ld,ll)
+        end
         
-        run_selfplay!(env, replay_buffer, model, max_hist)
-
-        
-        ll = train_model!(env, replay_buffer, model, old_model, opt)
-        push!(ld,ll)
         old_model = deepcopy(model)
     end
     
     return ld, max_hist, model, replay_buffer.scores
 end
 
-function AlphaZero_ForPhysics_hind(env::Env)
+@everywhere function AlphaZero_ForPhysics_hind(env::Env)
     ld = []
     max_hist::Vector{Float32} = [-12.0f0]
 
+    model_0 = Chain(Dense(zeros(Float32, env.output, env.input_dim))) |> gpu
+    #model = Chain(Dense(env.input_dim, env.middle_dim), BatchNorm(env.middle_dim), Tuple(Chain(Parallel(+, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, env.middle_dim, relu),Dense(env.middle_dim, env.middle_dim, relu)), identity)) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), env.act_ind, tanh2)), Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), 1, tanh10)))) |> gpu
+    #model = Chain(Dense(env.input_dim, env.middle_dim), Tuple(Chain(Parallel(+, Chain(Dense(env.middle_dim, env.middle_dim, relu),Dense(env.middle_dim, env.middle_dim, relu)), identity)) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Chain(Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), env.act_ind, tanh2)), Chain(Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), 1, tanh10)))) |> gpu
     #model = Chain(Dense(env.input_dim, env.middle_dim), BatchNorm(env.middle_dim), Tuple(Chain(Parallel(+, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, env.middle_dim, relu),Dense(env.middle_dim, env.middle_dim, relu)), identity)) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), env.act_ind, tanh2)), Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), 1, tanh10)))) |> gpu
     model = Chain(Dense(env.input_dim, env.middle_dim), Tuple(Chain(Parallel(+, Chain(Dense(env.middle_dim, env.middle_dim, relu),Dense(env.middle_dim, env.middle_dim, relu)), identity)) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Chain(Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), env.act_ind, tanh2)), Chain(Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), 1, tanh10)))) |> gpu
     opt = Flux.Optimiser(WeightDecay(1f-6), Adam(env.η))
 
-    replay_buffer = init_buffer(200, env.batch_size)
-
-    old_model = deepcopy(model)
+    replay_buffer = init_buffer(1000, env.batch_size)
+    old_model = deepcopy(model) |> gpu
 
     for it in 1:env.num_simulation
-        
+        println("=============")
+        println("it=$(it);")
         if(it%(env.num_simulation/10)==0)
             println("=============")
             println("it=$(it);")
@@ -254,12 +278,18 @@ function AlphaZero_ForPhysics_hind(env::Env)
             #end
         end
         
-        run_selfplay!(env, replay_buffer, model, max_hist)
+        if(it == 1)
+            run_selfplay!(env, replay_buffer, model, max_hist)
+        else
+            run_selfplay!(env, replay_buffer, model, max_hist)
+        end
 
         
-        ll = train_model!(env, replay_buffer, model, old_model, opt)
-        push!(ld,ll)
-        old_model = deepcopy(model)
+        for xx in 1:en.training_step
+            ll = train_model!(env, replay_buffer, model, old_model, opt)
+            push!(ld,ll)
+        end
+        old_model = deepcopy(model) |> gpu
     end
     
     return ld, max_hist, model, replay_buffer.scores
@@ -273,25 +303,27 @@ Plots.scalefontsizes(1.3)
 
 using DataFrames
 using CSV
+using SharedArrays
 
 #=
 using JLD2
 using FileIO
 =#
-date = 0121
+date = 0122
 
 function PPO(args::Vector{String})
     #args = ARGS
     println("Start! at $(now())")
-    env = init_Env(args)
+    @everywhere env = init_Env_hind($(args))
+    @everywhere dist = 10
+    max_hists = SharedArray(zeros(Float32, env.num_player*env.num_simulation, dist))
+    #lds = []
     
-    max_hists = []
-    lds = []
-    dist = 5
-    for dd in 1:dist
-        @time ld, max_hist, model, scores = AlphaZero_ForPhysics(env)
-        push!(max_hists, max_hist)
-        push!(lds, ld)
+    @sync @distributed for dd in 1:dist
+        @time ld, max_hist, model, scores = AlphaZero_ForPhysics_hind(env)
+        lm = length(max_hist)
+        max_hists[1:lm,dd] = max_hist
+        #push!(lds, ld)
 
         println("search count: $(length(scores))")
         println("max score: $(max_hist[end])")
@@ -300,14 +332,15 @@ function PPO(args::Vector{String})
         for i in inds
             println("$(k[i])")
         end
-        for test in 1:5
+        for test in 1:3
             game = play_physics!(env, model, scores)
             println("History:$(hist2eq(game.history)), Reward:$(game.reward)")
         end
     end
-    p0 = plot(max_hists[1],linewidth=3.0, gridwidth=2.0, xaxis=:log, xticks=([1,10,100,1000]), xlabel="iterate", yrange=(0,12), ylabel="max score", legend=:bottomright)
+    m_hists = Matrix(max_hists)
+    p0 = plot(m_hists[1],linewidth=3.0, gridwidth=2.0, xaxis=:log, xticks=([1,10,100,1000]), xlabel="iterate", yrange=(0,12), ylabel="max score", legend=:bottomright)
     for i in 2:dist
-        p0 = plot!(max_hists[i], linewidth=3.0, xaxis=:log, yrange=(0,12))
+        p0 = plot!(m_hists[i], linewidth=3.0, xaxis=:log, yrange=(0,12))
     end
     savefig(p0, "./PPO_valMAX_itr_mt$(env.max_turn)_$(date).pdf")
 
@@ -317,7 +350,7 @@ function PPO(args::Vector{String})
     end
     savefig(p1, "./PPO_loss_itr_mt$(env.max_turn)_$(date).png")
 
-    save_data = DataFrame(hist1=max_hists[1][1:2000],hist2=max_hists[2][1:2000],hist3=max_hists[3][1:2000],hist4=max_hists[4][1:2000],hist5=max_hists[5][1:2000])
+    save_data = DataFrame(m_hists, :auto)
     CSV.write("./PPO_hists_mt$(env.max_turn)_$(date).csv", save_data)
 
     println("PPO Finish!")
@@ -325,4 +358,4 @@ end
 
 
 
-@time PPO(ARGS)
+#@time PPO(ARGS)
