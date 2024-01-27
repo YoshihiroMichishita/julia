@@ -38,14 +38,8 @@ struct Env
     #Physics Model Parameter
     τ::Float32
     s_dim::Int
-    e_dim::Float32
-    ξ::Float32
-    Jz::Float32
-    Jx::Float32
-    hz::Float32
-    H_0::Hermitian{ComplexF32, Matrix{ComplexF32}}
-    V_t::Hermitian{ComplexF32, Matrix{ComplexF32}}
-    dt::Float32
+    e_dim::Int
+    tot_dim::Int
 
     Cb::Int
     Ci::Float32
@@ -58,9 +52,9 @@ function init_Env(args::Vector{String})
     println("max_turn:  $(max_turn)")
     num_player = parse(Int, args[2])
     println("num_player:  $(num_player)")
-    val_num::Int = 2
-    br_num::Int = 3
-    fn_num::Int = 1
+    val_num::Int = 2 # ρ, Λσ
+    br_num::Int = 1 # UρUd, 
+    fn_num::Int = 4 # nroot_m(2, -2), Λ, Λd
     act_ind = val_num+br_num+fn_num
     input_dim = act_ind*max_turn
     middle_dim = parse(Int, args[3])
@@ -87,30 +81,22 @@ function init_Env(args::Vector{String})
     println("α:  $(α)")
     frac = parse(Float32, args[10])
     println("frac:  $(frac)")
-    ratio = parse(Float32, args[21])
+    ratio = parse(Float32, args[11])
     println("ratio:  $(ratio)")
-    ratio_r = parse(Float32, args[22])
+    ratio_r = parse(Float32, args[12])
     println("ratio_r:  $(ratio_r)")
 
 
-    t_step = parse(Int, args[11])
-    HS_size = parse(Int, args[12])
-    Ω = parse(Float32, args[13])
-    println("Ω:  $(Ω)")
-    ξ = parse(Float32, args[14])
-    println("ξ:  $(ξ)")
-    Jz = parse(Float32, args[15])
-    Jx = parse(Float32, args[16])
-    hz = parse(Float32, args[17])
-    H_0 = Hermitian([ -Jz-2hz 0 0 -Jx; 0 Jz -Jx 0; 0 -Jx Jz 0; -Jx 0 0 -Jz+2hz])
-    V_t = Hermitian([ 0 -ξ -ξ 0; -ξ 0 0 -ξ; -ξ 0 0 -ξ; 0 -ξ -ξ 0])
-    dt = 2pi/t_step/Ω
+    τ::Float32 = parse(Float32, args[13])
+    s_dim::Int = parse(Int, args[14])
+    e_dim::Int = parse(Int, args[15])
+    tot_dim = s_dim * e_dim
 
-    Cb = parse(Int, args[18])
-    Ci = parse(Float32, args[19])
-    C = parse(Float32, args[20])
+    Cb = parse(Int, args[16])
+    Ci = parse(Float32, args[17])
+    C = parse(Float32, args[18])
 
-    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, ratio, ratio_r, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt, Cb, Ci, C)
+    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, ratio, ratio_r, τ, s_dim, e_dim, tot_dim, Cb, Ci, C)
 end
 
 function init_Env_forcheck(args::Vector{String})
@@ -119,8 +105,8 @@ function init_Env_forcheck(args::Vector{String})
     num_player = parse(Int, args[2])
     println("num_player:  $(num_player)")
     val_num::Int = 2
-    br_num::Int = 3
-    fn_num::Int = 1
+    br_num::Int = 1
+    fn_num::Int = 4
     act_ind = val_num+br_num+fn_num
     input_dim = act_ind*max_turn
     middle_dim = parse(Int, args[3])
@@ -147,37 +133,31 @@ function init_Env_forcheck(args::Vector{String})
     println("α:  $(α)")
     frac = parse(Float32, args[10])
     println("frac:  $(frac)")
-    ratio = parse(Float32, args[21])
+    ratio = parse(Float32, args[11])
     println("ratio:  $(ratio)")
-    ratio_r = parse(Float32, args[22])
+    ratio_r = parse(Float32, args[12])
     println("ratio_r:  $(ratio_r)")
 
-    t_step = parse(Int, args[11])
-    HS_size = parse(Int, args[12])
-    Ω = parse(Float32, args[13])
-    ξ = parse(Float32, args[14])
-    Jz = parse(Float32, args[15])
-    Jx = parse(Float32, args[16])
-    hz = parse(Float32, args[17])
-    H_0 = Hermitian([ -Jz-2hz 0 0 -Jx; 0 Jz -Jx 0; 0 -Jx Jz 0; -Jx 0 0 -Jz+2hz])
-    V_t = Hermitian([ 0 -ξ -ξ 0; -ξ 0 0 -ξ; -ξ 0 0 -ξ; 0 -ξ -ξ 0])
-    dt = 2pi/t_step/Ω
+    τ::Float32 = parse(Float32, args[13])
+    s_dim::Int = parse(Int, args[14])
+    e_dim::Int = parse(Int, args[15])
+    tot_dim = s_dim * e_dim
 
-    Cb = parse(Int, args[18])
-    Ci = parse(Float32, args[19])
-    C = parse(Float32, args[20])
+    Cb = parse(Int, args[16])
+    Ci = parse(Float32, args[17])
+    C = parse(Float32, args[18])
 
-    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, ratio, ratio_r, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt, Cb, Ci, C)
+    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, ratio, ratio_r, τ, s_dim, e_dim, tot_dim, Cb, Ci, C)
 end
 
 #max_turn, middle_dim, depth, α, frac, Cb, Ci
-function init_Env_quick(args::Vector{String}, hyperparams::Vector{Any})
+function init_Env_quick(args::Vector{String})
     max_turn = parse(Int, args[1])
     num_player = 200
     #parse(Int, args[2])
     val_num::Int = 2
-    br_num::Int = 3
-    fn_num::Int = 1
+    br_num::Int = 1
+    fn_num::Int = 4
     act_ind = val_num+br_num+fn_num
     input_dim = act_ind*max_turn
     middle_dim = parse(Int, args[2])
@@ -197,85 +177,191 @@ function init_Env_quick(args::Vector{String}, hyperparams::Vector{Any})
 
     num_simulation = 512
     #parse(Int, args[8])
-    α = Float32(hyperparams[1])
+    α = Float32(0.3)
     frac = parse(Float32, args[4])
     ratio = 0.1f0
     ratio_r = 1.0f0
 
-    t_step = 100
-    HS_size = 4
-    Ω = 10.0f0
-    ξ = 0.4f0
-    Jz = 1.0f0
-    Jx = 0.7f0
-    hz = 0.5f0
-    H_0 = Hermitian([ -Jz-2hz 0 0 -Jx; 0 Jz -Jx 0; 0 -Jx Jz 0; -Jx 0 0 -Jz+2hz])
-    V_t = Hermitian([ 0 -ξ -ξ 0; -ξ 0 0 -ξ; -ξ 0 0 -ξ; 0 -ξ -ξ 0])
-    dt = 2pi/t_step/Ω
+    τ::Float32 = parse(Float32, args[5])
+    s_dim::Int = 2
+    e_dim::Int = 2
+    tot_dim = s_dim * e_dim
 
-    Cb = Int(hyperparams[2])
-    Ci = Float32(hyperparams[3])
-    C = 1f-6
+    Cb = parse(Int, args[6])
+    Ci = parse(Float32, args[7])
+    C = parse(Float32, args[8])
 
-    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, ratio, ratio_r, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt, Cb, Ci, C)
+    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, ratio, ratio_r, τ, s_dim, e_dim, tot_dim, Cb, Ci, C)
+end
+const fi = ComplexF32(1.0im)
+
+struct DMs
+    s_dim::Int
+    e_dim::Int
+    tot_dim::Int
+    s_dm::Hermitian{ComplexF32, Matrix{ComplexF32}}
+    e_dm::Hermitian{ComplexF32, Matrix{ComplexF32}}
+    s_evs::Matrix{ComplexF32}
+    s_es::Vector{Float32}
+
+    U::Matrix{ComplexF32}
+    Ms::Vector{Matrix{ComplexF32}}
 end
 
-x = symbols("x", real=true)
-sx = sin(x)
+function vec2hermite(v::Vector{Float32})
+    N = round(Int, sqrt(length(v)))
+    H = zeros(ComplexF32, N, N)
+    for i in 1:N
+        for j in i:N
+            l = N*(i-1) + 2j - i^2
+            if(i == j)
+                H[i,j] = v[l]
+            else
+                H[i,j] = v[l-1] + fi*v[l]
+            end 
+        end
+    end
+    H = Hermitian(H)
+    return H
+end
 
-function calc_Kt_sym(history::Vector{Int}, env::Env)
+function vec2unitary(v::Vector{Float32}, τ::Float32)
+    H = vec2hermite(v)
+    U = exp(fi*(τ*H))
+    return U
+end
+
+function make_unitary(N::Int, τ::Float32)
+    v = rand(Float32, N^2)
+    U = vec2unitary(v, τ)
+    return U
+end
+
+function norm!(m::Hermitian{ComplexF32, Matrix{ComplexF32}})
+    T = real(tr(m))
+    m = m./T
+end
+
+function make_rand_dm(dim::Int)
+    ρ_vec = rand(Float32, dim^2)
+    rt_ρ = vec2hermite(ρ_vec)
+    ρ = Hermitian(norm!(Hermitian(rt_ρ*rt_ρ')))
+    return ρ
+end
+
+function ehot(vs::Vector{ComplexF32}, i::Int, s_dim::Int, e_dim::Int)
+    ve = zeros(ComplexF32, e_dim*s_dim)
+    ve[(s_dim*(i-1)+1):(s_dim*i)] = vs
+    return ve
+end
+
+function make_ev(s_ev::Matrix{ComplexF32}, s_dim::Int, e_dim::Int)
+    s_vec::Vector{Matrix{ComplexF32}} = []
+    tot_dim = s_dim * e_dim
+    for i in 1:s_dim
+        sm = zeros(ComplexF32, tot_dim, e_dim)
+        for j in 1:e_dim
+            sm[:,j] = ehot(s_ev[:,i], j, s_dim, e_dim)
+        end
+        push!(s_vec, sm)
+    end
+    return s_vec
+end
+
+function make_Mk(U::Matrix{ComplexF32}, s_vec::Vector{Matrix{ComplexF32}}, s_dim::Int, e_dim::Int)
+    L = s_dim * e_dim
+    #L = size(U)[1]
+    #e_dim = length(s_vec)
+    #s_dim = div(L,e_dim)
+    Ms::Vector{Matrix{ComplexF32}} = []
+    for j in 1:e_dim
+        for k in 1:s_dim
+            push!(Ms, (s_vec[k]'*U*s_vec[j]))
+        end
+    end
+    return Ms
+end
+
+function init_dms(en::Env)
+    s_dim = en.s_dim
+    e_dim = en.e_dim
+    tot_dim = s_dim * e_dim
+    s_dm = make_rand_dm(s_dim)
+    e_dm = make_rand_dm(e_dim)
+    s_es, s_evs = eigen(s_dm)
+    U = make_unitary(tot_dim, τ)
+    s_evsa = make_ev(s_evs, s_dim, e_dim)
+    Ms = make_Mk(U, s_evsa, s_dim, e_dim)
+    return DMs(s_dim, e_dim, tot_dim, s_dm, e_dm, s_evs, s_es, U, Ms)
+end
+
+
+
+function UρUd(U, ρ::Hermitian{ComplexF32, Matrix{ComplexF32}})
+    return Hermitian(U*ρ*U')
+end
+
+function nroot_m(ρ::Hermitian{ComplexF32, Matrix{ComplexF32}}, n::Int)
+    #ρ_vec = zeros(Float32, tot_dim^2)
+    e, v = eigen(ρ)
+    en = e.^(1.0f0/n)
+    ρ_n = v*Diagonal(en)*v'
+    return Hermitian(ρ_n)
+end
+
+function Λρ(ρ::Hermitian{ComplexF32, Matrix{ComplexF32}}, dms::DMs)
+    Lρ = zeros(ComplexF32, dms.s_dim, dms.s_dim)
+    for i in 1:dms.tot_dim
+        Lρ += dms.s_es[div(i-1,ds.e_dim)+1]*dms.Ms[i]'*ρ*dms.Ms[i]
+    end
+    return Hermitian(Lρ)
+end
+
+function Λρd(ρ::Hermitian{ComplexF32, Matrix{ComplexF32}}, dms::DMs)
+    Lρ = zeros(ComplexF32, dms.s_dim, dms.s_dim)
+    for i in 1:dms.tot_dim
+        Lρ += dms.s_es[div(i-1,ds.e_dim)+1]*dms.Ms[i]'*ρ*dms.Ms[i]
+    end
+    return Hermitian(Lρ)
+end
+
+#inds:symbols| 1:Λσ, 2:ρ, 3:UρUd, 4:nroot_m(2, -2), 5:Λ, 6:Λd 
+function calc_RecoveryMap(history::Vector{Int}, dms::DMs, Λσ::Hermitian{ComplexF32, Matrix{ComplexF32}})
     MV = []
     his = copy(history)
-    t = collect(0:env.Ω*env.dt:2pi)
-    #println(length(his))
+
     for it in 1:length(his)
         sw = pop!(his)
         if(sw==1)
-            push!(MV, env.H_0)
+            push!(MV, Λσ)
         elseif(sw==2)
-            push!(MV, env.V_t*sx)
+            push!(MV, dms.s_dm)
         elseif(sw==3)
             A = pop!(MV)
             B = pop!(MV)
-            C = A + B
+            C = UρUd(A, B)
             push!(MV, C)
         elseif(sw==4)
             A = pop!(MV)
-            B = pop!(MV)
-            C = -1im*(A*B - B*A)
-            push!(MV, C)
+            B = nroot_m(A, 2)
+            push!(MV, B)
         elseif(sw==5)
             A = pop!(MV)
-            B = pop!(MV)
-            C = (A*B + B*A)/2
-            push!(MV, C)
+            B = nroot_m(A, -2)
+            push!(MV, B)
         elseif(sw==6)
             A = pop!(MV)
-            a1 = sympy.re.(A)
-            a2 = sympy.im.(A)
-            B = (a1.integrate(x) + 1im*a2.integrate(x))/env.Ω
-            #=
-            try
-                S = A.subs(x, t[1])-A.subs(x, t[div(env.t_step,10)])
-                if(S==zeros(env.HS_size, env.HS_size))
-                    B = A
-                else
-                    a1 = sympy.re.(A)
-                    a2 = sympy.im.(A)
-                    #println("it=$(it): Integral!")
-                    B = (a1.integrate(x) + 1im*a2.integrate(x))/env.Ω
-                end
-                #println("try!$(A)")
-            catch
-                B = A
-            end=#
+            B = Λρ(A, dms)
+            push!(MV, B)
+        elseif(sw==7)
+            A = pop!(MV)
+            B = Λdρ(A, dms)
             push!(MV, B)
         end
-        #println("it=$(it): $(MV[end])")
     end
-    return MV[end], t
+    return MV[end]
 end
-
+#=
 function calc_Kt(history::Vector{Int}, env::Env)
     #=
     MV = []
@@ -334,9 +420,9 @@ function calc_Kt(history::Vector{Int}, env::Env)
         Kh::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = [Hermitian(convert(Matrix{ComplexF32}, Ks)) for i in 1:env.t_step]
         return Kh
     end
-end
+end=#
 
-dict = Dict(1=>"H_0 ", 2=>"V(t) ", 3=>"+ ", 4=>"-i[,] ", 5=>"{,}/2 ", 6=>"∱dt ")
+dict = Dict(1=>"Λσ ", 2=>"ρ ", 3=>"UρUd ", 4=>"M^{1/2} ", 5=>"M^{-1/2} ", 6=>"Λ ", 7=>"Λd")
 
 function hist2eq(history::Vector{Int})
     hist = copy(history)
@@ -354,43 +440,20 @@ function legal_action(env::Env, history::Vector{Int}, branch_left::Vector{Int})
     #elseif(env.max_turn-length(history)<=length(branch_left)+1)
     elseif(env.max_turn-length(history)<=length(branch_left)+2)
         return [i for i in 1:env.val_num]
-    elseif(history[end]>env.val_num && history[end]<=env.val_num+env.br_num)
-        return [i for i in 1:env.act_ind if(i!=history[end])]
-    elseif(history[end]==6)
-        return [i for i in 2:env.act_ind-1]
     else
         return [i for i in 1:env.act_ind]
     end
 end
 
-function calc_Hr(Kt::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}, env::Env)
-    Hr::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = []
-    for i in 1:env.t_step
-        ip = i+1
-        if(ip>env.t_step)
-            ip = 1
-        end
-        imm = i-1
-        if(imm<1)
-            imm = env.t_step
-        end
-        U = exp(1im*Kt[i])
-        Hr0 = Hermitian(U*(env.H_0 + env.V_t*sin(env.Ω*i*env.dt)) * U' - 1im* U*(exp(-1im*Kt[ip])-exp(-1im*Kt[imm]))/2env.dt)
-        push!(Hr, Hr0)
-    end
-    return Hr
+function KL_divergence(ρ::Hermitian{ComplexF32, Matrix{ComplexF32}}, σ::Hermitian{ComplexF32, Matrix{ComplexF32}})
+    return real(tr(ρ*(log(ρ)-log(σ))))
 end
 
-function calc_loss(Hr::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}, env::Env)
-    score::Float32 = 0.0
-    for i in 1:env.t_step
-        if(i==1)
-            score += real(tr((Hr[i]-Hr[end])^2))
-        else
-            score += real(tr((Hr[i]-Hr[i-1])^2))
-        end 
-    end
-    return -log(score/env.t_step+1f-15)
+function calc_score_σ(history::Vector{Int}, dms::DMs, σ::Hermitian{ComplexF32, Matrix{ComplexF32}})
+    Λσ = Λρ(σ, dms)
+    σ_recov = calc_RecoveryMap(history, dms, Λσ)
+    norm!(σ_recov)
+    return -KL_divergence(σ, σ_recov)+1.0f0
 end
 
 function calc_score(history::Vector{Int}, env::Env)
