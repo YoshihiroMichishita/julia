@@ -739,8 +739,9 @@ function legal_action(env::Env, history::Vector{Int}, branch_left::Vector{Int})
     elseif(env.max_turn-length(history)<=length(branch_left)+1)
         if(length(branch_left)==1)
             return [2]
+        else
+            return [1]
         end
-        return [i for i in 1:env.val_num]
     elseif(length(branch_left)==1)
         return [i for i in 2:env.act_ind]
     else
