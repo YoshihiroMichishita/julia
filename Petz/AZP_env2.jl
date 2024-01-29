@@ -294,6 +294,8 @@ function Petz_σ(dms::DMs, v2m_vec::Vector{Hermitian{ComplexF32, Matrix{ComplexF
         Flux.Optimise.update!(opt, Flux.params(σ_vec), grads)
         if(itr==1000)
             opt = ADAM(3f-3)
+        elseif(itr==2000)
+            opt = ADAM(1f-3)
         end
     end
     return vec2dm(σ_vec, v2m_vec), lds[end]
@@ -353,11 +355,16 @@ function init_Env(args::Vector{String})
     Λσs::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = []
     for ss in 1:sample_num
         σ, le = Petz_σ(dms, v2m_vec)
-        push!(σs, σ)
-        println("sample$(ss):: KL_loss:$(KL_divergence(dms.s_dm, σ)), final_loss:$(le)")
-        Λσ = Λρ(σ, dms)
-        push!(Λσs, Λσ)
-        println("trσ:$(tr(σ)), trΛσ:$(tr(Λσ))")
+        
+        kl_loss = KL_divergence(dms.s_dm, σ)
+        println("sample$(ss):: KL_loss:$(kl_loss), final_loss:$(le)")
+        if(kl_loss<0.05f0)
+            push!(σs, σ)
+            Λσ = Λρ(σ, dms)
+            push!(Λσs, Λσ)
+            println("trσ:$(tr(σ)), trΛσ:$(tr(Λσ))")
+        end
+        
     end
 
 

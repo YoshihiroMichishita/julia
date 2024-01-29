@@ -168,9 +168,10 @@ function run_selfplay!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::
         #model = gpu(latest_model(storage))
         game = play_physics!(env, model, ratio, noise_r, storage, max_hist)
         save_game!(buffer, game)
+        #=
         if(length(max_hist)>lmax_hist)
             break
-        end
+        end=#
     end
 end
 
@@ -227,7 +228,7 @@ end
 
 
 
-function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
+function AlphaZero_ForPhysics(env::Env, storage::Storage)
     ld = []
     max_hist::Vector{Float32} = [-1.0f0]
     itn = 6
@@ -278,9 +279,11 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
         val, key = findmax(storage.scores)
         println("max score: $(val)")
         println(key)
+        #=
         if(length(max_hist)>lmax_hist)
+            println("break!")
             break
-        end
+        end=#
     end
     
     return ld, max_hist, latest_model(storage)
@@ -344,14 +347,14 @@ function main(args::Vector{String})
     #args = ARGS
     println("Start! at $(now())")
     env = init_Env(args)
-    env_fc = init_Env_forcheck(args)
+    #env_fc = init_Env_forcheck(args)
     lds = []
     max_hists::Vector{Vector{Float32}} = []
     
     bb = 1 #number of trials by AZfP
     for dd in 1:bb
         storage = init_storage(env, 2000)
-        ld, max_hist, model = AlphaZero_ForPhysics(env, env_fc, storage)
+        ld, max_hist, model = AlphaZero_ForPhysics(env, storage)
         push!(max_hists, max_hist)
         push!(lds, ld)
         #string_score = dict_copy(storage.scores)
