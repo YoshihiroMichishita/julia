@@ -254,7 +254,7 @@ end
     ld = []
     max_hist::Vector{Float32} = [-12.0f0]
 
-    model_0 = Chain(Dense(zeros(Float32, env.output, env.input_dim))) |> gpu
+    #model_0 = Chain(Dense(zeros(Float32, env.output, env.input_dim))) |> gpu
     #model = Chain(Dense(env.input_dim, env.middle_dim), BatchNorm(env.middle_dim), Tuple(Chain(Parallel(+, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, env.middle_dim, relu),Dense(env.middle_dim, env.middle_dim, relu)), identity)) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), env.act_ind, tanh2)), Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), 1, tanh10)))) |> gpu
     #model = Chain(Dense(env.input_dim, env.middle_dim), Tuple(Chain(Parallel(+, Chain(Dense(env.middle_dim, env.middle_dim, relu),Dense(env.middle_dim, env.middle_dim, relu)), identity)) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Chain(Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), env.act_ind, tanh2)), Chain(Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), 1, tanh10)))) |> gpu
     #model = Chain(Dense(env.input_dim, env.middle_dim), BatchNorm(env.middle_dim), Tuple(Chain(Parallel(+, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, env.middle_dim, relu),Dense(env.middle_dim, env.middle_dim, relu)), identity)) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), env.act_ind, tanh2)), Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), 1, tanh10)))) |> gpu
@@ -265,9 +265,9 @@ end
     old_model = deepcopy(model) |> gpu
 
     for it in 1:env.num_simulation
-        println("=============")
-        println("it=$(it);")
-        if(it%(env.num_simulation/10)==0)
+        #println("=============")
+        #println("it=$(it);")
+        if(it%div(env.num_simulation,10)==0)
             println("=============")
             println("it=$(it);")
             println("max score: $(max_hist[end])")
@@ -285,7 +285,7 @@ end
         end
 
         
-        for xx in 1:en.training_step
+        for xx in 1:env.training_step
             ll = train_model!(env, replay_buffer, model, old_model, opt)
             push!(ld,ll)
         end
@@ -321,7 +321,7 @@ function PPO(args::Vector{String})
     
     @sync @distributed for dd in 1:dist
         @time ld, max_hist, model, scores = AlphaZero_ForPhysics_hind(env)
-        lm = length(max_hist)
+        lm = min(length(max_hist), env.num_player*env.num_simulation)
         max_hists[1:lm,dd] = max_hist
         #push!(lds, ld)
 
@@ -344,11 +344,12 @@ function PPO(args::Vector{String})
     end
     savefig(p0, "./PPO_valMAX_itr_mt$(env.max_turn)_$(date).pdf")
 
+    #=
     p1 = plot(lds[1], linewidth=3.0)
     for i in 2:dist
         p1 = plot!(lds[i], linewidth=3.0)
     end
-    savefig(p1, "./PPO_loss_itr_mt$(env.max_turn)_$(date).png")
+    savefig(p1, "./PPO_loss_itr_mt$(env.max_turn)_$(date).png")=#
 
     save_data = DataFrame(m_hists, :auto)
     CSV.write("./PPO_hists_mt$(env.max_turn)_$(date).csv", save_data)
@@ -358,4 +359,4 @@ end
 
 
 
-#@time PPO(ARGS)
+@time PPO(ARGS)

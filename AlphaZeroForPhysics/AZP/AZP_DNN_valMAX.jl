@@ -465,7 +465,7 @@ end=#
         #println("it=$(it);")
 
         replay_buffer = init_buffer(1200, env.batch_size)
-        
+        randr *= Float32(0.8)
         @time run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
         @time ll = train_model!(env, replay_buffer, storage, ratio)
         #@report_call run_selfplay(env, replay_buffer, storage)
@@ -495,7 +495,7 @@ end=#
         end
     end
     
-    return ld, max_hist[1:lmax_hist-env.num_player], latest_model(storage)
+    return ld, max_hist, latest_model(storage)
 end
 
 function dict_copy(orig::Dict{Vector{Int}, Float32})
@@ -527,7 +527,7 @@ using DataFrames
 using CSV
 
 
-date = 0120
+date = 0126
 using SharedArrays
 
 function main(args::Vector{String})
@@ -555,7 +555,8 @@ function main(args::Vector{String})
         #storage = init_storage(env)
         storage = init_storage(env, 2000)
         ld, max_hist, model = AlphaZero_ForPhysics(env, storage)
-        max_hists[:,dd] = max_hist
+        L = min(length(max_hist), lmax_hist-env.num_player)
+        max_hists[1:L,dd] = max_hist[1:L]
         #push!(max_hists, max_hist)
         #string_score = dict_copy(storage.scores)
         

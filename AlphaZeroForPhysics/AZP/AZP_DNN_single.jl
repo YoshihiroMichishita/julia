@@ -295,9 +295,15 @@ function dict_copy(orig::Dict{Vector{Int}, Float32})
 end
 
 function mhists2matrix(mhists::Vector{Vector{Float32}})
-    mat = zeros(Float32, length(mhists[1]), length(mhists))
+    mat = zeros(Float32, lmax_hist, length(mhists))
     for i in 1:length(mhists)
-        mat[:,i] = mhists[i][1:lmax_hist-100]
+        if(length(mhists[i]) >= lmax_hist)
+            mat[:,i] = mhists[i][1:lmax_hist]
+        else
+            mat[1:length(mhists[i]),i] = mhists[i]
+            mat[length(mhists[i])+1:end,i] .= mhists[i][end]
+            mat[length(mhists[i])+1,i] = 10.0f0
+        end
     end
     return mat
 end
@@ -313,15 +319,16 @@ Plots.scalefontsizes(1.3)
 using DataFrames
 using CSV
 
-date = 0117
+date = 0128
 
 function main(args::Vector{String})
     println("Start! at $(now())")
     env = init_Env(args)
     env_fc = init_Env_forcheck(args)
     
-    max_hists = []
-    for dd in 1:10
+    max_hists::Vector{Vector{Float32}} = []
+    for dd in 1:20
+        println("Start! at dd=$(dd)")
         #storage = init_storage(env)
         storage = init_storage(env, 2000)
         ld, max_hist, model = AlphaZero_ForPhysics(env, env_fc, storage)
@@ -335,9 +342,9 @@ function main(args::Vector{String})
             println("$(hist2eq(k[i])), $(storage.scores[k[i]])")
         end
     end
-    p0 = plot(max_hists[1], linewidth=3.0, xaxis=:log, xrange=(1,lmax_hist), yrange=(0,12))
+    p0 = plot(max_hists[1], linewidth=3.0, xaxis=:log, xrange=(1,lmax_hist), yrange=(0,12),legend=nothing)
     for i in 2:length(max_hists)
-        p0 = plot!(max_hists[i], linewidth=3.0, xaxis=:log, xrange=(1,lmax_hist), yrange=(0,12))
+        p0 = plot!(max_hists[i], linewidth=3.0, xaxis=:log, xrange=(1,lmax_hist), yrange=(0,12),legend=nothing)
     end
     savefig(p0, "./valMAX_itr_mt$(env.max_turn)_$(date).png")
 
