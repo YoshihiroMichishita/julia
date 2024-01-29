@@ -1,7 +1,7 @@
 using Dates
 
-include("AZP_env.jl")
-include("AZP_agt.jl")
+#include("AZP_env.jl")
+#include("AZP_agt.jl")
 include("AZP_mcts_single_CPU.jl")
 
 #Stock the games in serious trials. 
@@ -33,41 +33,6 @@ function save_game!(buffer::ReplayBuffer, agt::Agent)
 end
 
 
-#=
-mutable struct Storage
-    storage::Dict{Int, Chain}
-    random_out::Chain
-    scores::Dict{Vector{Int}, Float32}
-    scores_size::Int
-end
-
-function save_score!(storage::Storage, history::Vector{Int}, score::Float32)
-    if length(storage.score) > storage.scores_size
-        popfirst!(storage.score)
-    end
-    push!(buffer.buffer, agt)
-end
-
-function init_storage(env)
-    return Storage(Dict(), Chain(Dense(zeros(Float32, env.output,env.input_dim))), Dict())
-end=#
-
-#=
-function latest_model(storage::Storage)
-    if(isempty(storage.storage))
-        return storage.random_out
-    else
-        return storage.storage[rand(keys(storage.storage))]
-    end
-end=#
-
-#=
-function WeightSample(hist::Vector{Int})
-    s = [i for i in 1:length(hist)]
-    ww = s.^2
-    ww = ww/sum(ww)
-    return sample(s, ProbabilityWeights(ww))
-end=#
 
 #we can weight the probability of sampling the experience from the buffer as the difference between the true value and estimated value is large.(Prioritzed Experience Replay)
 function WeightSample(hist::Vector{Int})
@@ -177,6 +142,7 @@ function sample_batch!(env::Env, buffer::ReplayBuffer, storage::Storage)
     return imag, tar_data
 end
 
+const lmax_hist = 5000
 
 #Play and save the game by AZfP
 function run_selfplay(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::Float32, noise_r::Float32)
@@ -196,13 +162,13 @@ function run_selfplay!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::
     model = latest_model(storage)
     for it in 1:env.num_player
         
-        if(it%(env.num_player/10)==0)
+        if(it%div(env.num_player,10)==0)
             print("#")
         end
         #model = gpu(latest_model(storage))
         game = play_physics!(env, model, ratio, noise_r, storage, max_hist)
         save_game!(buffer, game)
-        if(length(max_hist)>2200)
+        if(length(max_hist)>lmax_hist)
             break
         end
     end
@@ -224,7 +190,8 @@ function loss_check(image::Matrix{Int}, target::Matrix{Float32}, env::Env, model
 end
 
 
-tanh10(x) = Float32(15)*tanh(x/10)
+tanh10(x) = tanh(x)
+#Float32(15)*tanh(x/10)
 tanh2(x) = Float32(4)*tanh(x/4)
 
 #training
@@ -262,26 +229,32 @@ end
 
 function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
     ld = []
-    max_hist::Vector{Float32} = [-12.0f0]
-    itn = 4
+    max_hist::Vector{Float32} = [-1.0f0]
+    itn = 6
     ratio = env.ratio
     randr = env.ratio_r
+
     for it in 1:itn
         println("=============")
         println("it=$(it);")
 
-        replay_buffer = init_buffer(1200, env.batch_size)
+        replay_buffer = init_buffer(2000, env.batch_size)
         
         if(it<5)
+            randr *= 0.8f0
             @time run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
+            #println("store data: $(length(storage.scores))")
+            #println("buffer_size: $(length(replay_buffer.buffer))")
+            #println("game: $(replay_buffer.buffer[1].history)")
             @time ll = train_model!(env, replay_buffer, storage)
         else
             #ratio -= Float32(2.0)
             #randr -= Float32(1.0f-1)
             #ratio = Float32(6.0)
             #@time run_selfplay_palss(env, replay_buffer, storage, ratio, randr)
+            randr *= 0.8f0
             @time run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
-            @time ll = train_model!(env, replay_buffer, storage, ratio)
+            @time ll = train_model!(env, replay_buffer, storage)
         end
 
         show_buffer(replay_buffer)
@@ -289,6 +262,7 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
         println("store data")
         println(length(storage.scores))
 
+        #=
         for bb in 1:env.batch_num
             model0 = storage.storage[bb]
             println("------------")
@@ -299,12 +273,12 @@ function AlphaZero_ForPhysics(env::Env, envf::Env, storage::Storage)
                 val = model0(make_image(envf, game, length(game.history)))[end, 1]
                 println("$(hist2eq(game.history)), score:$(score), val(NN):$(val)")
             end
-        end
+        end=#
 
         val, key = findmax(storage.scores)
         println("max score: $(val)")
         println(key)
-        if(length(max_hist)>2200)
+        if(length(max_hist)>lmax_hist)
             break
         end
     end
@@ -339,6 +313,19 @@ function dict_copy(orig::Dict{Vector{Int}, Float32})
     return c_dict
 end
 
+function mhists2matrix(mhists::Vector{Vector{Float32}})
+    mat = zeros(Float32, lmax_hist, length(mhists))
+    for i in 1:length(mhists)
+        if(length(mhists[i]) >= lmax_hist)
+            mat[:,i] = mhists[i][1:lmax_hist]
+        else
+            mat[1:length(mhists[i]),i] = mhists[i]
+            mat[length(mhists[i])+1:end,i] .= mhists[i][end]
+            mat[length(mhists[i])+1,i] = 10.0f0
+        end
+    end
+    return mat
+end
 
 #using BSON: @save
 #using BSON: @load
@@ -351,7 +338,7 @@ Plots.scalefontsizes(1.3)
 using DataFrames
 using CSV
 
-date = 1118
+date = 0129
 
 function main(args::Vector{String})
     #args = ARGS
@@ -359,11 +346,11 @@ function main(args::Vector{String})
     env = init_Env(args)
     env_fc = init_Env_forcheck(args)
     lds = []
-    max_hists = []
+    max_hists::Vector{Vector{Float32}} = []
     
-    bb = 5 #number of trials by AZfP
+    bb = 1 #number of trials by AZfP
     for dd in 1:bb
-        storage = init_storage(env, 1200)
+        storage = init_storage(env, 2000)
         ld, max_hist, model = AlphaZero_ForPhysics(env, env_fc, storage)
         push!(max_hists, max_hist)
         push!(lds, ld)
@@ -376,14 +363,15 @@ function main(args::Vector{String})
         end
     end
 
-    h_max = 2000
+    h_max = min([length(max_hists[i]) for i in 1:bb]...)
     p0 = plot(max_hists[1], linewidth=3.0, xaxis=:log, xrange=(1,h_max))
     for i in 2:length(max_hists)
         p0 = plot!(max_hists[i], linewidth=3.0, xaxis=:log, xrange=(1,h_max))
     end
     savefig(p0, "valMAX_itr_mt$(env.max_turn)_$(date).png")
 
-    save_data = DataFrame(hist1=max_hists[1][1:h_max],hist2=max_hists[2][1:h_max],hist3=max_hists[3][1:h_max],hist4=max_hists[4][1:h_max],hist5=max_hists[5][1:h_max])
+    mm_hist = mhists2matrix(max_hists)
+    save_data = DataFrame(mm_hist, :auto)
     CSV.write("./hists_$(date).csv", save_data)
     #savefig(p0, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/valMAX_itr_mt$(env.max_turn)_$(date).png")
     #savefig(p0, "/Users/johnbrother/Documents/Codes/julia/AlphaZeroForPhysics/valMAX_itr_mt$(env.max_turn)_$(date).png")
@@ -404,6 +392,10 @@ function main(args::Vector{String})
     savefig(p2, "loss_valMAX_mt$(env.max_turn)_$(date)_normal.png")
 
     println("AlphaZero Finish!")
+    println("check original Petz")
+    history0 = [3, 4, 1, 7, 3, 5, 6, 1, 2]
+    println(hist2eq(history0))
+    println(calc_score(history0, env))
     
     #=
     if(st == 0)

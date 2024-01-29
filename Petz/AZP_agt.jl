@@ -40,6 +40,7 @@ function latest_model(storage::Storage)
     if(isempty(storage.storage))
         return storage.random_out
     else
+        println("use NN model!")
         return storage.storage[rand(keys(storage.storage))]
     end
 end

@@ -67,8 +67,8 @@ struct Env
 
     U::Matrix{ComplexF32}
     Ms::Vector{Matrix{ComplexF32}}=#
-    σ::Hermitian{ComplexF32, Matrix{ComplexF32}}
-    Λσ::Hermitian{ComplexF32, Matrix{ComplexF32}}
+    σs::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}
+    Λσs::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}}
 
     Cb::Int
     Ci::Float32
@@ -261,8 +261,10 @@ end
 
 function loss_petz(σ_vec::Vector{Float32}, dms::DMs, v2m::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}})
     σ = vec2dm(σ_vec, v2m)
-    K1 = KL_divergence(σ, dms.s_dm)
-    K2 = KL_divergence(Λρ(σ, dms), Λρ(dms.s_dm,dms))
+    #K1 = KL_divergence(σ, dms.s_dm)
+    #K2 = KL_divergence(Λρ(σ, dms), Λρ(dms.s_dm,dms))
+    K1 = KL_divergence(dms.s_dm, σ)
+    K2 = KL_divergence(Λρ(dms.s_dm,dms), Λρ(σ, dms))
     sim_loss = -0.0001f0log(K1+1f-6)
     return (K1-K2)^2 + sim_loss
     #(1.0f0-K2/(K1+1f-6))^2 + sim_loss
@@ -270,16 +272,18 @@ end
 
 function loss_KL(σ_vec::Vector{Float32}, dms::DMs, v2m::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}})
     σ = vec2dm(σ_vec, v2m)
-    K1 = KL_divergence(σ, dms.s_dm)
-    K2 = KL_divergence(Λρ(σ, dms), Λρ(dms.s_dm,dms))
-    return (K1-K2)^2
+    #K1 = KL_divergence(σ, dms.s_dm)
+    #K2 = KL_divergence(Λρ(σ, dms), Λρ(dms.s_dm,dms))
+    K1 = KL_divergence(dms.s_dm, σ)
+    K2 = KL_divergence(Λρ(dms.s_dm,dms), Λρ(σ, dms))
+    return abs(K1-K2)
 end
 
 using Flux
 
-function Petz_σ(dms::DMs)
+function Petz_σ(dms::DMs, v2m_vec::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}})
     σ_vec = 5rand(Float32, dms.s_dim^2)
-    v2m_vec = generate_M2(dms.s_dim)
+    #v2m_vec = generate_M2(dms.s_dim)
     lds = Float32[]
     opt = ADAM(1f-2)
     for itr in 1:2000
@@ -292,7 +296,7 @@ function Petz_σ(dms::DMs)
             opt = ADAM(3f-3)
         end
     end
-    return σ_vec, lds
+    return vec2dm(σ_vec, v2m_vec), lds[end]
 end
 #max_turn, num_player, middle=dim, depth, training_step, batch_size, batch_num, num_simulation, a, frac, ratio, ratio_rand, τ, s_dim, e_dim, Cb, Ci, C
 function init_Env(args::Vector{String})
@@ -341,13 +345,21 @@ function init_Env(args::Vector{String})
     tot_dim = s_dim * e_dim
 
     dms = init_dms(s_dim, e_dim, τ)
+    println("test trΛρ: $(tr(Λρ(dms.s_dm, dms)))")
 
-    σ_vec, lds = Petz_σ(dms)
-    println("KL_loss:$(loss_KL(σ_vec, dms, generate_M2(s_dim))), final_loss:$(lds[end])")
-    σ = vec2dm(σ_vec, generate_M2(dms.s_dim))
-    Λσ = Λρ(σ, dms)
-    println("trσ:$(tr(σ)), trΛσ:$(tr(Λσ))")
-    println("test: $(tr(Λρ(dms.s_dm, dms)))")
+    sample_num::Int = parse(Int, args[19])
+    v2m_vec = generate_M2(s_dim)
+    σs::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = []
+    Λσs::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = []
+    for ss in 1:sample_num
+        σ, le = Petz_σ(dms, v2m_vec)
+        push!(σs, σ)
+        println("sample$(ss):: KL_loss:$(KL_divergence(dms.s_dm, σ)), final_loss:$(le)")
+        Λσ = Λρ(σ, dms)
+        push!(Λσs, Λσ)
+        println("trσ:$(tr(σ)), trΛσ:$(tr(Λσ))")
+    end
+
 
     Cb = parse(Int, args[16])
     Ci = parse(Float32, args[17])
@@ -356,7 +368,7 @@ function init_Env(args::Vector{String})
     println("setting Env done")
     println("====================")
 
-    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, ratio, ratio_r, τ, s_dim, e_dim, tot_dim, dms, σ, Λσ, Cb, Ci, C)
+    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, ratio, ratio_r, τ, s_dim, e_dim, tot_dim, dms, σs, Λσs, Cb, Ci, C)
 end
 
 function init_Env_forcheck(args::Vector{String})
@@ -404,17 +416,30 @@ function init_Env_forcheck(args::Vector{String})
     tot_dim = s_dim * e_dim
 
     dms = init_dms(s_dim, e_dim, τ)
+    println("test trΛρ: $(tr(Λρ(dms.s_dm, dms)))")
 
-    σ_vec, lds = Petz_σ(dms)
-    println("KL_loss:$(loss_KL(σ_vec, dms, generate_M2(s_dim))), final_loss:$(lds[end])")
-    σ = vec2dm(σ_vec, generate_M2(dms.s_dim))
-    Λσ = Λρ(σ, dms)
+    sample_num::Int = parse(Int, args[19])
+    v2m_vec = generate_M2(s_dim)
+    σs::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = []
+    Λσs::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = []
+    for ss in 1:sample_num
+        σ, le = Petz_σ(dms, v2m_vec)
+        push!(σs, σ)
+        println("sample$(ss):: KL_loss:$(KL_divergence(dms.s_dm, σ)), final_loss:$(le)")
+        Λσ = Λρ(σ, dms)
+        push!(Λσs, Λσ)
+        println("trσ:$(tr(σ)), trΛσ:$(tr(Λσ))")
+    end
+
 
     Cb = parse(Int, args[16])
     Ci = parse(Float32, args[17])
     C = parse(Float32, args[18])
 
-    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, ratio, ratio_r, τ, s_dim, e_dim, tot_dim, dms, σ, Λσ, Cb, Ci, C)
+    println("setting Env done")
+    println("====================")
+
+    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, ratio, ratio_r, τ, s_dim, e_dim, tot_dim, dms, σs, Λσs, Cb, Ci, C)
 end
 
 #max_turn, middle_dim, depth, α, frac, Cb, Ci
@@ -455,17 +480,30 @@ function init_Env_quick(args::Vector{String})
     tot_dim = s_dim * e_dim
 
     dms = init_dms(s_dim, e_dim, τ)
+    println("test trΛρ: $(tr(Λρ(dms.s_dm, dms)))")
 
-    σ_vec, lds = Petz_σ(dms)
-    println("KL_loss:$(loss_KL(σ_vec, dms, generate_M2(s_dim))), final_loss:$(lds[end])")
-    σ = vec2dm(σ_vec, generate_M2(dms.s_dim))
-    Λσ = Λρ(σ, dms)
+    sample_num::Int = parse(Int, args[19])
+    v2m_vec = generate_M2(s_dim)
+    σs::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = []
+    Λσs::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = []
+    for ss in 1:sample_num
+        σ, le = Petz_σ(dms, v2m_vec)
+        push!(σs, σ)
+        println("sample$(ss):: KL_loss:$(KL_divergence(dms.s_dm, σ)), final_loss:$(le)")
+        Λσ = Λρ(σ, dms)
+        push!(Λσs, Λσ)
+        println("trσ:$(tr(σ)), trΛσ:$(tr(Λσ))")
+    end
 
-    Cb = parse(Int, args[6])
-    Ci = parse(Float32, args[7])
-    C = parse(Float32, args[8])
 
-    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, ratio, ratio_r, τ, s_dim, e_dim, tot_dim, dms, σ, Λσ, Cb, Ci, C)
+    Cb = parse(Int, args[16])
+    Ci = parse(Float32, args[17])
+    C = parse(Float32, args[18])
+
+    println("setting Env done")
+    println("====================")
+
+    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, ratio, ratio_r, τ, s_dim, e_dim, tot_dim, dms, σs, Λσs, Cb, Ci, C)
 end
 
 
@@ -604,11 +642,11 @@ function calc_RecoveryMap(history::Vector{Int}, dms::DMs, Λσ::Hermitian{Comple
             push!(MV, B)
         elseif(sw==6)
             A = pop!(MV)
-            B = Λρ(A, en)
+            B = Λρ(A, dms)
             push!(MV, B)
         elseif(sw==7)
             A = pop!(MV)
-            B = Λdρ(A, en)
+            B = Λdρ(A, dms)
             push!(MV, B)
         end
     end
@@ -689,7 +727,7 @@ end
 #Rule of AZfP
 function legal_action(env::Env, history::Vector{Int}, branch_left::Vector{Int})
     if(isempty(history))
-        return [i for i in 1:env.act_ind]
+        return [i for i in 2:env.act_ind]
     #elseif(env.max_turn-length(history)<=length(branch_left)+1)
     elseif(env.max_turn-length(history)<=length(branch_left)+1)
         if(length(branch_left)==1)
@@ -699,16 +737,15 @@ function legal_action(env::Env, history::Vector{Int}, branch_left::Vector{Int})
     elseif(length(branch_left)==1)
         return [i for i in 2:env.act_ind]
     else
-        return [i for i in 1:env.act_ind]
+        return [1, (i for i in 3:env.act_ind)...]
     end
 end
 
 
-function calc_score_σ(history::Vector{Int}, dms::DMs, σ::Hermitian{ComplexF32, Matrix{ComplexF32}})
-    Λσ = Λρ(σ, dms)
+function calc_score_σ(history::Vector{Int}, dms::DMs, σ::Hermitian{ComplexF32, Matrix{ComplexF32}}, Λσ::Hermitian{ComplexF32, Matrix{ComplexF32}})
     σ_recov = calc_RecoveryMap(history, dms, Λσ)
-    norm!(σ_recov)
-    return -KL_divergence(σ, σ_recov)+1.0f0
+    diff = sum(abs.(σ - σ_recov))
+    return -diff+1.0f0
 end
 
 #=function calc_score(history::Vector{Int}, env::Env)
@@ -722,15 +759,12 @@ end
     return -kl+1.0f0
 end=#
 function calc_score(history::Vector{Int}, env::Env)
-    #Λσ = Λρ(σ, dms)
-    σ_recov = calc_RecoveryMap(history, env)
-    #println("trσ:$(tr(σ_recov))")
-    #σ_recov = norm(σ_recov)
-    #println("trσ:$(tr(σ_recov)), trΛσ:$(tr(env.Λσ)), trσ:$(tr(env.σ))")
-    diff = sum(abs.(env.σ - σ_recov))
-    #kl = KL_divergence(env.σ, σ_recov)
-    #println("KL_divergence:$(kl)")
-    return -diff+1.0f0
+    score = 0.0f0
+    L = length(env.σs)
+    for ss in 1:L
+        score += calc_score_σ(history, env.dms, env.σs[ss], env.Λσs[ss])
+    end
+    return score/L
 end
 
 function score_test(args::Vector{String})
@@ -741,5 +775,3 @@ function score_test(args::Vector{String})
 end
 
 #score_test(ARGS)
-
-

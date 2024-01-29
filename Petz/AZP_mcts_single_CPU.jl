@@ -1,3 +1,5 @@
+include("AZP_env2.jl")
+include("AZP_agt.jl")
 
 using Distributions
 using StatsBase
@@ -63,7 +65,7 @@ end
 
 
 #child_visit_piの計算
-#=
+
 function store_search_statistics!(env::Env, root::Node, agt::Agent)
     visit_pi = zeros(Float32, env.act_ind)
     actions = Int.(keys(root.children))
@@ -72,7 +74,7 @@ function store_search_statistics!(env::Env, root::Node, agt::Agent)
         visit_pi[a] = root.children[a].visit_count/sum_visits
     end
     push!(agt.child_visit_pi, visit_pi)
-end=#
+end
 
 #adding the Dirichlet noise for exploration.
 function add_exploration_noise!(env::Env, node::Node)
@@ -351,7 +353,7 @@ function play_physics!(env::Env, model::Chain)
     while(!is_finish(env, agt))
         action, root = run_MCTS(env, agt, model)
         apply!(env, agt, action)
-        #store_search_statistics!(env, root, agt)
+        store_search_statistics!(env, root, agt)
     end
     return agt
 end
@@ -361,7 +363,7 @@ function play_physics!(env::Env, model::Chain, ratio::Float32, noise_r::Float32)
     while(!is_finish(env, agt))
         action, root = run_MCTS(env, agt, model, ratio, noise_r)
         apply!(env, agt, action)
-        #store_search_statistics!(env, root, agt)
+        store_search_statistics!(env, root, agt)
     end
     return agt
 end
@@ -370,7 +372,7 @@ function play_physics!(env::Env, model::Chain, ratio::Float32, noise_r::Float32,
     while(!is_finish(env, agt))
         action, root = run_MCTS!(env, agt, model, ratio, noise_r, scores, max_hist)
         apply!(env, agt, action)
-        #store_search_statistics!(env, root, agt)
+        store_search_statistics!(env, root, agt)
     end
     return agt
 end
@@ -380,20 +382,25 @@ function play_physics!(env::Env, model::Chain, ratio::Float32, noise_r::Float32,
     while(!is_finish(env, agt))
         action, root = run_MCTS!(env, agt, model, ratio, noise_r, storage, max_hist)
         apply!(env, agt, action)
-        #store_search_statistics!(env, root, agt)
+        store_search_statistics!(env, root, agt)
     end
     return agt
 end
 
 #using BSON: @save
-using BSON: @load
+#using BSON: @load
+tanh2(x) = Float32(4)*tanh(x/4)
 
 function check_RL()
     env = init_Env(ARGS)
-    @load ARGS[21] model
+    model = Chain(Dense(zeros(Float32, env.output, env.input_dim)))
+    #model = Chain(Dense(env.input_dim, env.middle_dim, relu), Dense(env.middle_dim, env.middle_dim, relu), Flux.Parallel(vcat, Dense(env.middle_dim, env.act_ind, tanh2), Dense(env.middle_dim, 1, tanh)))
+    #@load ARGS[21] model
     for it in 1:10
         game = play_physics!(env, model)
         score = calc_score(game.history, env)
         println("$(game.history), score:$(score)")
     end
 end
+
+#check_RL()
