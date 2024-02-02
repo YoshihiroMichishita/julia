@@ -353,18 +353,20 @@ function init_Env(args::Vector{String})
     v2m_vec = generate_M2(s_dim)
     σs::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = []
     Λσs::Vector{Hermitian{ComplexF32, Matrix{ComplexF32}}} = []
-    for ss in 1:sample_num
+    while true
         σ, le = Petz_σ(dms, v2m_vec)
         
         kl_loss = KL_divergence(dms.s_dm, σ)
-        println("sample$(ss):: KL_loss:$(kl_loss), final_loss:$(le)")
+        println("trial:: KL_loss:$(kl_loss), final_loss:$(le)")
         if(kl_loss<0.05f0)
             push!(σs, σ)
             Λσ = Λρ(σ, dms)
             push!(Λσs, Λσ)
             println("trσ:$(tr(σ)), trΛσ:$(tr(Λσ))")
         end
-        
+        if(length(σs)==sample_num)
+            break
+        end
     end
 
 
