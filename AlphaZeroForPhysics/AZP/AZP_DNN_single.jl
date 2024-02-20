@@ -215,11 +215,11 @@ function train_model!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::F
             model = Chain(Dense(env.input_dim, env.middle_dim), BatchNorm(env.middle_dim), Tuple(Chain(Parallel(+, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, env.middle_dim, relu),Dense(env.middle_dim, env.middle_dim, relu)), identity)) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), env.act_ind, tanh2)), Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, div(env.middle_dim,2), relu), Tuple(Dense(div(env.middle_dim,2), div(env.middle_dim,2), relu) for i in 1:3)..., Dense(div(env.middle_dim,2), 1, tanh10)))) |> gpu
             #model = Chain(Dense(env.input_dim, env.middle_dim), Tuple(Chain(Parallel(+, Chain(BatchNorm(env.middle_dim), Dense(env.middle_dim, env.middle_dim, relu)),Dense(env.middle_dim, env.middle_dim, relu)), identity) for i in 1:env.depth)..., Flux.flatten, Flux.Parallel(vcat, Chain(Dense(env.middle_dim, env.middle_dim, relu), Dense(env.middle_dim, env.act_ind, tanh2)), Chain(Dense(env.middle_dim, env.middle_dim, relu), Dense(env.middle_dim, 1, tanh10)))) |> gpu
         end
-        opt = Flux.Optimiser(WeightDecay(env.C), Adam(1f-4))
+        opt = Flux.Optimiser(WeightDecay(env.C), Adam(2f-5))
         #ParameterSchedulers.Scheduler(env.scheduler, Momentum())
         for it in 1:env.training_step
             if(it%(env.checkpoint_interval)==0)
-                opt = Flux.Optimiser(WeightDecay(env.C), Adam(1f-4))
+                opt = Flux.Optimiser(WeightDecay(env.C), Adam(2f-5))
             end
             #image_batch, target_batch = sample_batch!(env, buffer, storage.scores)
             image_batch, target_batch = sample_batch!(env, buffer, storage)
@@ -294,6 +294,20 @@ function dict_copy(orig::Dict{Vector{Int}, Float32})
     return c_dict
 end
 
+function mhists2matrix(mhists::Vector{Vector{Float32}})
+    mat = zeros(Float32, lmax_hist, length(mhists))
+    for i in 1:length(mhists)
+        if(length(mhists[i]) >= lmax_hist)
+            mat[:,i] = mhists[i][1:lmax_hist]
+        else
+            mat[1:length(mhists[i]),i] = mhists[i]
+            mat[length(mhists[i])+1:end,i] .= mhists[i][end]
+            mat[length(mhists[i])+1,i] = 10.0f0
+        end
+    end
+    return mat
+end
+
 #using BSON: @save
 #using BSON: @load
 using Plots
@@ -305,15 +319,16 @@ Plots.scalefontsizes(1.3)
 using DataFrames
 using CSV
 
-date = 1123
+date = 0128
 
 function main(args::Vector{String})
     println("Start! at $(now())")
     env = init_Env(args)
     env_fc = init_Env_forcheck(args)
     
-    max_hists = []
-    for dd in 1:5
+    max_hists::Vector{Vector{Float32}} = []
+    for dd in 1:20
+        println("Start! at dd=$(dd)")
         #storage = init_storage(env)
         storage = init_storage(env, 2000)
         ld, max_hist, model = AlphaZero_ForPhysics(env, env_fc, storage)
@@ -327,12 +342,15 @@ function main(args::Vector{String})
             println("$(hist2eq(k[i])), $(storage.scores[k[i]])")
         end
     end
-    p0 = plot(max_hists[1], linewidth=3.0, xaxis=:log, xrange=(1,lmax_hist), yrange=(0,12))
+    p0 = plot(max_hists[1], linewidth=3.0, xaxis=:log, xrange=(1,lmax_hist), yrange=(0,12),legend=nothing)
     for i in 2:length(max_hists)
-        p0 = plot!(max_hists[i], linewidth=3.0, xaxis=:log, xrange=(1,lmax_hist), yrange=(0,12))
+        p0 = plot!(max_hists[i], linewidth=3.0, xaxis=:log, xrange=(1,lmax_hist), yrange=(0,12),legend=nothing)
     end
-    savefig(p0, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/valMAX_itr_mt$(env.max_turn)_$(date).png")
-    save_data = DataFrame(hist1=max_hists[1][1:lmax_hist-100],hist2=max_hists[2][1:lmax_hist-100],hist3=max_hists[3][1:lmax_hist-100],hist4=max_hists[4][1:lmax_hist-100],hist5=max_hists[5][1:lmax_hist-100])
+    savefig(p0, "./valMAX_itr_mt$(env.max_turn)_$(date).png")
+
+    mm_hist = mhists2matrix(max_hists)
+    save_data = DataFrame(mm_hist, :auto)
+    #save_data = DataFrame(hist1=max_hists[1][1:lmax_hist-100],hist2=max_hists[2][1:lmax_hist-100],hist3=max_hists[3][1:lmax_hist-100],hist4=max_hists[4][1:lmax_hist-100],hist5=max_hists[5][1:lmax_hist-100])
     CSV.write("./hists_mt$(env.max_turn)_$(date).csv", save_data)
     println("AlphaZero Finish!")
     

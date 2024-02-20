@@ -112,6 +112,52 @@ function init_Env(args::Vector{String})
     return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, ratio, ratio_r, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt, Cb, Ci, C)
 end
 
+function init_Env_hind(args::Vector{String})
+    max_turn = parse(Int, args[1])
+    num_player = parse(Int, args[2])
+    val_num::Int = 2
+    br_num::Int = 3
+    fn_num::Int = 1
+    act_ind = val_num+br_num+fn_num
+    input_dim = act_ind*max_turn
+    middle_dim = parse(Int, args[3])
+    output =  act_ind + 1
+    depth = parse(Int, args[4])
+
+    #training parameter
+    training_step = parse(Int, args[5])
+    checkpoint_interval = 200
+    batch_size = parse(Int, args[6])
+    batch_num = parse(Int, args[7])
+    η = 1f-5
+    momentum = 0.9
+
+
+    num_simulation = parse(Int, args[8])
+    α = parse(Float32, args[9])
+    frac = parse(Float32, args[10])
+    ratio = parse(Float32, args[21])
+    ratio_r = parse(Float32, args[22])
+
+
+    t_step = parse(Int, args[11])
+    HS_size = parse(Int, args[12])
+    Ω = parse(Float32, args[13])
+    ξ = parse(Float32, args[14])
+    Jz = parse(Float32, args[15])
+    Jx = parse(Float32, args[16])
+    hz = parse(Float32, args[17])
+    H_0 = Hermitian([ -Jz-2hz 0 0 -Jx; 0 Jz -Jx 0; 0 -Jx Jz 0; -Jx 0 0 -Jz+2hz])
+    V_t = Hermitian([ 0 -ξ -ξ 0; -ξ 0 0 -ξ; -ξ 0 0 -ξ; 0 -ξ -ξ 0])
+    dt = 2pi/t_step/Ω
+
+    Cb = parse(Int, args[18])
+    Ci = parse(Float32, args[19])
+    C = parse(Float32, args[20])
+
+    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, batch_num, η, momentum, num_simulation, α, frac, ratio, ratio_r, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt, Cb, Ci, C)
+end
+
 function init_Env_forcheck(args::Vector{String})
     max_turn = parse(Int, args[1])
     println("max_turn:  $(max_turn)")
