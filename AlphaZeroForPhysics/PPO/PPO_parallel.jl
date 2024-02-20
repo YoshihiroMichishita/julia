@@ -54,11 +54,13 @@ end
 
 @everywhere function play_physics!(env::Env, model::Chain, scores::Dict{Vector{Int}, Float32}, best_scores::Vector{Float32})
     game = init_agt()
+    #mc = model |> cpu
     while(true)
         #input = make_image(env, game.history)
         #output = cpu(model(input))
-        Y = model(cu(make_image(env, game.history)))
-        output = cpu(Y)
+        #Y = model(cu(make_image(env, game.history)))
+        #output = cpu(Y)
+        output = model(make_image(env, game.history))
         policy_log = output[1:end-1, 1]
         legal = legal_action(env, game.history, game.branch_left)
         policy = softmax([policy_log[i] for i in legal])
@@ -93,6 +95,7 @@ end
 end
 
 #cpu並列化予定
+#=
 @everywhere function sample_batch(env::Env, buffer::ReplayBuffer)
     games = sample(buffer.buffer, env.batch_size, replace=true)
     images_batch::Vector{Vector{Matrix{Int}}} = []
@@ -120,12 +123,30 @@ end
         push!(rewards_batch, game.reward)
     end
     return images_batch, legals_batch, actions_batch, rewards_batch
+end=#
+
+@everywhere function sample_batch(env::Env, buffer::ReplayBuffer)
+    @time games = sample(buffer.buffer, env.batch_size, replace=true)
+    #tuple(state, action, reward, next_state)
+    batch = []
+    for game in games
+        l = length(game.history)
+        turn = sample(1:l, 1)[1]
+        state = make_image(env, game.history, turn-1)
+        action = game.history[turn]
+        reward = (turn == l) ? game.reward : 0.0f0
+        next_state = make_image(env, game.history, turn)
+        push!(batch, (state, action, reward, next_state))
+    end
+    return batch
 end
 
 #cpu並列化予定
 @everywhere function run_selfplay!(env::Env, buffer::ReplayBuffer, model::Chain, best_score::Vector{Float32})
+    mc = model |> cpu
     for it in 1:env.num_player
-        game = play_physics!(env, model, buffer.scores, best_score)
+        #game = play_physics!(env, model, buffer.scores, best_score)
+        game = play_physics!(env, mc, buffer.scores, best_score)
         #print("#")
         if(game.reward > best_score[end])
             push!(best_score, game.reward)
@@ -154,6 +175,8 @@ end
     end
 end
 
+#1stepのadvにする
+#=
 @everywhere function loss(env::Env, images_batch,legals_batch, actions_batch, rewards_batch, model::Chain, old_model::Chain)
     L::Float32 = 0.0f0
     
@@ -172,7 +195,8 @@ end
             policy_log_old = y_old[1:end-1, 1]
 
             #legal = legal_action(env, actions_batch[b][1:end-it+1], game.branch_left)
-            policy = softmax([policy_log[i] for i in legals_batch[b][it]])
+            #policy = softmax([policy_log[i] for i in legals_batch[b][it]])
+            policy = softmax(policy_log)
             #policy_old = softmax([policy_log_old[i] for i in legal])
 
             delta = (reward + env.γ * val_next - val)/10.0f0
@@ -190,6 +214,55 @@ end
     end
     return L / env.batch_size
     # + env.C * sum(sqnorm, Flux.params(model))
+end=#
+@everywhere function logvec(v)
+    return [log(v[i]) for i in 1:length(v)]
+end
+
+@everywhere function clip(r::Float32, c::Float32, adv::Float32)
+    if(adv>0)
+        return min(r, Float32(1+c))*adv
+    else
+        return max(r, Float32(1-c))*adv
+    end
+end
+
+@everywhere function normv(v)
+    return v .- maximum(v)
+end
+
+@everywhere function loss_val(env::Env, state::Matrix{Int}, action::Int, reward::Float32, next_state::Matrix{Int}, model::Chain, old_model::Chain)
+    #image = make_image(env, state) |> gpu
+    y = model(cu(state)) |> cpu
+    y_old = old_model(cu(state)) |> cpu
+
+    policy_log = y[1:end-1,1]
+    val = y[end,1]
+    policy_log_old = y_old[1:end-1,1]
+    valn = (model(cu(next_state)) |> cpu)[end,1]
+
+    policy = softmax(policy_log[:,1])
+    #delta = reward - val
+    delta = (reward + env.γ * valn - val)/10.0f0
+    #adv = delta
+    rt = exp(policy_log[action]-policy_log_old[action])
+    #L = min(rt*delta, clip(rt, env.ϵ)*delta) + delta^2  + env.E * (policy' * logvec(policy))
+    L = clip(rt, env.ϵ, delta) + delta^2  + env.E * policy' * normv(policy_log)
+    #(policy' * logvec(policy))
+    #L = delta^2  + env.E * policy' * normv(policy_log)
+    return L
+end
+
+@everywhere function loss(env::Env, batch, model::Chain, old_model::Chain)
+    L::Float32 = 0.0f0
+    l = length(batch)
+    #for b in 1:l
+    for b in batch
+        #L += loss_val(env, batch[b]..., model, old_model)
+        #L += loss_val(env, b[1], b[2], b[3], b[4], model, old_model)
+        L += loss_val(env, b..., model, old_model)
+    end
+    return L / l
 end
 
 @everywhere tanh10(x) = Float32(15)*tanh(x/10)
@@ -197,14 +270,20 @@ end
 
 #gpu並列化予定
 @everywhere function train_model!(env::Env, buffer::ReplayBuffer, model::Chain, old_model::Chain, opt)
-
-    
-    images_batch, legals_batch, actions_batch, rewards_batch = sample_batch(env, buffer)
-    val, grads = Flux.withgradient(Flux.params(model)) do
-        loss(env, images_batch, legals_batch, actions_batch, rewards_batch, model, old_model)
+    #images_batch, legals_batch, actions_batch, rewards_batch = sample_batch(env, buffer)
+    #println("sample_batch")
+    batch = sample_batch(env, buffer)
+    ll = Float32[]
+    #println("train_model!")
+    for xx in 1:env.training_step
+        val, grads = Flux.withgradient(Flux.params(model)) do
+            loss(env, batch, model, old_model)
+        end
+        Flux.Optimise.update!(opt, Flux.params(model), grads)
+        push!(ll, val)
     end
-    Flux.Optimise.update!(opt, Flux.params(model), grads)
-    return val
+    
+    return ll
 end
 
 @everywhere function AlphaZero_ForPhysics(env::Env)
@@ -235,14 +314,17 @@ end
             end
         end
         if(it == 1)
-            run_selfplay!(env, replay_buffer, model, max_hist)
+            @time run_selfplay!(env, replay_buffer, model, max_hist)
         else
             run_selfplay!(env, replay_buffer, model, max_hist)
         end
+        ld0 = train_model!(env, replay_buffer, model, old_model, opt)
+        push!(ld,ld0[end])
+        #=
         for xx in 1:en.training_step
-            ll = train_model!(env, replay_buffer, model, old_model, opt)
+            @time ll = train_model!(env, replay_buffer, model, old_model, opt)
             push!(ld,ll)
-        end
+        end=#
         
         old_model = deepcopy(model)
     end
@@ -267,7 +349,18 @@ end
     for it in 1:env.num_simulation
         #println("=============")
         #println("it=$(it);")
-        if(it%div(env.num_simulation,10)==0)
+        
+        
+        if(it == 1)
+            #println("run_selfplay!")
+            run_selfplay!(env, replay_buffer, model, max_hist)
+        else
+            run_selfplay!(env, replay_buffer, model, max_hist)
+        end
+        ld0 = train_model!(env, replay_buffer, model, old_model, opt)
+        push!(ld,ld0[end])
+
+        #if(it%div(env.num_simulation,10)==0)
             println("=============")
             println("it=$(it);")
             println("max score: $(max_hist[end])")
@@ -276,19 +369,13 @@ end
             #for i in inds
             #    println("$(k[i])")
             #end
-        end
-        
-        if(it == 1)
-            run_selfplay!(env, replay_buffer, model, max_hist)
-        else
-            run_selfplay!(env, replay_buffer, model, max_hist)
-        end
-
-        
+        #end
+        #=
         for xx in 1:env.training_step
             ll = train_model!(env, replay_buffer, model, old_model, opt)
             push!(ld,ll)
-        end
+        end=#
+        #println("copy model!")
         old_model = deepcopy(model) |> gpu
     end
     
@@ -309,20 +396,21 @@ using SharedArrays
 using JLD2
 using FileIO
 =#
-date = 0122
+date = 0209
+lmax_hist = 5000
 
 function PPO(args::Vector{String})
     #args = ARGS
     println("Start! at $(now())")
     @everywhere env = init_Env_hind($(args))
-    @everywhere dist = 10
-    max_hists = SharedArray(zeros(Float32, env.num_player*env.num_simulation, dist))
+    @everywhere dist = 20
+    max_hists = SharedArray(zeros(Float32, lmax_hist, dist))
     #lds = []
     
     @sync @distributed for dd in 1:dist
-        @time ld, max_hist, model, scores = AlphaZero_ForPhysics_hind(env)
-        lm = min(length(max_hist), env.num_player*env.num_simulation)
-        max_hists[1:lm,dd] = max_hist
+        ld, max_hist, model, scores = AlphaZero_ForPhysics_hind(env)
+        lm = min(length(max_hist), lmax_hist)
+        max_hists[1:lm,dd] = max_hist[1:lm]
         #push!(lds, ld)
 
         println("search count: $(length(scores))")
@@ -338,9 +426,9 @@ function PPO(args::Vector{String})
         end
     end
     m_hists = Matrix(max_hists)
-    p0 = plot(m_hists[1],linewidth=3.0, gridwidth=2.0, xaxis=:log, xticks=([1,10,100,1000]), xlabel="iterate", yrange=(0,12), ylabel="max score", legend=:bottomright)
+    p0 = plot(m_hists[:,1],linewidth=3.0, gridwidth=2.0, xaxis=:log, xticks=([1,10,100,1000]), xlabel="iterate", yrange=(0,12), ylabel="max score", legend=:bottomright)
     for i in 2:dist
-        p0 = plot!(m_hists[i], linewidth=3.0, xaxis=:log, yrange=(0,12))
+        p0 = plot!(m_hists[:,i], linewidth=3.0, xaxis=:log, yrange=(0,12))
     end
     savefig(p0, "./PPO_valMAX_itr_mt$(env.max_turn)_$(date).pdf")
 

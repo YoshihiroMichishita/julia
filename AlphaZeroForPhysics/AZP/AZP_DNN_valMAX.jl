@@ -1,7 +1,7 @@
 using Distributed
 using Dates
 #using JET
-addprocs(10)
+addprocs(7)
 
 @everywhere include("AZP_env.jl")
 @everywhere include("AZP_agt.jl")
@@ -73,15 +73,15 @@ end
         #imag = SharedArray(zeros(Int, env.input_dim, 4env.batch_size))
         #target = SharedArray(zeros(Float32, env.output, 4env.batch_size))
         #@sync @distributed for it in 1:env.batch_size
-        imag = zeros(Int, env.input_dim, 4env.batch_size)
-        target = zeros(Float32, env.output, 4env.batch_size)
+        imag = zeros(Int, env.input_dim, 3env.batch_size)
+        target = zeros(Float32, env.output, 3env.batch_size)
         for it in 1:env.batch_size
             g, turn = g_turn[it]
             imag[:,it] = make_image(env, g, turn)
             target[:,it] = make_target(env, g, scores, turn)
         end
         #@sync @distributed 
-        for it in 1:3env.batch_size
+        for it in 1:2env.batch_size
             hist = rand(keys(scores))
             imag[:,env.batch_size+it] = make_image(env, hist)
             target[end,env.batch_size+it] = scores[hist]
@@ -122,14 +122,14 @@ end
             target[:,it] = make_target(env, g, storage, turn)
         end
     else
-        imag = zeros(Int, env.input_dim, 4env.batch_size)
-        target = zeros(Float32, env.output, 4env.batch_size)
+        imag = zeros(Int, env.input_dim, 3env.batch_size)
+        target = zeros(Float32, env.output, 3env.batch_size)
         for it in 1:env.batch_size
             g, turn = g_turn[it]
             imag[:,it] = make_image(env, g, turn)
             target[:,it] = make_target(env, g, storage, turn)
         end
-        for it in 1:3env.batch_size
+        for it in 1:2env.batch_size
             hist = rand(keys(storage.scores))
             imag[:,env.batch_size+it] = make_image(env, hist)
             target[end,env.batch_size+it] = storage.scores[hist]
@@ -204,7 +204,7 @@ function sample_batch_s!(env::Env, buffer::ReplayBuffer, scores::Dict{Vector{Int
     return sdata(imag), tar_data
 end=#
 
-@everywhere lmax_hist::Int = 2200
+@everywhere lmax_hist::Int = 10200
 
 #cpu並列化予定
 #=
@@ -456,16 +456,19 @@ end=#
 @everywhere function AlphaZero_ForPhysics(env::Env, storage::Storage)
     ld = []
     max_hist::Vector{Float32} = [-12.0f0]
-    itn = 6
+    itn = 10
     lastit = 0
     ratio = env.ratio
-    randr = env.ratio_r
+    randr = env.ratio_r*1.2f0
     for it in 1:itn
         #println("=============")
         #println("it=$(it);")
 
-        replay_buffer = init_buffer(1200, env.batch_size)
-        randr *= Float32(0.8)
+        replay_buffer = init_buffer(1500, env.batch_size)
+        
+        if(it>1)
+            randr *= Float32(0.8)
+        end
         @time run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
         @time ll = train_model!(env, replay_buffer, storage, ratio)
         #@report_call run_selfplay(env, replay_buffer, storage)
@@ -527,7 +530,7 @@ using DataFrames
 using CSV
 
 
-date = 0126
+date = 0218
 using SharedArrays
 
 function main(args::Vector{String})
@@ -576,9 +579,9 @@ function main(args::Vector{String})
     end
     savefig(p, "/home/yoshihiro/Documents/Codes/julia/AlphaZeroForPhysics/loss_valMAX_mt$(env.max_turn)_$(date).png")=#
     m_hists = Matrix(max_hists)
-    p0 = plot(m_hists[:,1], linewidth=3.0, xaxis=:log, xrange=(1,lmax_hist), yrange=(0,12))
+    p0 = plot(m_hists[:,1], linewidth=3.0, xaxis=:log, xrange=(1,10000), yrange=(0,12), xticks = ([1, 10, 100, 1000, 10000], ["1", "10", "10^2", "10^3", "10^4"]))
     for i in 2:ds
-        p0 = plot!(m_hists[:,i], linewidth=3.0, xaxis=:log, xrange=(1,lmax_hist), yrange=(0,12))
+        p0 = plot!(m_hists[:,i], linewidth=3.0, xaxis=:log, xrange=(1, 10000), yrange=(0,12))
     end
     savefig(p0, "./valMAX_itr_mt$(env.max_turn)_$(date).png")
 

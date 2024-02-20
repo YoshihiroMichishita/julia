@@ -198,11 +198,26 @@ function select_action(root::Node)
     #Alpha Zeroの場合、おそらく将棋等で序盤の手を広げるためにsoftmaxを使っている
     #alphazeroでは30手までsoftmaxを使っている。将棋が大体100手で終わることを考えると、max_turnの1/3までsoftmaxを使うのは妥当かもしれない
     #=
-    if(length(agt.history)<=div(env.max_turn, 3))
+    if(length(agt.history)<=div(env.max_turn, 2))
         d = ProbabilityWeights(softmax(visits))
         a = sample(actions, d)
         return a
     end=#
+    return actions[argmax(visits)]
+end
+
+function select_action(env::Env, root::Node, agt::Agent)
+#function select_action(root::Node)
+    actions = Int.(keys(root.children))
+    visits = [root.children[a].visit_count for a in actions]
+    #Alpha Zeroの場合、おそらく将棋等で序盤の手を広げるためにsoftmaxを使っている
+    #alphazeroでは30手までsoftmaxを使っている。将棋が大体100手で終わることを考えると、max_turnの1/3までsoftmaxを使うのは妥当かもしれない
+    
+    if(length(agt.history)<=div(env.max_turn, 2))
+        d = ProbabilityWeights(softmax(visits))
+        a = sample(actions, d)
+        return a
+    end
     return actions[argmax(visits)]
 end
 
@@ -270,8 +285,8 @@ function run_MCTS(env::Env, agt::Agent, model::Chain)
         value = evaluate!(env, scratch, node, model)
         backpropagate!(search_path, value)
     end
-    return select_action(root), root
-    #return select_action(env, root, agt), root
+    #return select_action(root), root
+    return select_action(env, root, agt), root
 end
 
 function run_MCTS(env::Env, agt::Agent, model::Chain, ratio::Float32, noise_r::Float32)
@@ -291,8 +306,8 @@ function run_MCTS(env::Env, agt::Agent, model::Chain, ratio::Float32, noise_r::F
         value = evaluate!(env, scratch, node, model)
         backpropagate!(search_path, value)
     end
-    return select_action(root), root
-    #return select_action(env, root, agt), root
+    #return select_action(root), root
+    return select_action(env, root, agt), root
 end
 
 #探索効率の可視化のために、max_histを追加
@@ -325,8 +340,8 @@ function run_MCTS!(env::Env, agt::Agent, model::Chain, ratio::Float32, noise_r::
         #value = evaluate!(env, scratch, node, model)
         backpropagate!(search_path, value)
     end
-    return select_action(root), root
-    #return select_action(env, root, agt), root
+    #return select_action(root), root
+    return select_action(env, root, agt), root
 end
 
 function run_MCTS!(env::Env, agt::Agent, model::Chain, ratio::Float32, noise_r::Float32, storage::Storage, max_hist::Vector{Float32})
@@ -358,8 +373,8 @@ function run_MCTS!(env::Env, agt::Agent, model::Chain, ratio::Float32, noise_r::
         #value = evaluate!(env, scratch, node, model)
         backpropagate!(search_path, value)
     end
-    return select_action(root), root
-    #return select_action(env, root, agt), root
+    #return select_action(root), root
+    return select_action(env, root, agt), root
 end
 
 
