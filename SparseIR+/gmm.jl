@@ -28,6 +28,12 @@ function rand_init_params(K::Int)
     return gParams(K, μ, Σ, ϕ)
 end
 
+function gparams2data(p::gParams)
+    ord = sortperm(p.ϕ)
+    return [p.μ[ord]..., log.(p.Σ[ord])..., p.ϕ[ord]...]
+    #return [p.μ..., p.Σ..., p.ϕ...]
+end
+
 function gmm1(w::Float32, p::gParams)
     #μ, Σ, ϕ = p.μ, p.Σ, p.ϕ
     y = sum([p.ϕ[i]*pdf(Normal(p.μ[i], p.Σ[i]), w) for i in 1:p.K])
@@ -87,7 +93,7 @@ function M_step!(ws::Vector{Float32}, true_ρ::Vector{Float32}, q::Matrix{Float3
     params.ϕ = params.ϕ/sum(params.ϕ)
 end
 
-function EM(dkl_max::Float32, X::Int)
+function EM(dkl_max::Float32, X::Int, ws::Vector{Float32}, true_ρ::Vector{Float32})
     #X = 10
     itr_max = 2000
     th = 1e-6

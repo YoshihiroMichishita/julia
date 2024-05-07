@@ -97,6 +97,17 @@ function check_rhol_dkl(w_size::Int, n_gauss::Int, ir::IR_params, gp::gParams)
     return ρl, dkl
 end
 
+function check_rhol_edge(w_size::Int, ir::IR_params, gp::gParams)
+    ws = [range(-ir.bw, ir.bw, length=w_size)...]
+    #gmm_params = rand_init_params(n_gauss)
+    gmm_rho0 = gmm_rho(ws, gp)
+    l = length(ir.basis.s)
+    ρl = [calc_rhol(ws, gmm_rho0, ir.basis.v[i]) for i in 1:l]
+    ρ_recov = ir.basis.v(ws)' * ρl
+    dkl = D_kl(ws, gmm_rho0, ρ_recov)
+    return ρl, dkl
+end
+
 function create_data(w_size::Int, n_gauss::Int, ir::IR_params)
     ws = [range(-ir.bw,ir.bw, length=w_size)...]
     gmm_params = rand_init_params(n_gauss)
@@ -173,4 +184,52 @@ function check_orth(ir::IR_params, w_size::Int, l0::Int)
         orth[i] = cross_integration_sympson(ir.basis.v[i](ws), ir.basis.v[l0](ws), dw)
     end
     return orth
+end
+
+function create_data6(w_size::Int, n_gauss::Int, ir::IR_params)
+    ws = [range(-ir.bw,ir.bw, length=w_size)...]
+    l = length(ir.basis.s)
+    gl_gmm = zeros(Float32, l)
+    data = zeros(Float32, 3n_gauss)
+    while(true)
+        gmm_params = rand_init_params(n_gauss)
+        gmm_rho0 = gmm_rho(ws, gmm_params)
+        if(gmm_rho0[1] < 1f-2 && gmm_rho0[end] < 1f-2)
+            gl_gmm = Float32.(loginv.(rho2gl(ws, gmm_rho0, ir)))
+            data = gparams2data(gmm_params)
+            break
+        end
+    end
+    #data = gparams2data(gmm_params)
+    return gl_gmm, data
+end
+
+function check_rhol_dkl(ws::Vector{Float64}, gmm_rho0::Vector{Float64}, ir::IR_params)
+    l = length(ir.basis.s)
+    ρl = [calc_rhol(ws, gmm_rho0, ir.basis.v[i]) for i in 1:l]
+    ρ_recov = ir.basis.v(ws)' * ρl
+    dkl = D_kl(ws, gmm_rho0, ρ_recov)
+    return ρl, dkl
+end
+
+function create_data7(w_size::Int, n_gauss::Int, ir::IR_params)
+    ws = [range(-ir.bw,ir.bw, length=w_size)...]
+    l = length(ir.basis.s)
+    gl_gmm = zeros(Float32, l)
+    data = zeros(Float32, 3n_gauss)
+    while(true)
+        gmm_params = rand_init_params(n_gauss)
+        gmm_rho0 = gmm_rho(ws, gmm_params)
+        if(gmm_rho0[1] < 1f-2 && gmm_rho0[end] < 1f-2)
+            rhol, dkl = check_rhol_dkl(ws, gmm_rho0, ir)
+            if(dkl < 1f-1)
+                gl_gmm = -Float32.(loginv.(ir.basis.s .* rhol))
+                #gl_gmm = Float32.(rho2gl(ws, gmm_rho0, ir))
+                data = gparams2data(gmm_params)
+                break
+            end
+        end
+    end
+    #data = gparams2data(gmm_params)
+    return gl_gmm, data
 end
