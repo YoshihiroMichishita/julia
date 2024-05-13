@@ -34,6 +34,109 @@ function gparams2data(p::gParams)
     #return [p.μ..., p.Σ..., p.ϕ...]
 end
 
+function gparams2data_sym2(p::gParams)
+    return [sum(p.μ), sum(log.(p.Σ)), sum(p.ϕ), p.μ[1]*p.μ[2], log(p.Σ[1])*log(p.Σ[2]), p.ϕ[1]*p.ϕ[2], p.μ[1]*log(p.Σ[2])+ p.μ[2]*log(p.Σ[1]), p.ϕ[1]*log(p.Σ[2])+ p.ϕ[2]*log(p.Σ[1]), p.μ[1]*p.ϕ[2]+ p.μ[2]*p.ϕ[1]]
+end
+
+function gparams2data_sym2_2(p::gParams)
+    return [sum(p.μ), 0.1f0sum(log.(p.Σ)), sum(p.ϕ), p.μ[1]*p.μ[2], 0.01f0log(p.Σ[1])*log(p.Σ[2]), p.ϕ[1]*p.ϕ[2], 0.1f0p.μ[1]*log(p.Σ[2])+ 0.1f0p.μ[2]*log(p.Σ[1]), 0.1f0p.ϕ[1]*log(p.Σ[2])+ 0.1f0p.ϕ[2]*log(p.Σ[1]), p.μ[1]*p.ϕ[2]+ p.μ[2]*p.ϕ[1]]
+end
+
+using SymPy
+@syms x
+
+function create_perms(n::Int)
+    perms = []
+    init = [1, 1, 1]
+    for i in 1:n^3
+        push!(perms, copy(init))
+        init[end] += 1
+        for j in 3:-1:2
+            if init[j] > n
+                init[j] = 1
+                init[j-1] += 1
+            end
+        end
+    end
+    return perms
+end
+
+function mod3(x::Int)
+    t = x % 3
+    if t == 0
+        return 3
+    else
+        return t
+    end
+end
+
+function sym2params(out::Vector{Float32})
+    xs = []
+    for i in 1:3
+        f(x) = x^2 - out[i]*x + out[i+3]
+        ans = convert(Vector{Float32}, solve(f(x), x))
+        push!(xs, ans)
+    end
+    scores = Float32[]
+    for perm in create_perms(2)[1:4]
+        score = 0.0
+        x0 = [xs[1][perm[1]], xs[2][perm[2]], xs[3][perm[3]]]
+        y0 = [xs[1][3-perm[1]], xs[2][3-perm[2]], xs[3][3-perm[3]]]
+        for i in 1:3
+            score += (x0[mod3(i)]*y0[mod3(i+1)] + x0[mod3(i+1)]*y0[mod3(i)] - out[6+i])^2
+        end
+        push!(scores, score)
+    end
+    id = argmin(scores)
+    ans_perm = create_perms(2)[id]
+    return [xs[1][ans_perm[1]], xs[1][3-ans_perm[1]], xs[2][ans_perm[2]], xs[2][3-ans_perm[2]], xs[3][ans_perm[3]], xs[3][3-ans_perm[3]]]
+end
+
+function sym2params2(out::Vector{Float32})
+    xs = []
+    for i in 1:3
+        f(x) = x^2 - out[i]*x + out[i+3]
+        ans = convert(Vector{Float32}, solve(f(x), x))
+        push!(xs, ans)
+    end
+    scores = Float32[]
+    for perm in create_perms(2)[1:4]
+        score = 0.0
+        x0 = [xs[1][perm[1]], xs[2][perm[2]], xs[3][perm[3]]]
+        y0 = [xs[1][3-perm[1]], xs[2][3-perm[2]], xs[3][3-perm[3]]]
+        for i in 1:3
+            score += (x0[mod3(i)]*y0[mod3(i+1)] + x0[mod3(i+1)]*y0[mod3(i)] - out[6+i])^2
+        end
+        push!(scores, score)
+    end
+    id = argmin(scores)
+    ans_perm = create_perms(2)[id]
+    return [xs[1][ans_perm[1]], xs[1][3-ans_perm[1]], exp(xs[2][ans_perm[2]]), exp(xs[2][3-ans_perm[2]]), xs[3][ans_perm[3]], xs[3][3-ans_perm[3]]]
+end
+
+function sym2params2_2(out::Vector{Float32})
+    xs = []
+    for i in 1:3
+        f(x) = x^2 - out[i]*x + out[i+3]
+        #ans = convert(Vector{Float32}, solve(f(x), x))
+        ans = real.(convert(Vector{ComplexF32}, solve(f(x), x)))
+        push!(xs, ans)
+    end
+    scores = Float32[]
+    for perm in create_perms(2)[1:4]
+        score = 0.0
+        x0 = [xs[1][perm[1]], xs[2][perm[2]], xs[3][perm[3]]]
+        y0 = [xs[1][3-perm[1]], xs[2][3-perm[2]], xs[3][3-perm[3]]]
+        for i in 1:3
+            score += (x0[mod3(i)]*y0[mod3(i+1)] + x0[mod3(i+1)]*y0[mod3(i)] - out[6+i])^2
+        end
+        push!(scores, score)
+    end
+    id = argmin(scores)
+    ans_perm = create_perms(2)[id]
+    return [xs[1][ans_perm[1]], xs[1][3-ans_perm[1]], exp(10xs[2][ans_perm[2]]), exp(10xs[2][3-ans_perm[2]]), xs[3][ans_perm[3]], xs[3][3-ans_perm[3]]]
+end
+
 function gmm1(w::Float32, p::gParams)
     #μ, Σ, ϕ = p.μ, p.Σ, p.ϕ
     y = sum([p.ϕ[i]*pdf(Normal(p.μ[i], p.Σ[i]), w) for i in 1:p.K])
