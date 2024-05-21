@@ -22,7 +22,7 @@ end
 
 function rand_init_params(K::Int)
     μ = rand(Uniform(-1.0,1.0),K)
-    Σ = exp.(rand(Uniform(-4.0,1.0),K))
+    Σ = exp.(rand(Uniform(-4.0,2.0),K))
     ϕ = softmax0(rand(Uniform(-5.0,5.0),K))
     #[1.0/K for i in 1:K]
     return gParams(K, μ, Σ, ϕ)
@@ -30,6 +30,24 @@ end
 
 function gparams2data(p::gParams)
     ord = sortperm(p.ϕ)
+    return [p.μ[ord]..., log.(p.Σ[ord])..., p.ϕ[ord]...]
+    #return [p.μ..., p.Σ..., p.ϕ...]
+end
+
+function gparams2data_μperm(p::gParams)
+    ord = sortperm(p.μ)
+    return [p.μ[ord]..., log.(p.Σ[ord])..., p.ϕ[ord]...]
+    #return [p.μ..., p.Σ..., p.ϕ...]
+end
+
+function gparams2data_σperm(p::gParams)
+    ord = sortperm(p.Σ)
+    return [p.μ[ord]..., log.(p.Σ[ord])..., p.ϕ[ord]...]
+    #return [p.μ..., p.Σ..., p.ϕ...]
+end
+
+function gparams2data_μσperm(p::gParams)
+    ord = sortperm(p.μ./p.Σ)
     return [p.μ[ord]..., log.(p.Σ[ord])..., p.ϕ[ord]...]
     #return [p.μ..., p.Σ..., p.ϕ...]
 end

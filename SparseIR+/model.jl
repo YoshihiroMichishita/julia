@@ -27,6 +27,11 @@ function init_model_tanh(n_l::Int, n_gauss::Int, width::Int, depth::Int)
     return model
 end
 
+function init_model_tanh2(n_l::Int, n_gauss::Int, width::Int, depth::Int)
+    model = Chain(Dense(n_l, width), LayerNorm(width), (Chain(Dense(width, width), LayerNorm(width), tanh) for i in 1:depth)..., Flux.Parallel(vcat, Dense(width, n_gauss, tanh), Dense(width, n_gauss, tanh6), Dense(width, n_gauss, tanh5)))
+    return model
+end
+
 function init_model_tanh_symGP(n_l::Int, n_gauss::Int, width::Int, depth::Int)
     model = Chain(Dense(n_l, width), LayerNorm(width), (Chain(Dense(width, width, tanh), LayerNorm(width)) for i in 1:depth)..., Flux.Parallel(vcat, (Chain(Dense(width, div(width,8), tanh), Dense(div(width,8), div(width,8), tanh), Dense(div(width,8), div(width,8), tanh), Dense(div(width,8), 3, tanh)) for i in 1:n_gauss)... ))
     return model
@@ -55,27 +60,36 @@ end
 
 function loss(model::Chain, K::Int, in, ans, λ::Float32)
     out = cpu(model(cu(in)))
-    l = size(out)[2]
     phi = softmax(out[2K+1:3K,:])
     mu = out[1:K,:]
     logs = out[K+1:2K,:]
     sigma = exp.(logs)
     logts = ans[K+1:2K, :]
     true_sigma = exp.(logts)
-    loss = sum(phi.*(((mu .- ans[1:K,:])./ sigma).^2 + (true_sigma./sigma).^2 - 2logts + 2logs)) + λ * sum(phi.*log.(phi ./ (ans[2K+1:3K, :] .+ 1f-10)))
-    return loss/l - 1.0f0
+    loss = mean(phi.*(((mu .- ans[1:K,:])./ sigma).^2 + (true_sigma./sigma).^2 - 2logts + 2logs) + λ * log.(phi ./ (ans[2K+1:3K, :] .+ 1f-10)))
+    return loss
 end
 
 function loss2(model::Chain, K::Int, in, ans, λ::Float32)
     out = cpu(model(cu(in)))
-    l = size(out)[2]
     phi = softmax(out[2K+1:3K,:])
     true_phi = ans[2K+1:3K, :]
     mu = out[1:K,:]
     sigma = out[K+1:2K,:]
     t_sigma = ans[K+1:2K, :]
-    loss = sum(true_phi .* ((mu .- ans[1:K,:]).^2 + (sigma .- t_sigma).^2)) + λ * sum(true_phi.*log.(true_phi ./ (phi .+ 1f-10)))
-    return loss/l
+    loss = mean(true_phi .* ((mu .- ans[1:K,:]).^2 + (sigma .- t_sigma).^2 + λ * log.(true_phi ./ (phi .+ 1f-10))))
+    return loss
+end
+
+function loss2_3(model::Chain, K::Int, in, ans, λ::Float32)
+    out = cpu(model(cu(in)))
+    phi = softmax(out[2K+1:3K,:])
+    true_phi = ans[2K+1:3K, :]
+    mu = out[1:K,:]
+    sigma = out[K+1:2K,:]
+    t_sigma = ans[K+1:2K, :]
+    loss = mean(true_phi .* (λ * (mu .- ans[1:K,:]).^2 + (sigma .- t_sigma).^2 + log.(true_phi ./ (phi .+ 1f-10))))
+    return loss
 end
 
 function loss2_1(model::Chain, K::Int, in, ans, λ::Float32)
@@ -137,21 +151,35 @@ function loss2_2(model::Chain, K::Int, in, ans, λ::Float32)
     mu = out[1:K,:]
     sigma = out[K+1:2K,:]
     t_sigma = ans[K+1:2K, :]
-    loss = sum(true_phi .* ((mu .- ans[1:K,:]).^2 ./ exp.(sigma./2) + (sigma .- t_sigma).^2)) + λ * sum(phi.*log.(phi ./ (true_phi .+ 1f-10)))
+    loss = sum(true_phi .* ((mu .- ans[1:K,:]).^2 ./ exp.(sigma./2) + (sigma .- t_sigma).^2)) + λ * sum(true_phi.*log.(true_phi ./ (phi .+ 1f-10)))
     return loss/l
 end
 
 function loss4(model::Chain, K::Int, in, ans, λ::Float32)
     out = cpu(model(cu(in)))
-    l = size(out)[2]
+    #l = size(out)[2]
     phi = softmax(out[2K+1:3K,:])
     mu = out[1:K,:]
     logs = out[K+1:2K,:]
     sigma = exp.(logs)
     logts = ans[K+1:2K, :]
     true_sigma = exp.(logts)
-    loss = sum(phi.*(((mu .- ans[1:K,:])./ sigma).^2 + (true_sigma./sigma - sigma./true_sigma).^2)) + λ * sum(phi.*log.(phi ./ (ans[2K+1:3K, :] .+ 1f-10)))
-    return loss/l
+    loss = mean(phi.*(((mu .- ans[1:K,:])./ sigma).^2 + (true_sigma./sigma - sigma./true_sigma).^2)) + λ * sum(phi.*log.(phi ./ (ans[2K+1:3K, :] .+ 1f-10)))
+    return loss
+end
+function loss4_2(model::Chain, K::Int, in, ans, λ::Float32)
+    out = cpu(model(cu(in)))
+    #l = size(out)[2]
+    phi = softmax(out[2K+1:3K,:])
+    true_phi = ans[2K+1:3K,:]
+    mu = out[1:K,:]
+    true_mu = ans[1:K,:]
+    logs = out[K+1:2K,:]
+    sigma = exp.(logs)
+    logts = ans[K+1:2K, :]
+    true_sigma = exp.(logts)
+    loss = mean(true_phi.*(((mu .- true_mu)./ true_sigma).^2 + (true_sigma./sigma - sigma./true_sigma).^2)) + λ * sum(true_phi.*log.(true_phi ./ (phi .+ 1f-10)))
+    return loss
 end
 
 function gmm1(K::Int, w::Float32, μ::Vector{Float32}, Σ::Vector{Float32}, ϕ::Vector{Float32})

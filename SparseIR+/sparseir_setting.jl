@@ -204,6 +204,61 @@ function create_data6(w_size::Int, n_gauss::Int, ir::IR_params)
     return gl_gmm, data
 end
 
+function create_data6_2(w_size::Int, n_gauss::Int, ir::IR_params)
+    ws = [range(-ir.bw,ir.bw, length=w_size)...]
+    l = length(ir.basis.s)
+    gl_gmm = zeros(Float32, l)
+    data = zeros(Float32, 3n_gauss)
+    while(true)
+        gmm_params = rand_init_params(n_gauss)
+        gmm_rho0 = gmm_rho(ws, gmm_params)
+        if(gmm_rho0[1] < 1f-2 && gmm_rho0[end] < 1f-2)
+            gl_gmm = Float32.(loginv.(rho2gl(ws, gmm_rho0, ir)))
+            data = gparams2data_μperm(gmm_params)
+            break
+        end
+    end
+    #data = gparams2data(gmm_params)
+    return gl_gmm, data
+end
+
+function create_data6_3(w_size::Int, n_gauss::Int, ir::IR_params)
+    ws = [range(-ir.bw,ir.bw, length=w_size)...]
+    l = length(ir.basis.s)
+    gl_gmm = zeros(Float32, l)
+    data = zeros(Float32, 3n_gauss)
+    while(true)
+        gmm_params = rand_init_params(n_gauss)
+        gmm_rho0 = gmm_rho(ws, gmm_params)
+        if(gmm_rho0[1] < 1f-2 && gmm_rho0[end] < 1f-2)
+            gl_gmm = Float32.(loginv.(rho2gl(ws, gmm_rho0, ir)))
+            data = gparams2data_σperm(gmm_params)
+            break
+        end
+    end
+    #data = gparams2data(gmm_params)
+    return gl_gmm, data
+end
+
+function create_data6_4(w_size::Int, n_gauss::Int, ir::IR_params)
+    ws = [range(-ir.bw,ir.bw, length=w_size)...]
+    l = length(ir.basis.s)
+    gl_gmm = zeros(Float32, l)
+    data = zeros(Float32, 3n_gauss)
+    while(true)
+        gmm_params = rand_init_params(n_gauss)
+        gmm_rho0 = gmm_rho(ws, gmm_params)
+        if(gmm_rho0[1] < 1f-2 && gmm_rho0[end] < 1f-2)
+            gl_gmm = Float32.(loginv.(rho2gl(ws, gmm_rho0, ir)))
+            data = gparams2data_μσperm(gmm_params)
+            break
+        end
+    end
+    #data = gparams2data(gmm_params)
+    return gl_gmm, data
+end
+
+
 function check_rhol_dkl(ws::Vector{Float64}, gmm_rho0::Vector{Float64}, ir::IR_params)
     l = length(ir.basis.s)
     ρl = [calc_rhol(ws, gmm_rho0, ir.basis.v[i]) for i in 1:l]
