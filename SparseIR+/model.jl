@@ -9,8 +9,71 @@ tanh6(x) = 4tanh(x)
 tanh8(x) = 8tanh(x)
 
 ###############################################
+### CUSTOM LAYERS
+###############################################
+
+struct Attention
+    d_in::Int
+    d_k::Int
+    d_out::Int
+    sqrt_d_k::Float32
+    
+    Wq::Matrix{Float32}
+    Wk::Matrix{Float32}
+    Wv::Matrix{Float32}
+    bv::Vector{Float32}
+end
+
+function Attention(d_in::Int, d_k::Int, d_out::Int)
+    sqrt_d = Float32(sqrt(d_k))
+    Wq = randn(Float32, d_out, d_in)
+    Wk = randn(Float32, d_k, d_in)
+    Wv = randn(Float32, d_k, d_in)
+    bv = randn(Float32, d_out)
+    return Attention(d_in, d_k, d_out, sqrt_d, Wq, Wk, Wv, bv)
+end
+
+struct RMSLayerNorm
+    d_in::Int
+    sqrt_d::Float32
+    g::Vector{Float32}
+end
+
+function RMSLayerNorm(d_in::Int)
+    sqrt_d = Float32(sqrt(d_in))
+    g = ones(Float32, d_in)
+    return RMSLayerNorm(d_in, sqrt_d, g)
+end
+
+Flux.trainable(a::Attention) = (Wq=a.Wq, Wk = a.Wk, Wv= a.Wv, b=a.bv)
+
+Flux.trainable(a::RMSLayerNorm) = (g =a.g)
+
+function (m::Attention)(x)
+    q = m.Wq * x
+    k = m.Wk * x
+    v = m.Wv * x
+    a = softmax(q * k' / m.sqrt_d_k, dims=2)
+    return a * v + m.bv
+end
+
+function (m::RMSLayerNorm)(x)
+    return (m.sqrt_d * x) ./ sqrt(x'*x) .* m.g
+end
+
+Flux.@functor Attention
+Flux.@functor RMSLayerNorm
+
+
+
+###############################################
 #### Model Initialization
 ###############################################
+
+function init_model_attention(n_l::Int, n_gauss::Int, width::Int, depth::Int, d_k::Int)
+    model = Chain(Dense(n_l, width), (Chain(RMSLayerNorm(width), Attention(width, d_k, width)) for i in 1:depth)..., Flux.Parallel(vcat, Dense(width, n_gauss, tanh), Dense(width, n_gauss, tanh6), Dense(width, n_gauss, tanh5)))
+    return model
+end
 
 function init_model_sp(n_l::Int, n_gauss::Int, width::Int, depth::Int)
     model = Chain(Dense(n_l, width), LayerNorm(width), (Chain(Dense(width, width, softplus), LayerNorm(width)) for i in 1:depth)..., Flux.Parallel(vcat, Dense(width, n_gauss, tanh), Dense(width, n_gauss, tanh6), Dense(width, n_gauss, tanh5)))
