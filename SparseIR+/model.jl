@@ -12,17 +12,18 @@ tanh8(x) = 8tanh(x)
 ### CUSTOM LAYERS
 ###############################################
 
-struct Attention
-    d_in::Int
-    d_k::Int
-    d_out::Int
-    sqrt_d_k::Float32
+struct Attention{I <: Integer, O, F1 <: AbstractArray, F2 <: AbstractArray}
+    d_in::I
+    d_k::I
+    d_out::I
+    sqrt_d_k::O
     
-    Wq::Matrix{Float32}
-    Wk::Matrix{Float32}
-    Wv::Matrix{Float32}
-    bv::Vector{Float32}
+    Wq::F1
+    Wk::F1
+    Wv::F1
+    bv::F2
 end
+
 
 function Attention(d_in::Int, d_k::Int, d_out::Int)
     sqrt_d = Float32(sqrt(d_k))
@@ -33,15 +34,15 @@ function Attention(d_in::Int, d_k::Int, d_out::Int)
     return Attention(d_in, d_k, d_out, sqrt_d, Wq, Wk, Wv, bv)
 end
 
-struct RMSLayerNorm
-    d_in::Int
-    sqrt_d::Float32
-    g::Vector{Float32}
+struct RMSLayerNorm{I <: Integer, O, F <: AbstractArray}
+    d_in::I
+    sqrt_d::O
+    g::F
 end
 
 function RMSLayerNorm(d_in::Int)
     sqrt_d = Float32(sqrt(d_in))
-    g = ones(Float32, d_in)
+    g = Diagonal(ones(Float32, d_in))
     return RMSLayerNorm(d_in, sqrt_d, g)
 end
 
@@ -49,16 +50,17 @@ Flux.trainable(a::Attention) = (Wq=a.Wq, Wk = a.Wk, Wv= a.Wv, b=a.bv)
 
 Flux.trainable(a::RMSLayerNorm) = (g =a.g)
 
-function (m::Attention)(x)
+function (m::Attention)(x::AbstractArray)
     q = m.Wq * x
     k = m.Wk * x
     v = m.Wv * x
     a = softmax(q * k' / m.sqrt_d_k, dims=2)
-    return a * v + m.bv
+    #a = softmax(q * k')
+    return a * v .+ m.bv
 end
 
 function (m::RMSLayerNorm)(x)
-    return (m.sqrt_d * x) ./ sqrt(x'*x) .* m.g
+    return m.g *  x * Diagonal((sqrt.(vec(mean(x.^2, dims=1)))).^-1)
 end
 
 Flux.@functor Attention
@@ -71,7 +73,7 @@ Flux.@functor RMSLayerNorm
 ###############################################
 
 function init_model_attention(n_l::Int, n_gauss::Int, width::Int, depth::Int, d_k::Int)
-    model = Chain(Dense(n_l, width), (Chain(RMSLayerNorm(width), Attention(width, d_k, width)) for i in 1:depth)..., Flux.Parallel(vcat, Dense(width, n_gauss, tanh), Dense(width, n_gauss, tanh6), Dense(width, n_gauss, tanh5)))
+    model = Chain(Dense(n_l, width), (Chain(Dense(width, width), LayerNorm(width), Attention(width, d_k, width)) for i in 1:depth)..., Flux.Parallel(vcat, Dense(width, n_gauss, tanh), Dense(width, n_gauss, tanh6), Dense(width, n_gauss, tanh5)))
     return model
 end
 
