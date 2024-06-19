@@ -4,7 +4,7 @@ using JLD2
 using BSON
 using Plots
 
-tanh5(x) = 5tanh(x)
+tanh5(x) = 6tanh(x)
 tanh6(x) = 4tanh(x)
 tanh8(x) = 8tanh(x)
 
@@ -54,7 +54,7 @@ function (m::Attention)(x::AbstractArray)
     q = m.Wq * x
     k = m.Wk * x
     v = m.Wv * x
-    a = softmax(q * k' / m.sqrt_d_k, dims=2)
+    a = softmax(q' * k / m.sqrt_d_k, dims=2)
     #a = softmax(q * k')
     return a * v .+ m.bv
 end
@@ -73,7 +73,7 @@ Flux.@functor RMSLayerNorm
 ###############################################
 
 function init_model_attention(n_l::Int, n_gauss::Int, width::Int, depth::Int, d_k::Int)
-    model = Chain(Dense(n_l, width), (Chain(Dense(width, width), LayerNorm(width), Attention(width, d_k, width)) for i in 1:depth)..., Flux.Parallel(vcat, Dense(width, n_gauss, tanh), Dense(width, n_gauss, tanh6), Dense(width, n_gauss, tanh5)))
+    model = Chain(Dense(n_l, width), (Chain(SkipConnection(Chain(LayerNorm(width), Attention(width, d_k, width)), +), LayerNorm(width), Dense(width, width, relu), Dense(width, width, relu), Dense(width, width, relu), Dense(width, width, relu)) for i in 1:depth)..., Flux.Parallel(vcat, Dense(width, n_gauss, tanh), Dense(width, n_gauss, tanh6), Dense(width, n_gauss, tanh5)))
     return model
 end
 

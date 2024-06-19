@@ -15,7 +15,7 @@ function init_params(K::Int)
     return gParams(K, μ, Σ, ϕ)
 end
 
-function softmax0(x::Vector{Float64})
+function softmax0(x)
     p1 = exp.(x)
     return p1/sum(p1)
 end

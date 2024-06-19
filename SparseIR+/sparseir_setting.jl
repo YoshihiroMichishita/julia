@@ -186,6 +186,116 @@ function check_orth(ir::IR_params, w_size::Int, l0::Int)
     return orth
 end
 
+
+using Combinatorics
+function set_mu_order(K::Int, μ::Vector{Float32})
+    ord = combinations(μ, K)
+    return ord
+end
+
+function set_mu_order2(K::Int, μ::Vector{Float32})
+    data = []
+    l = length(μ)
+    for i in 1:l^K
+        vec = zeros(Float32,K)
+        for j in 1:K
+            n = l^(K-j)
+            s = (i-1)%(l*n)
+            x = div(s,n)
+            vec[j] = μ[x+1]
+        end
+        push!(data, vec)
+    end
+    return data
+end
+
+function set_σ_order(K::Int, σ::Vector{Float32})
+    data = []
+    l = length(σ)
+    for i in 1:l^K
+        vec = zeros(Float32,K)
+        for j in 1:K
+            n = l^(K-j)
+            s = (i-1)%(l*n)
+            x = div(s,n)
+            vec[j] = σ[x+1]
+        end
+        push!(data, vec)
+    end
+    return data
+end
+
+function set_ϕ_order(K::Int, ϕ::Vector{Float32})
+    data = []
+    l = length(ϕ)
+    for i in 1:l^K
+        vec = zeros(Float32,K)
+        for j in 1:K
+            n = l^(K-j)
+            s = (i-1)%(l*n)
+            x = div(s,n)
+            vec[j] = ϕ[x+1]
+        end
+        push!(data, vec)
+    end
+    return data
+end
+
+function add_noise(K::Int, μ::Vector{Float32}, σ::Vector{Float32}, ϕ::Vector{Float32}, η::Vector{Float32})
+    μ1 = μ + η[1] * randn(Float32, K)
+    σ1 = exp.(σ + η[2] * randn(Float32, K))
+    ϕ1 = softmax0(ϕ + η[3] * randn(Float32, K))
+    return μ1, σ1, ϕ1
+end
+
+function create_data6_orderly(w_size::Int, n_gauss::Int, ir::IR_params, μ::Vector{Float32}, σ::Vector{Float32}, ϕ::Vector{Float32})
+    ws = [range(-ir.bw,ir.bw, length=w_size)...]
+    l = length(ir.basis.s)
+    gl_gmm = zeros(Float32, l)
+    data = zeros(Float32, 3n_gauss)
+    it = 0
+    while(true)
+        if(it< 20)
+            μ1, σ1, ϕ1 = add_noise(n_gauss, μ, σ, ϕ, [0.1f0, 1f0, 1f0])
+            gmm_params = gParams(n_gauss, μ1, σ1, ϕ1)
+        else
+            gmm_params = rand_init_params(n_gauss)
+        end
+        gmm_rho0 = gmm_rho(ws, gmm_params)
+        if(gmm_rho0[1] < 1f-2 && gmm_rho0[end] < 1f-2)
+            gl_gmm = Float32.(loginv.(rho2gl(ws, gmm_rho0, ir)))
+            data = gparams2data(gmm_params)
+            break
+        end
+        it+=1
+    end
+    return gl_gmm, data
+end
+
+function create_data6_orderly2(w_size::Int, n_gauss::Int, ir::IR_params, μ::Vector{Float32}, σ::Vector{Float32}, ϕ::Vector{Float32})
+    ws = [range(-ir.bw,ir.bw, length=w_size)...]
+    l = length(ir.basis.s)
+    gl_gmm = zeros(Float32, l)
+    data = zeros(Float32, 3n_gauss)
+    it = 0
+    while(true)
+        if(it< 20)
+            μ1, σ1, ϕ1 = add_noise(n_gauss, μ, σ, ϕ, [0.5f0, 1f0, 1f0])
+            gmm_params = gParams(n_gauss, μ1, σ1, ϕ1)
+        else
+            gmm_params = rand_init_params(n_gauss)
+        end
+        gmm_rho0 = gmm_rho(ws, gmm_params)
+        if(gmm_rho0[1] < 1f-2 && gmm_rho0[end] < 1f-2)
+            gl_gmm = Float32.(loginv.(rho2gl(ws, gmm_rho0, ir)))
+            data = gparams2data(gmm_params)
+            break
+        end
+        it+=1
+    end
+    return gl_gmm, data
+end
+
 function create_data6(w_size::Int, n_gauss::Int, ir::IR_params)
     ws = [range(-ir.bw,ir.bw, length=w_size)...]
     l = length(ir.basis.s)
@@ -202,6 +312,24 @@ function create_data6(w_size::Int, n_gauss::Int, ir::IR_params)
     end
     #data = gparams2data(gmm_params)
     return gl_gmm, data
+end
+include("cauchy.jl")
+function create_data6_c(w_size::Int, n_gauss::Int, ir::IR_params)
+    ws = [range(-ir.bw,ir.bw, length=w_size)...]
+    l = length(ir.basis.s)
+    gl_ccm = zeros(Float32, l)
+    data = zeros(Float32, 3n_gauss)
+    while(true)
+        ccm_params = init_rand_params(n_gauss)
+        ccm_rho0 = ccm_rho(ws, ccm_params)
+        if(ccm_rho0[1] < 1f-2 && ccm_rho0[end] < 1f-2)
+            gl_ccm = Float32.(loginv.(rho2gl(ws, ccm_rho0, ir)))
+            data = cparams2data(ccm_params)
+            break
+        end
+    end
+    #data = gparams2data(gmm_params)
+    return gl_ccm, data
 end
 
 function create_data6_2(w_size::Int, n_gauss::Int, ir::IR_params)
@@ -365,4 +493,8 @@ function create_data9(w_size::Int, n_gauss::Int, ir::IR_params)
     end
     #data = gparams2data(gmm_params)
     return gl_gmm, data
+end
+
+function add_noise!(data::Matrix{Float32}, η::Float32)
+    data += η * randn(Float32, size(data)...)
 end
