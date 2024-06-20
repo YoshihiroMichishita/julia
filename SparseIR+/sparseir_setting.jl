@@ -263,9 +263,13 @@ function create_data6_orderly(w_size::Int, n_gauss::Int, ir::IR_params, μ::Vect
         end
         gmm_rho0 = gmm_rho(ws, gmm_params)
         if(gmm_rho0[1] < 1f-2 && gmm_rho0[end] < 1f-2)
-            gl_gmm = Float32.(loginv.(rho2gl(ws, gmm_rho0, ir)))
-            data = gparams2data(gmm_params)
-            break
+            if(sum(gmm_rho0) < 0.9f0)
+                continue
+            else
+                gl_gmm = Float32.(loginv.(rho2gl(ws, gmm_rho0, ir)))
+                data = gparams2data(gmm_params)
+                break
+            end
         end
         it+=1
     end
@@ -287,9 +291,13 @@ function create_data6_orderly2(w_size::Int, n_gauss::Int, ir::IR_params, μ::Vec
         end
         gmm_rho0 = gmm_rho(ws, gmm_params)
         if(gmm_rho0[1] < 1f-2 && gmm_rho0[end] < 1f-2)
-            gl_gmm = Float32.(loginv.(rho2gl(ws, gmm_rho0, ir)))
-            data = gparams2data(gmm_params)
-            break
+            if(sum(gmm_rho0) < 0.9f0)
+                continue
+            else
+                gl_gmm = Float32.(loginv.(rho2gl(ws, gmm_rho0, ir)))
+                data = gparams2data(gmm_params)
+                break
+            end
         end
         it+=1
     end

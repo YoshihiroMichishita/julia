@@ -92,6 +92,16 @@ function init_model_tanh(n_l::Int, n_gauss::Int, width::Int, depth::Int)
     return model
 end
 
+function init_model_relu(n_l::Int, n_gauss::Int, width::Int, depth::Int)
+    model = Chain(Dense(n_l, width), LayerNorm(width), (Chain(Dense(width, width), LayerNorm(width), relu) for i in 1:depth)..., Flux.Parallel(vcat, Dense(width, n_gauss, tanh), Dense(width, n_gauss, tanh6), Dense(width, n_gauss, tanh5)))
+    return model
+end
+
+function init_model_relu_rms(n_l::Int, n_gauss::Int, width::Int, depth::Int)
+    model = Chain(Dense(n_l, width), RMSLayerNorm(width), (Chain(Dense(width, width), RMSLayerNorm(width), relu) for i in 1:depth)..., Flux.Parallel(vcat, Dense(width, n_gauss, tanh), Dense(width, n_gauss, tanh6), Dense(width, n_gauss, tanh5)))
+    return model
+end
+
 function attention(width::Int, depth::Int)
     return Flux.Chain(Dense(width, width, relu), LayerNorm(width), Flux.Parallel(*,Dense(Matrix(I, width, width)), Chain((Chain(Dense(width, width, relu), LayerNorm(width)) for i in 1:depth)..., sigmoid)))
 end
