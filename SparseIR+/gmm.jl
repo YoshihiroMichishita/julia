@@ -23,7 +23,7 @@ end
 function rand_init_params(K::Int)
     μ = rand(Uniform(-1.0,1.0),K)
     Σ = exp.(rand(Uniform(-4.0,2.0),K))
-    ϕ = softmax0(rand(Uniform(-5.0,5.0),K))
+    ϕ = softmax0(rand(Uniform(-3.0,3.0),K))
     #[1.0/K for i in 1:K]
     return gParams(K, μ, Σ, ϕ)
 end

@@ -34,21 +34,18 @@ function Attention(d_in::Int, d_k::Int, d_out::Int)
     return Attention(d_in, d_k, d_out, sqrt_d, Wq, Wk, Wv, bv)
 end
 
-struct RMSLayerNorm{I <: Integer, O, F <: AbstractArray}
-    d_in::I
-    sqrt_d::O
+struct RMSLayerNorm{F}
     g::F
 end
 
 function RMSLayerNorm(d_in::Int)
-    sqrt_d = Float32(sqrt(d_in))
     g = Diagonal(ones(Float32, d_in))
-    return RMSLayerNorm(d_in, sqrt_d, g)
+    return RMSLayerNorm(g)
 end
 
 Flux.trainable(a::Attention) = (Wq=a.Wq, Wk = a.Wk, Wv= a.Wv, b=a.bv)
 
-Flux.trainable(a::RMSLayerNorm) = (g =a.g)
+Flux.trainable(a::RMSLayerNorm) = (;g =a.g,)
 
 function (m::Attention)(x::AbstractArray)
     q = m.Wq * x
@@ -60,11 +57,11 @@ function (m::Attention)(x::AbstractArray)
 end
 
 function (m::RMSLayerNorm)(x)
-    return m.g *  x * Diagonal((sqrt.(vec(mean(x.^2, dims=1)))).^-1)
+    return m.g *  x / Diagonal((sqrt.(vec(mean(x.^2, dims=1)))))
 end
 
-Flux.@functor Attention
-Flux.@functor RMSLayerNorm
+Flux.@layer Attention
+Flux.@layer RMSLayerNorm
 
 
 
@@ -89,6 +86,11 @@ end
 
 function init_model_tanh(n_l::Int, n_gauss::Int, width::Int, depth::Int)
     model = Chain(Dense(n_l, width), LayerNorm(width), (Chain(Dense(width, width, tanh), LayerNorm(width)) for i in 1:depth)..., Flux.Parallel(vcat, Dense(width, n_gauss, tanh), Dense(width, n_gauss, tanh6), Dense(width, n_gauss, tanh5)))
+    return model
+end
+
+function init_model_sig_rms(n_l::Int, n_gauss::Int, width::Int, depth::Int)
+    model = Chain(Dense(n_l, width), RMSLayerNorm(width), (Chain(Dense(width, width), RMSLayerNorm(width), sigmoid) for i in 1:depth)..., Flux.Parallel(vcat, Dense(width, n_gauss, tanh), Dense(width, n_gauss, tanh6), Dense(width, n_gauss, tanh5)))
     return model
 end
 
@@ -136,6 +138,47 @@ function init_model_sym2(n_l::Int, n_gauss::Int, width::Int, depth::Int)
     return model
 end
 
+
+function layer_attention(input::Int, width::Int)
+    model = Chain(Parallel(.*, Chain(Parallel(.*, Dense(input=>input), Dense(input=>input)), softmax), identity), Dense(input=>width))
+    return model
+end
+
+function layer2relu(width::Int)
+    model = Chain(LayerNorm(width), Dense(width=>width, relu), Dense(width=>width, relu))
+    return model
+end
+
+function layer2tanh(width::Int)
+    model = Chain(LayerNorm(width), Dense(width=>width, tanh), Dense(width=>width, tanh))
+    return model
+end
+
+function layer2tanh_res(width::Int)
+    model = Chain(LayerNorm(width), Parallel(+, Chain(Dense(width=>width, tanh), Dense(width=>width, tanh)), identity))
+    return model
+end
+
+function init_model_multihead(n_l::Int, n_gauss::Int, width::Int, width2::Int, depth::Int, heads::Int)
+    model = Chain(Flux.Parallel(vcat, (Chain(layer_attention(n_l, width), layer2relu(width), layer2relu(width), LayerNorm(width)) for i in 1:heads)...),Dense(heads*width, width2), (layer2relu(width2) for i in 1:depth)..., Flux.Parallel(vcat, Dense(width2, n_gauss, tanh), Dense(width2, n_gauss, tanh6), Dense(width2, n_gauss, tanh5)))
+    return model
+end
+
+function output_filter(width::Int, n_gauss::Int)
+    filter = Flux.Parallel(vcat, Dense(width, n_gauss, tanh), Dense(width, n_gauss, tanh6), Dense(width, n_gauss, tanh5))
+    return filter
+end
+
+function init_model_multihead_tanh(n_l::Int, n_gauss::Int, width::Int, width2::Int, depth::Int, heads::Int)
+    #model = Chain(Flux.Parallel(vcat, (Chain(layer_attention(n_l, width), LayerNorm(width)) for i in 1:heads)...),Dense(heads*width, width2), (layer2tanh(width2) for i in 1:depth)..., Flux.Parallel(vcat, Dense(width2, n_gauss, tanh), Dense(width2, n_gauss, tanh6), Dense(width2, n_gauss, tanh5)))
+    model = Chain(Flux.Parallel(vcat, (Chain(layer_attention(n_l, width), LayerNorm(width)) for i in 1:heads)...),Dense(heads*width, width2), (Chain(LayerNorm(width2), Dense(width2, width2, tanh)) for i in 1:depth)..., output_filter(width2, n_gauss))
+    return model
+end
+
+function init_model_multihead_tanh_res(n_l::Int, n_gauss::Int, width::Int, width2::Int, depth::Int, heads::Int)
+    model = Chain(Flux.Parallel(vcat, (Chain(layer_attention(n_l, width), LayerNorm(width)) for i in 1:heads)...),Dense(heads*width, width2), (layer2tanh_res(width2) for i in 1:depth)..., Flux.Parallel(vcat, Dense(width2, n_gauss, tanh), Dense(width2, n_gauss, tanh6), Dense(width2, n_gauss, tanh5)))
+    return model
+end
 
 
 ###################################################
@@ -449,3 +492,11 @@ end
 
 ########################################################
 ### 
+
+function add_noise!(data::Matrix{Float32}, η::Float32)
+    data += η * randn(Float32, size(data)...)
+end
+
+function add_noise_gpu!(data::CuArray{Float32, 2, CUDA.Mem.DeviceBuffer}, η::Float32)
+    data += η * CUDA.randn(Float32, size(data)...)
+end

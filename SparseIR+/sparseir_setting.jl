@@ -276,7 +276,7 @@ function create_data6_orderly(w_size::Int, n_gauss::Int, ir::IR_params, μ::Vect
     return gl_gmm, data
 end
 
-function create_data6_orderly2(w_size::Int, n_gauss::Int, ir::IR_params, μ::Vector{Float32}, σ::Vector{Float32}, ϕ::Vector{Float32})
+function create_data6_orderly2(w_size::Int, n_gauss::Int, ir::IR_params, μ::Vector{Float32}, σ::Vector{Float32}, ϕ::Vector{Float32}, noise_vec::Vector{Float32})
     ws = [range(-ir.bw,ir.bw, length=w_size)...]
     l = length(ir.basis.s)
     gl_gmm = zeros(Float32, l)
@@ -284,7 +284,7 @@ function create_data6_orderly2(w_size::Int, n_gauss::Int, ir::IR_params, μ::Vec
     it = 0
     while(true)
         if(it< 20)
-            μ1, σ1, ϕ1 = add_noise(n_gauss, μ, σ, ϕ, [0.5f0, 1f0, 1f0])
+            μ1, σ1, ϕ1 = add_noise(n_gauss, μ, σ, ϕ, noise_vec)
             gmm_params = gParams(n_gauss, μ1, σ1, ϕ1)
         else
             gmm_params = rand_init_params(n_gauss)
@@ -503,6 +503,3 @@ function create_data9(w_size::Int, n_gauss::Int, ir::IR_params)
     return gl_gmm, data
 end
 
-function add_noise!(data::Matrix{Float32}, η::Float32)
-    data += η * randn(Float32, size(data)...)
-end
