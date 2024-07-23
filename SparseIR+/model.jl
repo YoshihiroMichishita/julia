@@ -4,7 +4,7 @@ using JLD2
 using BSON
 using Plots
 
-tanh5(x) = 6tanh(x)
+tanh5(x) = 4tanh(x)
 tanh6(x) = 4tanh(x)
 tanh8(x) = 8tanh(x)
 
@@ -139,13 +139,25 @@ function init_model_sym2(n_l::Int, n_gauss::Int, width::Int, depth::Int)
 end
 
 
+
+function normed40_softmax(x::AbstractArray)
+    rt = Float32(sqrt(40))
+    return softmax(x/rt)
+end
+
+
 function layer_attention(input::Int, width::Int)
-    model = Chain(Parallel(.*, Chain(Parallel(.*, Dense(input=>input), Dense(input=>input)), softmax), identity), Dense(input=>width))
+    model = Chain(Parallel(.*, Chain(Parallel(.*, Dense(input=>width), Dense(input=>width)), normed40_softmax), Dense(input=>width)))
     return model
 end
 
 function layer2relu(width::Int)
     model = Chain(LayerNorm(width), Dense(width=>width, relu), Dense(width=>width, relu))
+    return model
+end
+
+function relu1layer_res(width::Int)
+    model = Chain(Parallel(+,Dense(width=>width, relu), identity), LayerNorm(width))
     return model
 end
 
@@ -167,6 +179,23 @@ end
 function output_filter(width::Int, n_gauss::Int)
     filter = Flux.Parallel(vcat, Dense(width, n_gauss, tanh), Dense(width, n_gauss, tanh6), Dense(width, n_gauss, tanh5))
     return filter
+end
+
+function multihead_layer(n_l::Int, width::Int, heads::Int)
+    model = Chain(Flux.Parallel(vcat,(layer_attention(n_l, width) for i in 1:heads)...))
+    return model
+end
+
+function transformer_block(heads::Int, head_width::Int)
+    width = heads * head_width
+    model = Chain(Parallel(+, multihead_layer(width, head_width, heads), identity), LayerNorm(width), relu1layer_res(width))
+    return model
+end 
+
+function init_model_multihead_relu(n_l::Int, n_gauss::Int, head_width::Int, heads::Int, depth::Int)
+    width = heads * head_width
+    model = Chain(Dense(n_l, width), (transformer_block(heads, head_width) for i in 1:depth)..., output_filter(width, n_gauss))
+    return model
 end
 
 function init_model_multihead_tanh(n_l::Int, n_gauss::Int, width::Int, width2::Int, depth::Int, heads::Int)
@@ -343,6 +372,91 @@ function loss4_3(model::Chain, K::Int, in, ans, λ::Float32)
     return loss
 end
 
+function gm(μ::Float32, Σ::Float32)
+    f(x::Float32) = Float32(exp(-(x-μ)^2/(2Σ^2))/sqrt(2π*Σ^2))
+    return f
+end
+
+function gmm(K::Int, μ::Vector{Float32}, Σ::Vector{Float32}, ϕ::Vector{Float32}, x::Float32)
+    g = 0.0f0
+    for i in 1:K
+        g += ϕ[i]*gm(μ[i], Σ[i])(x)
+    end
+    return g
+end
+
+function p2gmm(K::Int, μ::Vector{Float32}, Σ::Vector{Float32}, ϕ::Vector{Float32})
+    gmm_comp = [Normal(μ[i], Σ[i]) for i in 1:K]
+    gmm = MixtureModel(gmm_comp, ϕ)
+    return gmm
+end
+
+function d_kl_params(ws::Vector{Float32}, mu::Vector{Float32}, sigma::Vector{Float32}, phi::Vector{Float32}, true_mu::Vector{Float32}, true_sigma::Vector{Float32}, true_phi::Vector{Float32})
+    K = length(mu)
+    dw = ws[2]-ws[1]
+    dkl= 0.0f0
+    #gmm_out = p2gmm(K, mu, sigma, phi)
+    #gmm_true = p2gmm(K, true_mu, true_sigma, true_phi)
+    for w in ws
+        dkl += dw * gmm(K, mu, sigma, phi, w) * log(gmm(K, mu, sigma, phi, w)/(gmm(K, true_mu, true_sigma, true_phi, w)+1f-10))
+    end
+    return dkl
+end
+
+function D_kl_sample(K::Int, mu::Vector{Float32}, sigma::Vector{Float32}, phi::Vector{Float32}, true_mu::Vector{Float32}, true_sigma::Vector{Float32}, true_phi::Vector{Float32}, n_sample::Int)
+    y = 0.0f0
+    #gmm0 = p2gmm(K, true_mu, true_sigma, true_phi)
+    #w = Float32.(rand(gmm0, n_sample))
+    #Float32.(rand(Uniform(-1.0f0,1.0f0),n_sample))
+    #Float32.(rand(gmm0, n_sample))
+    for i in 1:n_sample
+        id = rand(Categorical(true_phi))
+        w = Float32(rand(Normal(true_mu[id], true_sigma[id])))
+        y += log(gmm(K, true_mu, true_sigma, true_phi, w) /(gmm(K, mu, sigma, phi, w)+1f-10))
+    end
+    return y/n_sample
+end
+
+function loss_gmm_dkl_sample(model::Chain, K::Int, in, ans, n_sample::Int)
+    out = cpu(model(cu(in)))
+    #l = size(out)[2]
+    phi = softmax(out[2K+1:3K,:])
+    true_phi = ans[2K+1:3K,:]
+    mu = out[1:K,:]
+    true_mu = ans[1:K,:]
+    logs = out[K+1:2K,:]
+    sigma = exp.(logs)
+    logts = ans[K+1:2K, :]
+    true_sigma = exp.(logts)
+    n_batch = size(mu)[2]
+    loss = 0.0f0
+    for b in 1:n_batch
+        #gmm_true = p2gmm(K, true_mu[:,b], true_sigma[:,b], true_phi[:,b])
+        loss += D_kl_sample(K, mu[:,b], sigma[:,b], phi[:,b], true_mu[:,b], true_sigma[:,b], true_phi[:,b], n_sample)/n_batch
+    end
+    return loss
+end
+
+function loss_gmm_dkl(model::Chain, K::Int, in, ans, ws::Vector{Float32})
+    out = cpu(model(cu(in)))
+    #l = size(out)[2]
+    phi = softmax(out[2K+1:3K,:])
+    true_phi = ans[2K+1:3K,:]
+    mu = out[1:K,:]
+    true_mu = ans[1:K,:]
+    logs = out[K+1:2K,:]
+    sigma = exp.(logs)
+    logts = ans[K+1:2K, :]
+    true_sigma = exp.(logts)
+    n_batch = size(mu)[2]
+    loss = 0.0f0
+    for b in 1:n_batch
+        loss += d_kl_params(ws, mu[:,b], sigma[:,b], phi[:,b], true_mu[:,b], true_sigma[:,b], true_phi[:,b])/n_batch
+    end
+    return loss
+end
+
+#param=>pdf(w)
 function gmm1(K::Int, w::Float32, μ::Vector{Float32}, Σ::Vector{Float32}, ϕ::Vector{Float32})
     #μ, Σ, ϕ = p.μ, p.Σ, p.ϕ
     y = 0.0f0

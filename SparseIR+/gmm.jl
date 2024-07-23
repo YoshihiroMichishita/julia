@@ -52,6 +52,12 @@ function gparams2data_μσperm(p::gParams)
     #return [p.μ..., p.Σ..., p.ϕ...]
 end
 
+function gparams2data_μϕperm(p::gParams)
+    ord = sortperm(p.μ.*p.ϕ)
+    return [p.μ[ord]..., log.(p.Σ[ord])..., p.ϕ[ord]...]
+    #return [p.μ..., p.Σ..., p.ϕ...]
+end
+
 function gparams2data_sym2(p::gParams)
     return [sum(p.μ), sum(log.(p.Σ)), sum(p.ϕ), p.μ[1]*p.μ[2], log(p.Σ[1])*log(p.Σ[2]), p.ϕ[1]*p.ϕ[2], p.μ[1]*log(p.Σ[2])+ p.μ[2]*log(p.Σ[1]), p.ϕ[1]*log(p.Σ[2])+ p.ϕ[2]*log(p.Σ[1]), p.μ[1]*p.ϕ[2]+ p.μ[2]*p.ϕ[1]]
 end
