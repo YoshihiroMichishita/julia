@@ -51,31 +51,71 @@ build
 
 
 ## 2. Pythonのインストール
-今回はminiforge(conda)を使ってPythonの環境を構築する。(pipの方が軽量だけど、素人が使う分にはcondaの方が問題が起きづらい。)(AppleSiliconのPC含め安定に動作するのはminiforgeらしいので)
+今回はvenv+pipを使ってPythonの環境を構築する。(今までcondaはsupportが終わるのと、公式の推奨はvenv+pipであるため。また、例えば機械学習でJAXライブラリを使う際に、conda版だと正常に機能しない事があるため、venv+pipで環境を作る事に慣れた方が良い。)(多分企業とかに行って使うのはDocker+pipだけど)
 (当然既に自身の環境を持っている人はそれを使っても構いません)
 
-### 2.1 miniforgeのインストール
-[githubのminiforgeのサイト](https://github.com/conda-forge/miniforge/?tab=readme-ov-file)から自身のOSにあったインストーラをダウンロード。
+### 2.1 pyenvのインストールとpython-3.11.7のインストール(既にpython環境を持っている人はスキップ)
+(Mac/Linuxの場合)
+以下を実行し、pythonのバージョン管理システムpyenvをインストール。
+```
+curl https://pyenv.run | bash
+```
+Linuxを使っていればbashrc、AppleSiliconの人は多分zshrcを使っているはずなので以下を適宜書き換えて順次入力
+```
+echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
+echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
+echo 'eval "$(pyenv init -)"' >> ~/.bashrc
+```
+変更した.bashrcを反映。
+```
+source ~/.bashrc
+```
 
-ダウンロードしたディレクトリに行って(例えば`cd ~/Downloads`)、ダウンロードしたファイルを実行(下の例はApple SiliconのMac。他の場合はファイル名が違いますので適宜)
+(Windowsの場合)
+Powershellから以下を実行して、pyenv-winをインストール
 ```
-bash ./Miniforge3-MacOSX-arm64.sh
+Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/pyenv-win/pyenv-win/master/pyenv-win/install-pyenv-win.ps1" -OutFile "./install-pyenv-win.ps1"; &"./install-pyenv-win.ps1"
 ```
-全部yesで答えて、インストールが終わったらターミナルを開き直して、`python`と打ってみる。起動すれば成功。`exit()`で抜け出せる。
+Powershellを開き直して、`pyenv version`が実行できるか確認。
 
-デフォルトでcondaのbase環境が自動的にactivateされるようになってしまっているので、
+以降は共通。
+さてインストールしたpyenvを使って特定のバージョンのpythonをインストール。特別な理由がない限り、安定版の中で最新のものが良い。(今だとver-3.11.9)
 ```
-conda config --set auto_activate_base false
-conda deactivate
+pyenv install 3.11.9
 ```
-としておく。
+Macで`ModuleNotFoundError: No module named '_lzma'`のようなエラーが出た場合は`xz`なるものが事前にインストール出来ていない事が原因らしいので`brew install xz`を実行してから`pyenv uninstall 3.11.9`と`pyenv install 3.11.9`で入れ直す。
+
+「他のバージョンを既に入れていて普段はそのバージョンを使っている」等の理由がなければ、`python`を打った際にこのバージョンが選ばれるよう、以下を設定。
+```
+pyenv global 3.11.9
+```
+そうでなければ、今回授業で使うディレクトリ(例えば`~/statphys_test/`)を作ってから、そのディレクトリでのみver-3.11.9を使うように指定。
+```
+mkdir ~/statphys_test
+cd ~/statphys_test
+pyenv local 3.11.9
+```
+windowsの場合は
+```
+python --version
+```
+を実行して、先ほどインストールしたversionが表示されるかを確認する。違うものが表示されていたなら
+[ここ](https://qiita.com/probabilityhill/items/9a22f395a1e93206c846)に書いてあるエイリアスの設定をする必要があるかも？
+
+
 
 ### 2.2 仮想環境の準備
-今回の授業用に仮想環境を作っておこう。今回はなんとなくpython-3.10を使うことにする。
+pythonに内蔵されている仮想環境ライブラリvenvで仮想環境を作る
+今回の授業用に作ったディレクトリにて、
 ```
-conda create -n py310_ToK python=3.10 numpy scipy matplotlib jupyter
+python -m venv statphys
 ```
-授業用の仮想環境を作り、`conda activate py310_ToK`でアクティベートしておく。
+を実行する。そうするとpythonの中のvenvを使ってstatphysという仮想環境(pipの場合はディレクトリ)が作られる。
+
+```
+source ./statphys/bin/activate
+```
+を実行すると仮想環境が有効化される。
 
 
 
@@ -96,7 +136,7 @@ Julia, Jupyterを検索し、インストールする。
 以下のような画面が出てくる。`Python`となっているところをJuliaに変更し、カーネルの選択をJuliaのものにする。
 ![jupyter](jupyter.png)
 
-Pythonを選択した人はカーネルの選択で`Python環境`=>`py310_ToK`を選択。
+Pythonを選択した人はカーネルの選択で`Python環境`=>`statphys`を選択。
 ![step1](step1.png)
 ![step2](step2.png)
 
