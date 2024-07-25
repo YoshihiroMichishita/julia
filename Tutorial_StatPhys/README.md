@@ -76,6 +76,12 @@ Powershellから以下を実行して、pyenv-winをインストール
 ```
 Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/pyenv-win/pyenv-win/master/pyenv-win/install-pyenv-win.ps1" -OutFile "./install-pyenv-win.ps1"; &"./install-pyenv-win.ps1"
 ```
+セキュリティに関してエラーが出る場合は、「管理者として実行」からPowershellを開き、
+```
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope LocalMachine
+```
+を実行してから、上のコマンドを実行してインストールする。
+
 Powershellを開き直して、`pyenv version`が実行できるか確認。
 
 以降は共通。
