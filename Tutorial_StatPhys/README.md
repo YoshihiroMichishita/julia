@@ -122,6 +122,11 @@ python -m venv statphys
 source ./statphys/bin/activate
 ```
 を実行すると仮想環境が有効化される。
+Windowsの場合は、
+```
+statphys/Scripts/activate
+```
+で仮想環境を有効化する。
 
 
 
