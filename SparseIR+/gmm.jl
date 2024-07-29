@@ -173,6 +173,11 @@ function gmm1(w::Float64, p::gParams)
     return y
 end
 
+function gmm1(K::Int, w::Float32, mu::Vector{Float32}, sigma::Vector{Float32}, phi::Vector{Float32})
+    y = sum([phi[i]*pdf(Normal(mu[i], sigma[i]), w) for i in 1:K])
+    return y
+end
+
 function gmm_rho(ws::Vector{Float64}, p::gParams)
     return [gmm1(w, p) for w in ws]
 end

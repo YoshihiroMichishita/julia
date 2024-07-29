@@ -136,7 +136,8 @@ class FeedForward(nn.Module):
     @nn.compact
     def __call__(self, x, eval):
         x = nn.Dense(features=self.intermediate_size)(x)
-        x = nn.relu(x)
+        #x = nn.relu(x)
+        x = nn.tanh(x)
         x = nn.Dense(features=self.embed_dim)(x)
         #x = nn.Dropout(0.1, deterministic=eval)(x)
         return x

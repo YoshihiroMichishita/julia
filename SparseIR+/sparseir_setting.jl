@@ -350,7 +350,8 @@ function create_data6_2(w_size::Int, n_gauss::Int, ir::IR_params)
         gmm_rho0 = gmm_rho(ws, gmm_params)
         if(gmm_rho0[1] < 1f-2 && gmm_rho0[end] < 1f-2)
             gl_gmm = Float32.(loginv.(rho2gl(ws, gmm_rho0, ir)))
-            data = gparams2data_μϕperm(gmm_params)
+            #data = gparams2data_μϕperm(gmm_params)
+            data = gparams2data_μperm(gmm_params)
             break
         end
     end
