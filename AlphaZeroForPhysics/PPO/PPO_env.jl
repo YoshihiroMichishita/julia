@@ -92,6 +92,47 @@ function init_Env(args::Vector{String})
     return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, γ, λ, ϵ, E, η, num_simulation, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt)
 end
 
+function init_Env_hind(args::Vector{String})
+    max_turn = parse(Int, args[1])
+    num_player = parse(Int, args[2])
+    val_num::Int = 2
+    br_num::Int = 3
+    fn_num::Int = 1
+    act_ind = val_num+br_num+fn_num
+    input_dim = act_ind*max_turn
+    middle_dim = parse(Int, args[3])
+    output =  act_ind + 1
+    depth = parse(Int, args[4])
+
+    #training parameter
+    training_step = parse(Int, args[5])
+    checkpoint_interval = 200
+    batch_size = parse(Int, args[6])
+
+    γ::Float32 = 0.98 #discount factor
+    λ::Float32 = 0.94 #GAE factor
+    ϵ::Float32 = 0.2 #CLIP VALUE
+    E::Float32 = parse(Float32, args[7]) #entropy weight
+
+    η::Float32 = 2.0f-5#learning rate
+
+
+    num_simulation = parse(Int, args[8])
+
+    t_step = parse(Int, args[9])
+    HS_size = parse(Int, args[10])
+    Ω = parse(Float32, args[11])
+    ξ = parse(Float32, args[12])
+    Jz = parse(Float32, args[13])
+    Jx = parse(Float32, args[14])
+    hz = parse(Float32, args[15])
+    H_0 = Hermitian([ -Jz-2hz 0 0 -Jx; 0 Jz -Jx 0; 0 -Jx Jz 0; -Jx 0 0 -Jz+2hz])
+    V_t = Hermitian([ 0 -ξ -ξ 0; -ξ 0 0 -ξ; -ξ 0 0 -ξ; 0 -ξ -ξ 0])
+    dt = 2pi/t_step/Ω
+
+    return Env(max_turn, num_player, val_num, br_num, fn_num, act_ind, input_dim, middle_dim, output, depth, training_step, checkpoint_interval, batch_size, γ, λ, ϵ, E, η, num_simulation, t_step, HS_size, Ω, ξ, Jz, Jx, hz, H_0, V_t, dt)
+end
+
 #max_turn, num_player, middle_dim, depth, training_step, batch_size, num_simulation
 function quick_init_Env(args::Vector{String})
     max_turn = parse(Int, args[1])
@@ -319,7 +360,7 @@ end
 function legal_action(env::Env, history::Vector{Int}, branch_left::Vector{Int})
     if(isempty(history))
         return [i for i in 1:env.act_ind]
-    elseif(env.max_turn-length(history)<=length(branch_left)+1)
+    elseif(env.max_turn-length(history)<=length(branch_left)+2)
         return [i for i in 1:env.val_num]
     elseif(history[end]>env.val_num && history[end]<=env.val_num+env.br_num)
         return [i for i in 1:env.act_ind if(i!=history[end])]

@@ -176,13 +176,26 @@ function run_selfplay!(env::Env, buffer::ReplayBuffer, storage::Storage, ratio::
 end
 
 
-function loss(image::Matrix{Int}, target::Matrix{Float32}, env::Env, model::Chain)
+#=function loss(image::Matrix{Int}, target::Matrix{Float32}, env::Env, model::Chain)
+    y1 = model(image)
+    return sum([((env.ratio*(y1[end,i]-target[end,i]))^2 - target[1:end-1,i]' * log.(softmax(y1[1:end-1,i]))) for i in 1:env.batch_size])/env.batch_size
+    # + env.C * sum(sqnorm, Flux.params(model))
+end=#
+function loss(image::CuArray{Int, 2}, target::CuArray{Float32, 2}, env::Env, model::Chain)
     y1 = model(image)
     return sum([((env.ratio*(y1[end,i]-target[end,i]))^2 - target[1:end-1,i]' * log.(softmax(y1[1:end-1,i]))) for i in 1:env.batch_size])/env.batch_size
     # + env.C * sum(sqnorm, Flux.params(model))
 end
-
+#=
 function loss_check(image::Matrix{Int}, target::Matrix{Float32}, env::Env, model::Chain)
+    y1 = model(image)
+    val = sum([((env.ratio*(y1[end,i]-target[end,i]))^2) for i in 1:env.batch_size])/env.batch_size
+    pol = sum([(-target[1:end-1,i]' * log.(softmax(y1[1:end-1,i]))) for i in 1:env.batch_size])/env.batch_size
+    return val, pol
+    # + env.C * sum(sqnorm, Flux.params(model))
+end=#
+
+function loss_check(image::CuArray{Int, 2}, target::CuArray{Float32, 2}, env::Env, model::Chain)
     y1 = model(image)
     val = sum([((env.ratio*(y1[end,i]-target[end,i]))^2) for i in 1:env.batch_size])/env.batch_size
     pol = sum([(-target[1:end-1,i]' * log.(softmax(y1[1:end-1,i]))) for i in 1:env.batch_size])/env.batch_size
@@ -191,7 +204,7 @@ function loss_check(image::Matrix{Int}, target::Matrix{Float32}, env::Env, model
 end
 
 
-tanh10(x) = tanh(x/10)
+tanh10(x) = tanh(x)
 #Float32(15)*tanh(x/10)
 tanh2(x) = Float32(4)*tanh(x/4)
 
@@ -214,9 +227,8 @@ function train_model!(env::Env, buffer::ReplayBuffer, storage::Storage)
                 opt = Flux.Optimiser(WeightDecay(env.C), Adam(2f-5))
             end
             image_batch, target_batch = sample_batch!(env, buffer, storage)
-
             val, grads = Flux.withgradient(Flux.params(model)) do
-                loss(gpu(image_batch),gpu(target_batch),env,model)
+                loss(cu(image_batch),cu(target_batch),env,model)
             end
             Flux.Optimise.update!(opt, Flux.params(model), grads)
             ll[it] = val
@@ -242,7 +254,7 @@ function AlphaZero_ForPhysics(env::Env, storage::Storage)
 
         replay_buffer = init_buffer(2000, env.batch_size)
         
-        if(it<4)
+        if(it<5)
             #randr *= 0.8f0
             @time run_selfplay!(env, replay_buffer, storage, ratio, randr, max_hist)
             #println("store data: $(length(storage.scores))")
